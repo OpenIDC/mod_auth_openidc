@@ -935,20 +935,6 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 }
 
 /*
- * pick the "add" pointer if non-NULL, otherwise fall back to "base"
- */
-static void *_oidc_cfg_merge_ptr(void *add, void *base) {
-	return add != NULL ? add : base;
-}
-
-/*
- * pick the "add" int if it was explicitly configured, otherwise fall back to "base"
- */
-static int _oidc_cfg_merge_pos_int(int add, int base) {
-	return add != OIDC_CONFIG_POS_INT_UNSET ? add : base;
-}
-
-/*
  * merge an http_timeout struct: "add" wins as a whole if it has been configured
  */
 static void _oidc_cfg_merge_http_timeout(oidc_http_timeout_t *c, const oidc_http_timeout_t *add,

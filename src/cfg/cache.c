@@ -178,11 +178,9 @@ static void oidc_cfg_cache_shm_create_server_config(oidc_cfg_t *c) {
 }
 
 static void oidc_cfg_cache_shm_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
-	c->cache.shm_size_max =
-	    add->cache.shm_size_max != OIDC_CONFIG_POS_INT_UNSET ? add->cache.shm_size_max : base->cache.shm_size_max;
-	c->cache.shm_entry_size_max = add->cache.shm_entry_size_max != OIDC_CONFIG_POS_INT_UNSET
-					  ? add->cache.shm_entry_size_max
-					  : base->cache.shm_entry_size_max;
+	c->cache.shm_size_max = _oidc_cfg_merge_pos_int(add->cache.shm_size_max, base->cache.shm_size_max);
+	c->cache.shm_entry_size_max =
+	    _oidc_cfg_merge_pos_int(add->cache.shm_entry_size_max, base->cache.shm_entry_size_max);
 }
 
 /*
@@ -211,10 +209,9 @@ static void oidc_cfg_cache_file_create_server_config(oidc_cfg_t *c) {
 }
 
 static void oidc_cfg_cache_file_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
-	c->cache.file_dir = add->cache.file_dir != NULL ? add->cache.file_dir : base->cache.file_dir;
-	c->cache.file_clean_interval = add->cache.file_clean_interval != OIDC_CONFIG_POS_INT_UNSET
-					   ? add->cache.file_clean_interval
-					   : base->cache.file_clean_interval;
+	c->cache.file_dir = _oidc_cfg_merge_ptr(add->cache.file_dir, base->cache.file_dir);
+	c->cache.file_clean_interval =
+	    _oidc_cfg_merge_pos_int(add->cache.file_clean_interval, base->cache.file_clean_interval);
 }
 
 /*
@@ -269,16 +266,11 @@ static void oidc_cfg_cache_memcache_create_server_config(oidc_cfg_t *c) {
 }
 
 static void oidc_cfg_cache_memcache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
-	c->cache.memcache_servers =
-	    add->cache.memcache_servers != NULL ? add->cache.memcache_servers : base->cache.memcache_servers;
-	c->cache.memcache_min =
-	    add->cache.memcache_min != OIDC_CONFIG_POS_INT_UNSET ? add->cache.memcache_min : base->cache.memcache_min;
-	c->cache.memcache_smax = add->cache.memcache_smax != OIDC_CONFIG_POS_INT_UNSET ? add->cache.memcache_smax
-										       : base->cache.memcache_smax;
-	c->cache.memcache_hmax = add->cache.memcache_hmax != OIDC_CONFIG_POS_INT_UNSET ? add->cache.memcache_hmax
-										       : base->cache.memcache_hmax;
-	c->cache.memcache_ttl = add->cache.memcache_ttl != OIDC_CONFIG_POS_TIMEOUT_UNSET ? add->cache.memcache_ttl
-											 : base->cache.memcache_ttl;
+	c->cache.memcache_servers = _oidc_cfg_merge_ptr(add->cache.memcache_servers, base->cache.memcache_servers);
+	c->cache.memcache_min = _oidc_cfg_merge_pos_int(add->cache.memcache_min, base->cache.memcache_min);
+	c->cache.memcache_smax = _oidc_cfg_merge_pos_int(add->cache.memcache_smax, base->cache.memcache_smax);
+	c->cache.memcache_hmax = _oidc_cfg_merge_pos_int(add->cache.memcache_hmax, base->cache.memcache_hmax);
+	c->cache.memcache_ttl = _oidc_cfg_merge_timeout(add->cache.memcache_ttl, base->cache.memcache_ttl);
 }
 
 #endif
@@ -339,21 +331,14 @@ static void oidc_cfg_cache_redis_create_server_config(oidc_cfg_t *c) {
 }
 
 static void oidc_cfg_cache_redis_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
-	c->cache.redis_server = add->cache.redis_server != NULL ? add->cache.redis_server : base->cache.redis_server;
-	c->cache.redis_username =
-	    add->cache.redis_username != NULL ? add->cache.redis_username : base->cache.redis_username;
-	c->cache.redis_password =
-	    add->cache.redis_password != NULL ? add->cache.redis_password : base->cache.redis_password;
-	c->cache.redis_database = add->cache.redis_database != OIDC_CONFIG_POS_INT_UNSET ? add->cache.redis_database
-											 : base->cache.redis_database;
-	c->cache.redis_connect_timeout = add->cache.redis_connect_timeout != OIDC_CONFIG_POS_INT_UNSET
-					     ? add->cache.redis_connect_timeout
-					     : base->cache.redis_connect_timeout;
-	c->cache.redis_keepalive = add->cache.redis_keepalive != OIDC_CONFIG_POS_INT_UNSET
-				       ? add->cache.redis_keepalive
-				       : base->cache.redis_keepalive;
-	c->cache.redis_timeout = add->cache.redis_timeout != OIDC_CONFIG_POS_INT_UNSET ? add->cache.redis_timeout
-										       : base->cache.redis_timeout;
+	c->cache.redis_server = _oidc_cfg_merge_ptr(add->cache.redis_server, base->cache.redis_server);
+	c->cache.redis_username = _oidc_cfg_merge_ptr(add->cache.redis_username, base->cache.redis_username);
+	c->cache.redis_password = _oidc_cfg_merge_ptr(add->cache.redis_password, base->cache.redis_password);
+	c->cache.redis_database = _oidc_cfg_merge_pos_int(add->cache.redis_database, base->cache.redis_database);
+	c->cache.redis_connect_timeout =
+	    _oidc_cfg_merge_pos_int(add->cache.redis_connect_timeout, base->cache.redis_connect_timeout);
+	c->cache.redis_keepalive = _oidc_cfg_merge_pos_int(add->cache.redis_keepalive, base->cache.redis_keepalive);
+	c->cache.redis_timeout = _oidc_cfg_merge_pos_int(add->cache.redis_timeout, base->cache.redis_timeout);
 }
 
 #endif
@@ -376,8 +361,8 @@ void oidc_cfg_cache_create_server_config(oidc_cfg_t *c) {
 }
 
 void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
-	c->cache.impl = (add->cache.impl != NULL) ? add->cache.impl : base->cache.impl;
-	c->cache.encrypt = add->cache.encrypt != OIDC_CONFIG_POS_INT_UNSET ? add->cache.encrypt : base->cache.encrypt;
+	c->cache.impl = _oidc_cfg_merge_ptr(add->cache.impl, base->cache.impl);
+	c->cache.encrypt = _oidc_cfg_merge_pos_int(add->cache.encrypt, base->cache.encrypt);
 	c->cache.cfg = NULL;
 	oidc_cfg_cache_shm_merge_server_config(c, base, add);
 	oidc_cfg_cache_file_merge_server_config(c, base, add);

@@ -49,6 +49,28 @@
 
 #include <apr_tables.h>
 
+/*
+ * pick the "add" pointer if non-NULL, otherwise fall back to "base"; the canonical helper for
+ * "add wins when set" server/vhost config merging, shared by all merge functions under cfg/
+ */
+static inline void *_oidc_cfg_merge_ptr(const void *add, const void *base) {
+	return (void *)(add != NULL ? add : base);
+}
+
+/*
+ * pick the "add" int if it was explicitly configured, otherwise fall back to "base"
+ */
+static inline int _oidc_cfg_merge_pos_int(int add, int base) {
+	return add != OIDC_CONFIG_POS_INT_UNSET ? add : base;
+}
+
+/*
+ * pick the "add" timeout if it was explicitly configured, otherwise fall back to "base"
+ */
+static inline apr_interval_time_t _oidc_cfg_merge_timeout(apr_interval_time_t add, apr_interval_time_t base) {
+	return add != OIDC_CONFIG_POS_TIMEOUT_UNSET ? add : base;
+}
+
 struct oidc_cfg_cache_t {
 
 	/* pointer to cache functions */

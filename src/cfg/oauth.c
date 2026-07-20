@@ -379,41 +379,32 @@ oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool) {
 }
 
 void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_t *base, const oidc_oauth_t *add) {
-	dst->ssl_validate_server = add->ssl_validate_server != OIDC_CONFIG_POS_INT_UNSET ? add->ssl_validate_server
-											 : base->ssl_validate_server;
-	dst->metadata_url = add->metadata_url != NULL ? add->metadata_url : base->metadata_url;
-	dst->client_id = add->client_id != NULL ? add->client_id : base->client_id;
-	dst->client_secret = add->client_secret != NULL ? add->client_secret : base->client_secret;
+	dst->ssl_validate_server = _oidc_cfg_merge_pos_int(add->ssl_validate_server, base->ssl_validate_server);
+	dst->metadata_url = _oidc_cfg_merge_ptr(add->metadata_url, base->metadata_url);
+	dst->client_id = _oidc_cfg_merge_ptr(add->client_id, base->client_id);
+	dst->client_secret = _oidc_cfg_merge_ptr(add->client_secret, base->client_secret);
 
-	dst->introspection_endpoint_tls_client_key = add->introspection_endpoint_tls_client_key != NULL
-							 ? add->introspection_endpoint_tls_client_key
-							 : base->introspection_endpoint_tls_client_key;
-	dst->introspection_endpoint_tls_client_key_pwd = add->introspection_endpoint_tls_client_key_pwd != NULL
-							     ? add->introspection_endpoint_tls_client_key_pwd
-							     : base->introspection_endpoint_tls_client_key_pwd;
-	dst->introspection_endpoint_tls_client_cert = add->introspection_endpoint_tls_client_cert != NULL
-							  ? add->introspection_endpoint_tls_client_cert
-							  : base->introspection_endpoint_tls_client_cert;
+	dst->introspection_endpoint_tls_client_key = _oidc_cfg_merge_ptr(add->introspection_endpoint_tls_client_key,
+									 base->introspection_endpoint_tls_client_key);
+	dst->introspection_endpoint_tls_client_key_pwd = _oidc_cfg_merge_ptr(
+	    add->introspection_endpoint_tls_client_key_pwd, base->introspection_endpoint_tls_client_key_pwd);
+	dst->introspection_endpoint_tls_client_cert = _oidc_cfg_merge_ptr(add->introspection_endpoint_tls_client_cert,
+									  base->introspection_endpoint_tls_client_cert);
 
-	dst->introspection_endpoint_url = add->introspection_endpoint_url != NULL ? add->introspection_endpoint_url
-										  : base->introspection_endpoint_url;
-	dst->introspection_endpoint_method = add->introspection_endpoint_method != OIDC_CONFIG_POS_INT_UNSET
-						 ? add->introspection_endpoint_method
-						 : base->introspection_endpoint_method;
-	dst->introspection_endpoint_params = add->introspection_endpoint_params != NULL
-						 ? add->introspection_endpoint_params
-						 : base->introspection_endpoint_params;
-	dst->introspection_endpoint_auth = add->introspection_endpoint_auth != NULL ? add->introspection_endpoint_auth
-										    : base->introspection_endpoint_auth;
-	dst->introspection_endpoint_auth_alg = add->introspection_endpoint_auth_alg != NULL
-						   ? add->introspection_endpoint_auth_alg
-						   : base->introspection_endpoint_auth_alg;
-	dst->introspection_client_auth_bearer_token = add->introspection_client_auth_bearer_token != NULL
-							  ? add->introspection_client_auth_bearer_token
-							  : base->introspection_client_auth_bearer_token;
-	dst->introspection_token_param_name = add->introspection_token_param_name != NULL
-						  ? add->introspection_token_param_name
-						  : base->introspection_token_param_name;
+	dst->introspection_endpoint_url =
+	    _oidc_cfg_merge_ptr(add->introspection_endpoint_url, base->introspection_endpoint_url);
+	dst->introspection_endpoint_method =
+	    _oidc_cfg_merge_pos_int(add->introspection_endpoint_method, base->introspection_endpoint_method);
+	dst->introspection_endpoint_params =
+	    _oidc_cfg_merge_ptr(add->introspection_endpoint_params, base->introspection_endpoint_params);
+	dst->introspection_endpoint_auth =
+	    _oidc_cfg_merge_ptr(add->introspection_endpoint_auth, base->introspection_endpoint_auth);
+	dst->introspection_endpoint_auth_alg =
+	    _oidc_cfg_merge_ptr(add->introspection_endpoint_auth_alg, base->introspection_endpoint_auth_alg);
+	dst->introspection_client_auth_bearer_token = _oidc_cfg_merge_ptr(add->introspection_client_auth_bearer_token,
+									  base->introspection_client_auth_bearer_token);
+	dst->introspection_token_param_name =
+	    _oidc_cfg_merge_ptr(add->introspection_token_param_name, base->introspection_token_param_name);
 
 	if (add->introspection_token_expiry_claim_name != NULL) {
 		dst->introspection_token_expiry_claim_name = add->introspection_token_expiry_claim_name;
@@ -435,12 +426,11 @@ void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_
 		dst->remote_user_claim.replace = base->remote_user_claim.replace;
 	}
 
-	dst->verify_jwks_uri = add->verify_jwks_uri != NULL ? add->verify_jwks_uri : base->verify_jwks_uri;
-	dst->verify_public_keys = oidc_jwk_list_copy(pool, add->verify_public_keys != NULL ? add->verify_public_keys
-											   : base->verify_public_keys);
-	dst->verify_shared_keys = add->verify_shared_keys != NULL ? add->verify_shared_keys : base->verify_shared_keys;
-	dst->decrypt_shared_keys =
-	    add->decrypt_shared_keys != NULL ? add->decrypt_shared_keys : base->decrypt_shared_keys;
+	dst->verify_jwks_uri = _oidc_cfg_merge_ptr(add->verify_jwks_uri, base->verify_jwks_uri);
+	dst->verify_public_keys =
+	    oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->verify_public_keys, base->verify_public_keys));
+	dst->verify_shared_keys = _oidc_cfg_merge_ptr(add->verify_shared_keys, base->verify_shared_keys);
+	dst->decrypt_shared_keys = _oidc_cfg_merge_ptr(add->decrypt_shared_keys, base->decrypt_shared_keys);
 }
 
 void oidc_cfg_oauth_destroy(oidc_oauth_t *o) {

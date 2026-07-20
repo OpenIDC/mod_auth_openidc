@@ -777,113 +777,89 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 	provider->profile = OIDC_CONFIG_POS_INT_UNSET;
 }
 
-/*
- * pick the "add" pointer if non-NULL, otherwise fall back to "base"
- */
-static void *_oidc_cfg_provider_merge_ptr(const void *add, const void *base) {
-	return (void *)(add != NULL ? add : base);
-}
-
-/*
- * pick the "add" int if it was explicitly configured, otherwise fall back to "base"
- */
-static int _oidc_cfg_provider_merge_pos_int(int add, int base) {
-	return add != OIDC_CONFIG_POS_INT_UNSET ? add : base;
-}
-
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
 			     const oidc_provider_t *add) {
-	dst->metadata_url = _oidc_cfg_provider_merge_ptr(add->metadata_url, base->metadata_url);
-	dst->issuer = _oidc_cfg_provider_merge_ptr(add->issuer, base->issuer);
+	dst->metadata_url = _oidc_cfg_merge_ptr(add->metadata_url, base->metadata_url);
+	dst->issuer = _oidc_cfg_merge_ptr(add->issuer, base->issuer);
 	dst->authorization_endpoint_url =
-	    _oidc_cfg_provider_merge_ptr(add->authorization_endpoint_url, base->authorization_endpoint_url);
-	dst->token_endpoint_url = _oidc_cfg_provider_merge_ptr(add->token_endpoint_url, base->token_endpoint_url);
-	dst->token_endpoint_auth = _oidc_cfg_provider_merge_ptr(add->token_endpoint_auth, base->token_endpoint_auth);
-	dst->token_endpoint_auth_alg =
-	    _oidc_cfg_provider_merge_ptr(add->token_endpoint_auth_alg, base->token_endpoint_auth_alg);
-	dst->token_endpoint_params =
-	    _oidc_cfg_provider_merge_ptr(add->token_endpoint_params, base->token_endpoint_params);
-	dst->userinfo_endpoint_url =
-	    _oidc_cfg_provider_merge_ptr(add->userinfo_endpoint_url, base->userinfo_endpoint_url);
-	dst->revocation_endpoint_url =
-	    _oidc_cfg_provider_merge_ptr(add->revocation_endpoint_url, base->revocation_endpoint_url);
-	dst->jwks_uri.uri = _oidc_cfg_provider_merge_ptr(add->jwks_uri.uri, base->jwks_uri.uri);
+	    _oidc_cfg_merge_ptr(add->authorization_endpoint_url, base->authorization_endpoint_url);
+	dst->token_endpoint_url = _oidc_cfg_merge_ptr(add->token_endpoint_url, base->token_endpoint_url);
+	dst->token_endpoint_auth = _oidc_cfg_merge_ptr(add->token_endpoint_auth, base->token_endpoint_auth);
+	dst->token_endpoint_auth_alg = _oidc_cfg_merge_ptr(add->token_endpoint_auth_alg, base->token_endpoint_auth_alg);
+	dst->token_endpoint_params = _oidc_cfg_merge_ptr(add->token_endpoint_params, base->token_endpoint_params);
+	dst->userinfo_endpoint_url = _oidc_cfg_merge_ptr(add->userinfo_endpoint_url, base->userinfo_endpoint_url);
+	dst->revocation_endpoint_url = _oidc_cfg_merge_ptr(add->revocation_endpoint_url, base->revocation_endpoint_url);
+	dst->jwks_uri.uri = _oidc_cfg_merge_ptr(add->jwks_uri.uri, base->jwks_uri.uri);
 	dst->jwks_uri.refresh_interval =
-	    _oidc_cfg_provider_merge_pos_int(add->jwks_uri.refresh_interval, base->jwks_uri.refresh_interval);
-	dst->jwks_uri.signed_uri = _oidc_cfg_provider_merge_ptr(add->jwks_uri.signed_uri, base->jwks_uri.signed_uri);
+	    _oidc_cfg_merge_pos_int(add->jwks_uri.refresh_interval, base->jwks_uri.refresh_interval);
+	dst->jwks_uri.signed_uri = _oidc_cfg_merge_ptr(add->jwks_uri.signed_uri, base->jwks_uri.signed_uri);
 	dst->jwks_uri.jwk_list =
-	    oidc_jwk_list_copy(pool, _oidc_cfg_provider_merge_ptr(add->jwks_uri.jwk_list, base->jwks_uri.jwk_list));
+	    oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->jwks_uri.jwk_list, base->jwks_uri.jwk_list));
 	dst->verify_public_keys =
-	    oidc_jwk_list_copy(pool, _oidc_cfg_provider_merge_ptr(add->verify_public_keys, base->verify_public_keys));
-	dst->client_id = _oidc_cfg_provider_merge_ptr(add->client_id, base->client_id);
-	dst->client_secret = _oidc_cfg_provider_merge_ptr(add->client_secret, base->client_secret);
+	    oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->verify_public_keys, base->verify_public_keys));
+	dst->client_id = _oidc_cfg_merge_ptr(add->client_id, base->client_id);
+	dst->client_secret = _oidc_cfg_merge_ptr(add->client_secret, base->client_secret);
 
 	dst->token_endpoint_tls_client_key =
-	    _oidc_cfg_provider_merge_ptr(add->token_endpoint_tls_client_key, base->token_endpoint_tls_client_key);
-	dst->token_endpoint_tls_client_key_pwd = _oidc_cfg_provider_merge_ptr(add->token_endpoint_tls_client_key_pwd,
-									      base->token_endpoint_tls_client_key_pwd);
+	    _oidc_cfg_merge_ptr(add->token_endpoint_tls_client_key, base->token_endpoint_tls_client_key);
+	dst->token_endpoint_tls_client_key_pwd =
+	    _oidc_cfg_merge_ptr(add->token_endpoint_tls_client_key_pwd, base->token_endpoint_tls_client_key_pwd);
 	dst->token_endpoint_tls_client_cert =
-	    _oidc_cfg_provider_merge_ptr(add->token_endpoint_tls_client_cert, base->token_endpoint_tls_client_cert);
+	    _oidc_cfg_merge_ptr(add->token_endpoint_tls_client_cert, base->token_endpoint_tls_client_cert);
 
 	dst->registration_endpoint_url =
-	    _oidc_cfg_provider_merge_ptr(add->registration_endpoint_url, base->registration_endpoint_url);
+	    _oidc_cfg_merge_ptr(add->registration_endpoint_url, base->registration_endpoint_url);
 	dst->registration_endpoint_json =
-	    _oidc_cfg_provider_merge_ptr(add->registration_endpoint_json, base->registration_endpoint_json);
-	dst->pushed_authorization_request_endpoint_url = _oidc_cfg_provider_merge_ptr(
+	    _oidc_cfg_merge_ptr(add->registration_endpoint_json, base->registration_endpoint_json);
+	dst->pushed_authorization_request_endpoint_url = _oidc_cfg_merge_ptr(
 	    add->pushed_authorization_request_endpoint_url, base->pushed_authorization_request_endpoint_url);
 
-	dst->check_session_iframe = _oidc_cfg_provider_merge_ptr(add->check_session_iframe, base->check_session_iframe);
-	dst->end_session_endpoint = _oidc_cfg_provider_merge_ptr(add->end_session_endpoint, base->end_session_endpoint);
+	dst->check_session_iframe = _oidc_cfg_merge_ptr(add->check_session_iframe, base->check_session_iframe);
+	dst->end_session_endpoint = _oidc_cfg_merge_ptr(add->end_session_endpoint, base->end_session_endpoint);
 	dst->backchannel_logout_supported =
-	    _oidc_cfg_provider_merge_pos_int(add->backchannel_logout_supported, base->backchannel_logout_supported);
+	    _oidc_cfg_merge_pos_int(add->backchannel_logout_supported, base->backchannel_logout_supported);
 
-	dst->ssl_validate_server =
-	    _oidc_cfg_provider_merge_pos_int(add->ssl_validate_server, base->ssl_validate_server);
-	dst->validate_issuer = _oidc_cfg_provider_merge_pos_int(add->validate_issuer, base->validate_issuer);
-	dst->client_name = _oidc_cfg_provider_merge_ptr(add->client_name, base->client_name);
-	dst->client_contact = _oidc_cfg_provider_merge_ptr(add->client_contact, base->client_contact);
-	dst->registration_token = _oidc_cfg_provider_merge_ptr(add->registration_token, base->registration_token);
-	dst->scope = _oidc_cfg_provider_merge_ptr(add->scope, base->scope);
-	dst->response_type = _oidc_cfg_provider_merge_ptr(add->response_type, base->response_type);
-	dst->response_mode = _oidc_cfg_provider_merge_ptr(add->response_mode, base->response_mode);
-	dst->idtoken_iat_slack = _oidc_cfg_provider_merge_pos_int(add->idtoken_iat_slack, base->idtoken_iat_slack);
-	dst->session_max_duration =
-	    _oidc_cfg_provider_merge_pos_int(add->session_max_duration, base->session_max_duration);
-	dst->auth_request_params = _oidc_cfg_provider_merge_ptr(add->auth_request_params, base->auth_request_params);
-	dst->logout_request_params =
-	    _oidc_cfg_provider_merge_ptr(add->logout_request_params, base->logout_request_params);
-	dst->pkce = _oidc_cfg_provider_merge_ptr(add->pkce, base->pkce);
-	dst->dpop_mode = _oidc_cfg_provider_merge_pos_int(add->dpop_mode, base->dpop_mode);
+	dst->ssl_validate_server = _oidc_cfg_merge_pos_int(add->ssl_validate_server, base->ssl_validate_server);
+	dst->validate_issuer = _oidc_cfg_merge_pos_int(add->validate_issuer, base->validate_issuer);
+	dst->client_name = _oidc_cfg_merge_ptr(add->client_name, base->client_name);
+	dst->client_contact = _oidc_cfg_merge_ptr(add->client_contact, base->client_contact);
+	dst->registration_token = _oidc_cfg_merge_ptr(add->registration_token, base->registration_token);
+	dst->scope = _oidc_cfg_merge_ptr(add->scope, base->scope);
+	dst->response_type = _oidc_cfg_merge_ptr(add->response_type, base->response_type);
+	dst->response_mode = _oidc_cfg_merge_ptr(add->response_mode, base->response_mode);
+	dst->idtoken_iat_slack = _oidc_cfg_merge_pos_int(add->idtoken_iat_slack, base->idtoken_iat_slack);
+	dst->session_max_duration = _oidc_cfg_merge_pos_int(add->session_max_duration, base->session_max_duration);
+	dst->auth_request_params = _oidc_cfg_merge_ptr(add->auth_request_params, base->auth_request_params);
+	dst->logout_request_params = _oidc_cfg_merge_ptr(add->logout_request_params, base->logout_request_params);
+	dst->pkce = _oidc_cfg_merge_ptr(add->pkce, base->pkce);
+	dst->dpop_mode = _oidc_cfg_merge_pos_int(add->dpop_mode, base->dpop_mode);
 
-	dst->client_jwks_uri = _oidc_cfg_provider_merge_ptr(add->client_jwks_uri, base->client_jwks_uri);
-	dst->client_keys = oidc_jwk_list_copy(pool, _oidc_cfg_provider_merge_ptr(add->client_keys, base->client_keys));
+	dst->client_jwks_uri = _oidc_cfg_merge_ptr(add->client_jwks_uri, base->client_jwks_uri);
+	dst->client_keys = oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->client_keys, base->client_keys));
 
 	dst->id_token_signed_response_alg =
-	    _oidc_cfg_provider_merge_ptr(add->id_token_signed_response_alg, base->id_token_signed_response_alg);
+	    _oidc_cfg_merge_ptr(add->id_token_signed_response_alg, base->id_token_signed_response_alg);
 	dst->id_token_encrypted_response_alg =
-	    _oidc_cfg_provider_merge_ptr(add->id_token_encrypted_response_alg, base->id_token_encrypted_response_alg);
+	    _oidc_cfg_merge_ptr(add->id_token_encrypted_response_alg, base->id_token_encrypted_response_alg);
 	dst->id_token_encrypted_response_enc =
-	    _oidc_cfg_provider_merge_ptr(add->id_token_encrypted_response_enc, base->id_token_encrypted_response_enc);
+	    _oidc_cfg_merge_ptr(add->id_token_encrypted_response_enc, base->id_token_encrypted_response_enc);
 	dst->userinfo_signed_response_alg =
-	    _oidc_cfg_provider_merge_ptr(add->userinfo_signed_response_alg, base->userinfo_signed_response_alg);
+	    _oidc_cfg_merge_ptr(add->userinfo_signed_response_alg, base->userinfo_signed_response_alg);
 	dst->userinfo_encrypted_response_alg =
-	    _oidc_cfg_provider_merge_ptr(add->userinfo_encrypted_response_alg, base->userinfo_encrypted_response_alg);
+	    _oidc_cfg_merge_ptr(add->userinfo_encrypted_response_alg, base->userinfo_encrypted_response_alg);
 	dst->userinfo_encrypted_response_enc =
-	    _oidc_cfg_provider_merge_ptr(add->userinfo_encrypted_response_enc, base->userinfo_encrypted_response_enc);
-	dst->userinfo_token_method =
-	    _oidc_cfg_provider_merge_pos_int(add->userinfo_token_method, base->userinfo_token_method);
-	dst->auth_request_method =
-	    _oidc_cfg_provider_merge_pos_int(add->auth_request_method, base->auth_request_method);
+	    _oidc_cfg_merge_ptr(add->userinfo_encrypted_response_enc, base->userinfo_encrypted_response_enc);
+	dst->userinfo_token_method = _oidc_cfg_merge_pos_int(add->userinfo_token_method, base->userinfo_token_method);
+	dst->auth_request_method = _oidc_cfg_merge_pos_int(add->auth_request_method, base->auth_request_method);
 
 	dst->userinfo_refresh_interval =
-	    _oidc_cfg_provider_merge_pos_int(add->userinfo_refresh_interval, base->userinfo_refresh_interval);
-	dst->request_object = _oidc_cfg_provider_merge_ptr(add->request_object, base->request_object);
+	    _oidc_cfg_merge_pos_int(add->userinfo_refresh_interval, base->userinfo_refresh_interval);
+	dst->request_object = _oidc_cfg_merge_ptr(add->request_object, base->request_object);
 
-	dst->response_require_iss =
-	    _oidc_cfg_provider_merge_pos_int(add->response_require_iss, base->response_require_iss);
+	dst->response_require_iss = _oidc_cfg_merge_pos_int(add->response_require_iss, base->response_require_iss);
 
-	dst->id_token_aud_values = _oidc_cfg_provider_merge_ptr(add->id_token_aud_values, base->id_token_aud_values);
-	dst->profile = _oidc_cfg_provider_merge_pos_int(add->profile, base->profile);
+	dst->id_token_aud_values = _oidc_cfg_merge_ptr(add->id_token_aud_values, base->id_token_aud_values);
+	dst->profile = _oidc_cfg_merge_pos_int(add->profile, base->profile);
 }
 
 oidc_provider_t *oidc_cfg_provider_create(apr_pool_t *pool) {
