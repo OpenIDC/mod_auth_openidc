@@ -694,11 +694,14 @@ static apr_byte_t _oidc_jwk_ec_key_to_jwk(apr_pool_t *pool, const EVP_PKEY *pkey
 	ec_y = BN_new();
 	if (EC_POINT_get_affine_coordinates_GFp(ec_group, ecpoint, ec_x, ec_y, NULL) == 0) {
 		oidc_jose_error_openssl(err, "EC_POINT_get_affine_coordinates_GFp");
+		EC_KEY_free(eckey);
 		goto end;
 	}
+	/* NB: ec_d borrows from eckey; releasing our get1 reference here is safe since pkey keeps it alive */
 	ec_d = (BIGNUM *)EC_KEY_get0_private_key(eckey);
 	if (crv == 0) {
 		oidc_jose_error_openssl(err, "EC_GROUP_get_curve_name");
+		EC_KEY_free(eckey);
 		goto end;
 	}
 	EC_KEY_free(eckey);
