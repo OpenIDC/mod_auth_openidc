@@ -375,6 +375,40 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 }
 
 /*
+ * per response type, the authorization-response parameters that must not be accepted from the
+ * front channel because they may only come from the token endpoint - or are no part of the
+ * flow at all; keeping all six flows in one table makes the strip sets auditable side-by-side
+ */
+static void oidc_proto_response_strip_params(request_rec *r, apr_table_t *params, const char *response_type) {
+	static const struct {
+		const char *response_type;
+		const char *params[6];
+	} strip[] = {
+	    {OIDC_PROTO_RESPONSE_TYPE_CODE,
+	     {OIDC_PROTO_ACCESS_TOKEN, OIDC_PROTO_TOKEN_TYPE, OIDC_PROTO_EXPIRES_IN, OIDC_PROTO_ID_TOKEN,
+	      OIDC_PROTO_REFRESH_TOKEN, OIDC_PROTO_SCOPE}},
+	    {OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN,
+	     {OIDC_PROTO_ACCESS_TOKEN, OIDC_PROTO_TOKEN_TYPE, OIDC_PROTO_EXPIRES_IN, OIDC_PROTO_REFRESH_TOKEN,
+	      OIDC_PROTO_SCOPE, NULL}},
+	    {OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN,
+	     {OIDC_PROTO_ID_TOKEN, OIDC_PROTO_REFRESH_TOKEN, OIDC_PROTO_SCOPE, NULL}},
+	    {OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN, {OIDC_PROTO_REFRESH_TOKEN, OIDC_PROTO_SCOPE, NULL}},
+	    {OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN, {OIDC_PROTO_REFRESH_TOKEN, NULL}},
+	    {OIDC_PROTO_RESPONSE_TYPE_IDTOKEN,
+	     {OIDC_PROTO_TOKEN_TYPE, OIDC_PROTO_EXPIRES_IN, OIDC_PROTO_REFRESH_TOKEN, NULL}},
+	};
+	for (int i = 0; i < (int)(sizeof(strip) / sizeof(strip[0])); i++) {
+		if (_oidc_strcmp(response_type, strip[i].response_type) != 0)
+			continue;
+		for (int j = 0;
+		     (j < (int)(sizeof(strip[0].params) / sizeof(const char *))) && (strip[i].params[j] != NULL); j++)
+			apr_table_unset(params, strip[i].params[j]);
+		return;
+	}
+	oidc_warn(r, "no front-channel parameter strip list defined for response type \"%s\"", response_type);
+}
+
+/*
  * handle the "code id_token" response type
  */
 apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, const oidc_proto_state_t *proto_state,
@@ -396,11 +430,7 @@ apr_byte_t oidc_proto_response_code_idtoken(request_rec *r, oidc_cfg_t *c, const
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, OIDC_PROTO_ACCESS_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
-	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
-	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_SCOPE);
+	oidc_proto_response_strip_params(r, params, response_type);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -426,9 +456,7 @@ apr_byte_t oidc_proto_response_code_token(request_rec *r, oidc_cfg_t *c, const o
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, OIDC_PROTO_ID_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_SCOPE);
+	oidc_proto_response_strip_params(r, params, response_type);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -458,12 +486,7 @@ apr_byte_t oidc_proto_response_code(request_rec *r, oidc_cfg_t *c, const oidc_pr
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, OIDC_PROTO_ACCESS_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
-	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
-	apr_table_unset(params, OIDC_PROTO_ID_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_SCOPE);
+	oidc_proto_response_strip_params(r, params, response_type);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -530,8 +553,7 @@ apr_byte_t oidc_proto_response_code_idtoken_token(request_rec *r, oidc_cfg_t *c,
 		return FALSE;
 
 	/* clear parameters that should only be set from the token endpoint */
-	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
-	apr_table_unset(params, OIDC_PROTO_SCOPE);
+	oidc_proto_response_strip_params(r, params, response_type);
 
 	if (oidc_proto_resolve_code_and_validate_response(r, c, provider, response_type, params, proto_state) == FALSE)
 		return FALSE;
@@ -559,7 +581,7 @@ apr_byte_t oidc_proto_response_idtoken_token(request_rec *r, oidc_cfg_t *c, cons
 		return FALSE;
 
 	/* clear parameters that should not be part of this flow */
-	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
+	oidc_proto_response_strip_params(r, params, response_type);
 
 	return TRUE;
 }
@@ -580,9 +602,7 @@ apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, const oidc
 		return FALSE;
 
 	/* clear parameters that should not be part of this flow */
-	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE);
-	apr_table_unset(params, OIDC_PROTO_EXPIRES_IN);
-	apr_table_unset(params, OIDC_PROTO_REFRESH_TOKEN);
+	oidc_proto_response_strip_params(r, params, response_type);
 
 	return TRUE;
 }
