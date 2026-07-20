@@ -194,6 +194,30 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 }
 
 /*
+ * RFC 8705: select the endpoint authentication method from the metadata array at "key",
+ * auto-selecting and preferring a mutual-TLS method only when a TLS client certificate has been
+ * configured (b_cert) *and* no client secret is set (b_secret): a configured secret signals
+ * client_secret_* authentication with the certificate merely presented for RFC 8705 section 3
+ * certificate-bound access tokens, so it must not be silently upgraded to tls_client_auth
+ */
+const char *oidc_metadata_endpoint_auth_select(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_provider,
+					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value) {
+	apr_byte_t b_mtls = (b_secret == FALSE) && (b_cert == TRUE);
+	return oidc_metadata_valid_string_in_array(
+	    r->pool, j_provider, key, oidc_cfg_get_valid_endpoint_auth_function(cfg, b_mtls), value, TRUE,
+	    b_mtls ? OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH : OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC);
+}
+
+/*
+ * RFC 8705 section 5: return the "mtls_endpoint_aliases" metadata object holding the endpoint
+ * URLs to prefer under mutual-TLS, or NULL when absent or not an object
+ */
+const oidc_json_t *oidc_metadata_mtls_endpoint_aliases_get(const oidc_json_t *j_provider) {
+	const oidc_json_t *j_aliases = oidc_json_object_get(j_provider, OIDC_METADATA_MTLS_ENDPOINT_ALIASES);
+	return (oidc_json_is_object(j_aliases) != 0) ? j_aliases : NULL;
+}
+
+/*
  * parse boolean value from JSON configuration
  */
 void oidc_metadata_parse_boolean(request_rec *r, const oidc_json_t *json, const char *key, int *value,

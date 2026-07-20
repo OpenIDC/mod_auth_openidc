@@ -272,8 +272,8 @@ static void oidc_metadata_provider_parse_mtls_endpoint_aliases(request_rec *r, o
 	if (oidc_cfg_endpoint_auth_is_mtls(auth) == FALSE)
 		return;
 
-	j_aliases = oidc_json_object_get(j_provider, OIDC_METADATA_MTLS_ENDPOINT_ALIASES);
-	if (oidc_json_is_object(j_aliases) == 0)
+	j_aliases = oidc_metadata_mtls_endpoint_aliases_get(j_provider);
+	if (j_aliases == NULL)
 		return;
 
 	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_aliases,
@@ -344,21 +344,17 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const o
 	OIDC_METADATA_PROVIDER_SET_INT(provider, backchannel_logout_supported, ivalue, rv)
 
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) == NULL) {
-		/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate
-		 * has been configured (either on this provider or globally) *and* no client secret is set:
-		 * a configured secret signals client_secret_* authentication with the certificate merely
-		 * presented for RFC 8705 section 3 certificate-bound access tokens, so it must not be
-		 * silently upgraded to tls_client_auth */
+		/* the secret/certificate interplay that decides on RFC 8705 mutual-TLS is
+		 * documented at oidc_metadata_endpoint_auth_select; the secret and certificate
+		 * may be configured on this provider or globally */
 		apr_byte_t b_secret = (oidc_cfg_provider_client_secret_get(provider) != NULL) ||
 				      (oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(cfg)) != NULL);
-		apr_byte_t b_mtls =
-		    (b_secret == FALSE) &&
-		    ((oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL) ||
-		     (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL));
-		if (oidc_metadata_valid_string_in_array(
-			r->pool, j_provider, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED,
-			oidc_cfg_get_valid_endpoint_auth_function(cfg, b_mtls), &value, TRUE,
-			b_mtls ? OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH : OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
+		apr_byte_t b_cert =
+		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL) ||
+		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL);
+		if (oidc_metadata_endpoint_auth_select(r, cfg, j_provider,
+						       OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED, b_secret,
+						       b_cert, &value) != NULL) {
 			oidc_error(r,
 				   "could not find a supported token endpoint authentication method in provider"
 				   "metadata (%s) for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED

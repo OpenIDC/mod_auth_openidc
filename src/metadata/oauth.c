@@ -67,15 +67,12 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 			oidc_error(r, "oidc_oauth_verify_jwks_uri_set error: %s", rv);
 	}
 
-	/* auto-select and prefer an RFC 8705 mutual-TLS method only when a TLS client certificate is
-	 * configured and no client secret is set: a configured secret signals client_secret_* auth with
-	 * the certificate presented only for RFC 8705 section 3 certificate-bound access tokens */
-	apr_byte_t b_mtls = (oidc_cfg_oauth_client_secret_get(c) == NULL) &&
-			    (oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL);
-	if (oidc_metadata_valid_string_in_array(
-		r->pool, j_provider, OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
-		oidc_cfg_get_valid_endpoint_auth_function(c, b_mtls), &value, TRUE,
-		b_mtls ? OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH : OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC) != NULL) {
+	/* the secret/certificate interplay that decides on RFC 8705 mutual-TLS is documented at
+	 * oidc_metadata_endpoint_auth_select */
+	if (oidc_metadata_endpoint_auth_select(
+		r, c, j_provider, OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
+		oidc_cfg_oauth_client_secret_get(c) != NULL,
+		oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL, &value) != NULL) {
 		oidc_error(r,
 			   "could not find a supported token endpoint authentication method in provider metadata (%s) "
 			   "for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",
@@ -90,8 +87,8 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 	/* RFC 8705 section 5: when using mutual-TLS, prefer the "mtls_endpoint_aliases" introspection endpoint */
 	if (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_oauth_introspection_endpoint_auth_get(c))) {
 		value = NULL;
-		const oidc_json_t *j_aliases = oidc_json_object_get(j_provider, OIDC_METADATA_MTLS_ENDPOINT_ALIASES);
-		if (oidc_json_is_object(j_aliases) != 0)
+		const oidc_json_t *j_aliases = oidc_metadata_mtls_endpoint_aliases_get(j_provider);
+		if (j_aliases != NULL)
 			oidc_json_object_get_string(r->pool, j_aliases, OIDC_METADATA_INTROSPECTION_ENDPOINT, &value,
 						    NULL);
 		if (value != NULL) {
