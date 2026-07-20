@@ -46,6 +46,12 @@
 #include "util/util.h"
 
 /*
+ * "unset" sentinel for oauth_token_introspect_interval: the standard OIDC_CONFIG_POS_INT_UNSET (-1)
+ * cannot be used since -1 is a valid configured value for this directive
+ */
+#define OIDC_INTROSPECT_INTERVAL_UNSET -2
+
+/*
  * directory related configuration
  */
 struct oidc_dir_cfg_t {
@@ -515,8 +521,7 @@ const char *oidc_cmd_dir_token_introspection_interval_set(cmd_parms *cmd, void *
 
 int oidc_cfg_dir_token_introspection_interval_get(request_rec *r) {
 	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	// we use -2 here as an exception because -1 is a valid value
-	if (dir_cfg->oauth_token_introspect_interval <= -2)
+	if (dir_cfg->oauth_token_introspect_interval <= OIDC_INTROSPECT_INTERVAL_UNSET)
 		return OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL;
 	return dir_cfg->oauth_token_introspect_interval;
 }
@@ -634,7 +639,7 @@ void *oidc_cfg_dir_config_create(apr_pool_t *pool, char *path) {
 	c->pass_info_encoding = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_in = OIDC_CONFIG_POS_INT_UNSET;
 	c->oauth_accept_token_options = apr_hash_make(pool);
-	c->oauth_token_introspect_interval = -2;
+	c->oauth_token_introspect_interval = OIDC_INTROSPECT_INTERVAL_UNSET;
 	c->preserve_post = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_access_token = OIDC_CONFIG_POS_INT_UNSET;
 	c->pass_refresh_token = OIDC_CONFIG_POS_INT_UNSET;
@@ -658,10 +663,10 @@ static apr_hash_t *_oidc_cfg_dir_merge_hash(apr_hash_t *add, apr_hash_t *base) {
 
 /*
  * pick the "add" introspect interval if it was explicitly configured
- * (>= -1, i.e. not the -2 default), otherwise fall back to "base"
+ * (i.e. not the OIDC_INTROSPECT_INTERVAL_UNSET default), otherwise fall back to "base"
  */
 static int _oidc_cfg_dir_merge_introspect_interval(int add, int base) {
-	return add >= -1 ? add : base;
+	return add > OIDC_INTROSPECT_INTERVAL_UNSET ? add : base;
 }
 
 /*
