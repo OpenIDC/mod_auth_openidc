@@ -66,26 +66,24 @@ static const char *oidc_util_html_escape_char(char c) {
 }
 
 /*
- * HTML escape a string
+ * two-pass escape of a string with the provided per-character escape function: measure first,
+ * then write with the bounds-checked idiom; shared by the HTML and JavaScript escapers below
  */
-char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
+static char *oidc_util_html_escape_with(apr_pool_t *pool, const char *s, const char *(*escape_char)(char)) {
 	const char *cp = NULL;
 	size_t outputlen = 0;
 	size_t i = 0;
 
-	if (s == NULL)
-		s = "";
-
 	/* first pass: compute the length of the escaped output */
 	for (cp = s; *cp; cp++) {
-		const char *esc = oidc_util_html_escape_char(*cp);
+		const char *esc = escape_char(*cp);
 		outputlen += esc ? _oidc_strlen(esc) : 1;
 	}
 
 	/* second pass: write the escaped output, preserving the bounds-checked write idiom */
 	char *output = apr_pcalloc(pool, outputlen + 1);
 	for (cp = s; *cp; cp++) {
-		const char *esc = oidc_util_html_escape_char(*cp);
+		const char *esc = escape_char(*cp);
 		if (esc == NULL) {
 			if (i + 1 <= outputlen)
 				output[i] = *cp;
@@ -99,6 +97,13 @@ char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
 	}
 	output[i] = '\0';
 	return output;
+}
+
+/*
+ * HTML escape a string
+ */
+char *oidc_util_html_escape(apr_pool_t *pool, const char *s) {
+	return oidc_util_html_escape_with(pool, s != NULL ? s : "", oidc_util_html_escape_char);
 }
 
 /*
@@ -131,36 +136,9 @@ static const char *oidc_util_html_javascript_escape_char(char c) {
  * JavaScript escape a string
  */
 char *oidc_util_html_javascript_escape(apr_pool_t *pool, const char *s) {
-	const char *cp = NULL;
-	size_t outputlen = 0;
-	size_t i = 0;
-
 	if (s == NULL)
 		return NULL;
-
-	/* first pass: compute the length of the escaped output */
-	for (cp = s; *cp; cp++) {
-		const char *esc = oidc_util_html_javascript_escape_char(*cp);
-		outputlen += esc ? _oidc_strlen(esc) : 1;
-	}
-
-	/* second pass: write the escaped output, preserving the bounds-checked write idiom */
-	char *output = apr_pcalloc(pool, outputlen + 1);
-	for (cp = s; *cp; cp++) {
-		const char *esc = oidc_util_html_javascript_escape_char(*cp);
-		if (esc == NULL) {
-			if (i + 1 <= outputlen)
-				output[i] = *cp;
-			i += 1;
-			continue;
-		}
-		size_t n = _oidc_strlen(esc);
-		if (i + n <= outputlen)
-			(void)_oidc_strcpy(&output[i], esc);
-		i += n;
-	}
-	output[i] = '\0';
-	return output;
+	return oidc_util_html_escape_with(pool, s, oidc_util_html_javascript_escape_char);
 }
 
 /*
