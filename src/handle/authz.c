@@ -116,12 +116,10 @@ static oidc_authz_json_handler_t _oidc_authz_json_handlers[] = {
 // clang-format on
 
 static apr_byte_t oidc_authz_match_json_array_elem(request_rec *r, const char *spec, oidc_json_t *e, const char *key) {
-	const oidc_authz_json_handler_t *h = NULL;
-
 	// avoid recursing into a nested array; matching needs to be done with the "." syntax
 	if (oidc_json_typeof(e) != OIDC_JSON_TYPE_ARRAY)
 		// loop over the JSON object type handlers
-		for (h = _oidc_authz_json_handlers; h->handler; h++)
+		for (const oidc_authz_json_handler_t *h = _oidc_authz_json_handlers; h->handler; h++)
 			if (h->type == oidc_json_typeof(e))
 				// found the handler for this type: its result decides the match
 				return h->handler(r, spec, e, key);
@@ -287,10 +285,9 @@ static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
 // clang-format on
 
 static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, oidc_json_t *val, const char *spec) {
-	const oidc_authz_json_handler_t *h = NULL;
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
-	for (h = _oidc_authz_separator_handlers; h->handler; h++) {
+	for (const oidc_authz_json_handler_t *h = _oidc_authz_separator_handlers; h->handler; h++) {
 		// there's some overloading going on here, applying a char as an int index;
 		// NB: spec advances past each matched separator, so after a non-matching handler the
 		// remaining handlers are compared against the following character (preserved behavior)

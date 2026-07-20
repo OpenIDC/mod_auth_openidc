@@ -47,7 +47,7 @@
 
 typedef struct oidc_cfg_option_t {
 	int val;
-	char *str;
+	const char *str;
 } oidc_cfg_option_t;
 
 char *oidc_cfg_parse_option(apr_pool_t *pool, const oidc_cfg_option_t options[], int n, const char *arg, int *v);

@@ -200,7 +200,7 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
  * client_secret_* authentication with the certificate merely presented for RFC 8705 section 3
  * certificate-bound access tokens, so it must not be silently upgraded to tls_client_auth
  */
-const char *oidc_metadata_endpoint_auth_select(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_provider,
+const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value) {
 	apr_byte_t b_mtls = (b_secret == FALSE) && (b_cert == TRUE);
 	return oidc_metadata_valid_string_in_array(

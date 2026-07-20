@@ -208,7 +208,7 @@ static void oidc_cfg_cache_file_create_server_config(oidc_cfg_t *c) {
 	c->cache.file_clean_interval = OIDC_CONFIG_POS_INT_UNSET;
 }
 
-static void oidc_cfg_cache_file_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
+static void oidc_cfg_cache_file_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
 	c->cache.file_dir = _oidc_cfg_merge_ptr(add->cache.file_dir, base->cache.file_dir);
 	c->cache.file_clean_interval =
 	    _oidc_cfg_merge_pos_int(add->cache.file_clean_interval, base->cache.file_clean_interval);
@@ -265,7 +265,7 @@ static void oidc_cfg_cache_memcache_create_server_config(oidc_cfg_t *c) {
 	c->cache.memcache_ttl = OIDC_CONFIG_POS_TIMEOUT_UNSET;
 }
 
-static void oidc_cfg_cache_memcache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
+static void oidc_cfg_cache_memcache_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
 	c->cache.memcache_servers = _oidc_cfg_merge_ptr(add->cache.memcache_servers, base->cache.memcache_servers);
 	c->cache.memcache_min = _oidc_cfg_merge_pos_int(add->cache.memcache_min, base->cache.memcache_min);
 	c->cache.memcache_smax = _oidc_cfg_merge_pos_int(add->cache.memcache_smax, base->cache.memcache_smax);
@@ -330,7 +330,7 @@ static void oidc_cfg_cache_redis_create_server_config(oidc_cfg_t *c) {
 	c->cache.redis_timeout = OIDC_CONFIG_POS_INT_UNSET;
 }
 
-static void oidc_cfg_cache_redis_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
+static void oidc_cfg_cache_redis_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
 	c->cache.redis_server = _oidc_cfg_merge_ptr(add->cache.redis_server, base->cache.redis_server);
 	c->cache.redis_username = _oidc_cfg_merge_ptr(add->cache.redis_username, base->cache.redis_username);
 	c->cache.redis_password = _oidc_cfg_merge_ptr(add->cache.redis_password, base->cache.redis_password);

@@ -54,9 +54,9 @@
  * revoke a single token of the indicated type at the RFC 7009 revocation endpoint,
  * doing nothing when the session does not hold such a token
  */
-static void oidc_logout_revoke_one_token(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, apr_table_t *params,
-					 const char *basic_auth, const char *bearer_auth, const char *token_type_hint,
-					 const char *token) {
+static void oidc_logout_revoke_one_token(request_rec *r, oidc_cfg_t *c, const oidc_provider_t *provider,
+					 apr_table_t *params, const char *basic_auth, const char *bearer_auth,
+					 const char *token_type_hint, const char *token) {
 	char *response = NULL;
 
 	if (token == NULL)

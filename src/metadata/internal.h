@@ -180,7 +180,7 @@ apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const ch
 const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_json_t *json, const char *key,
 						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
 						const char *preference);
-const char *oidc_metadata_endpoint_auth_select(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_provider,
+const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value);
 const oidc_json_t *oidc_metadata_mtls_endpoint_aliases_get(const oidc_json_t *j_provider);
 void oidc_metadata_parse_boolean(request_rec *r, const oidc_json_t *json, const char *key, int *value,

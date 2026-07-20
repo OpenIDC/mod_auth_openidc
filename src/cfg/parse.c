@@ -81,7 +81,7 @@ static char *oidc_cfg_parse_string_options_flatten(apr_pool_t *pool, const char 
 	oidc_cfg_option_t *opts = apr_pcalloc(pool, n * sizeof(oidc_cfg_option_t));
 	for (int i = 0; i < n; i++) {
 		opts[i].val = i;
-		opts[i].str = (char *)options[i];
+		opts[i].str = options[i];
 	}
 	return oidc_cfg_parse_options_flatten(pool, opts, n);
 }

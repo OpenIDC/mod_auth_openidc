@@ -960,14 +960,12 @@ static const struct {
 };
 
 static apr_byte_t oidc_validate_redirect_url_chars(request_rec *r, const char *url, char **err_str, char **err_desc) {
-	int i = 0;
-
 	if ((_oidc_strstr(url, "\n") != NULL) || (_oidc_strstr(url, "\r") != NULL))
 		return oidc_validate_redirect_url_fail(
 		    r, err_str, err_desc, "Invalid URL",
 		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)", url));
 
-	for (i = 0; _oidc_redirect_url_illegal_substrings[i].needle != NULL; i++) {
+	for (int i = 0; _oidc_redirect_url_illegal_substrings[i].needle != NULL; i++) {
 		const char *needle = _oidc_redirect_url_illegal_substrings[i].needle;
 		const char *found = _oidc_redirect_url_illegal_substrings[i].case_insensitive
 					? oidc_util_strcasestr(url, needle)
