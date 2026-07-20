@@ -994,8 +994,8 @@ static void _oidc_cfg_merge_crypto_passphrase(oidc_crypto_passphrase_t *c, const
  * merge a new server config with a base one
  */
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
-	oidc_cfg_t *base = (oidc_cfg_t *)BASE;
-	oidc_cfg_t *add = (oidc_cfg_t *)ADD;
+	const oidc_cfg_t *base = (const oidc_cfg_t *)BASE;
+	const oidc_cfg_t *add = (const oidc_cfg_t *)ADD;
 
 	oidc_cfg_t *c = oidc_cfg_server_alloc(pool, add->svr);
 
