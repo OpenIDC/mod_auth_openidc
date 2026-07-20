@@ -51,16 +51,42 @@
 #define OIDC_TOKEN_REVOCATION_AUD_ENV_VAR "OIDC_TOKEN_REVOCATION_AUD"
 
 /*
+ * revoke a single token of the indicated type at the RFC 7009 revocation endpoint,
+ * doing nothing when the session does not hold such a token
+ */
+static void oidc_logout_revoke_one_token(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, apr_table_t *params,
+					 const char *basic_auth, const char *bearer_auth, const char *token_type_hint,
+					 const char *token) {
+	char *response = NULL;
+
+	if (token == NULL)
+		return;
+
+	apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, token_type_hint);
+	apr_table_setn(params, OIDC_PROTO_TOKEN, token);
+
+	if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
+				bearer_auth, NULL, oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL,
+				NULL, oidc_cfg_http_timeout_long_get(c), oidc_cfg_outgoing_proxy_get(c),
+				oidc_cfg_dir_pass_cookies_get(r),
+				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE)
+		oidc_warn(r, "revoking %s failed", token_type_hint);
+
+	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
+	apr_table_unset(params, OIDC_PROTO_TOKEN);
+}
+
+/*
  * revoke refresh token and access token stored in the session if the
  * OP has an RFC 7009 compliant token revocation endpoint
  */
 static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, const oidc_session_t *session) {
 
-	char *response = NULL;
 	char *basic_auth = NULL;
 	char *bearer_auth = NULL;
 	apr_table_t *params = NULL;
-	const char *token = NULL;
 	oidc_provider_t *provider = NULL;
 
 	oidc_debug(r, "enter");
@@ -92,39 +118,10 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, const oidc_
 		params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
-	token = oidc_session_get_refresh_token(r, session);
-	if (token != NULL) {
-		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_REFRESH_TOKEN);
-		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
-
-		if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
-					bearer_auth, NULL, oidc_cfg_provider_ssl_validate_server_get(provider),
-					&response, NULL, NULL, oidc_cfg_http_timeout_long_get(c),
-					oidc_cfg_outgoing_proxy_get(c), oidc_cfg_dir_pass_cookies_get(r),
-					oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
-					oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
-					oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
-			oidc_warn(r, "revoking refresh token failed");
-		}
-		apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
-		apr_table_unset(params, OIDC_PROTO_TOKEN);
-	}
-
-	token = oidc_session_get_access_token(r, session);
-	if (token != NULL) {
-		apr_table_setn(params, OIDC_PROTO_TOKEN_TYPE_HINT, OIDC_PROTO_ACCESS_TOKEN);
-		apr_table_setn(params, OIDC_PROTO_TOKEN, token);
-
-		if (oidc_http_post_form(r, oidc_cfg_provider_revocation_endpoint_url_get(provider), params, basic_auth,
-					bearer_auth, NULL, oidc_cfg_provider_ssl_validate_server_get(provider),
-					&response, NULL, NULL, oidc_cfg_http_timeout_long_get(c),
-					oidc_cfg_outgoing_proxy_get(c), oidc_cfg_dir_pass_cookies_get(r),
-					oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
-					oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
-					oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
-			oidc_warn(r, "revoking access token failed");
-		}
-	}
+	oidc_logout_revoke_one_token(r, c, provider, params, basic_auth, bearer_auth, OIDC_PROTO_REFRESH_TOKEN,
+				     oidc_session_get_refresh_token(r, session));
+	oidc_logout_revoke_one_token(r, c, provider, params, basic_auth, bearer_auth, OIDC_PROTO_ACCESS_TOKEN,
+				     oidc_session_get_access_token(r, session));
 
 out:
 
