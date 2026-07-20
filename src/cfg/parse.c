@@ -469,12 +469,16 @@ static const char *oidc_cfg_parse_key_value(apr_pool_t *pool, const char *enc, c
 #define OIDC_KEY_TUPLE_SEPARATOR "#"
 #define OIDC_KEY_SIG_PREFIX OIDC_JOSE_JWK_SIG_STR ":"
 #define OIDC_KEY_ENC_PREFIX OIDC_JOSE_JWK_ENC_STR ":"
+#define OIDC_KEY_ALG_SEPARATOR OIDC_STR_AT
+#define OIDC_KEY_ALG_LIST_SEPARATOR "+"
 
 /*
- * parse a <use>:<encoding>#<key-identifier>#<key> tuple
+ * parse a [<use>:][<alg>[+<alg>...]@][<key-identifier>#]<key> tuple (or, when triplet is TRUE, a
+ * [<use>:]<encoding>#<key-identifier>#<key> tuple); the optional "<alg>[+<alg>...]@" list is only
+ * recognized when a non-NULL alg out-parameter is passed
  */
 const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char **kid, char **key, int *key_len,
-				      char **use, apr_byte_t triplet) {
+				      char **use, char **alg, apr_byte_t triplet) {
 	const char *rv = NULL;
 	char *s = NULL;
 	char *p = NULL;
@@ -491,6 +495,22 @@ const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char 
 		} else if (_oidc_strstr(tuple, OIDC_KEY_ENC_PREFIX) == tuple) {
 			*use = OIDC_JOSE_JWK_ENC_STR;
 			tuple += _oidc_strlen(OIDC_KEY_ENC_PREFIX);
+		}
+	}
+
+	/* optional "<alg>[+<alg>...]@" list preceding the "[<kid>#]<key>" record; guard against a filename
+	 * that itself contains '@' by requiring the candidate segment to hold no kid ('#') or path ('/') char */
+	if (alg) {
+		const char *at = _oidc_strstr(tuple, OIDC_KEY_ALG_SEPARATOR);
+		if ((at != NULL) && (at > tuple)) {
+			apr_byte_t is_alg_list = TRUE;
+			for (const char *c = tuple; (is_alg_list == TRUE) && (c < at); c++)
+				if ((*c == OIDC_KEY_TUPLE_SEPARATOR[0]) || (*c == OIDC_CHAR_FORWARD_SLASH))
+					is_alg_list = FALSE;
+			if (is_alg_list == TRUE) {
+				*alg = apr_pstrndup(pool, tuple, at - tuple);
+				tuple = at + _oidc_strlen(OIDC_KEY_ALG_SEPARATOR);
+			}
 		}
 	}
 
@@ -569,18 +589,40 @@ const char *oidc_cfg_parse_passphrase(apr_pool_t *pool, const char *arg, char **
 }
 
 /*
- * add a public key from an X.509 file to our list of JWKs with public keys
+ * parse the PEM key in file "fname" into a JWK with key identifier "kid" (auto-derived when NULL)
  */
-const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys) {
-	oidc_jwk_t *jwk = NULL;
+static const char *oidc_cfg_parse_pem_key(apr_pool_t *pool, apr_byte_t is_private, const char *kid, const char *fname,
+					  oidc_jwk_t **jwk) {
 	oidc_jose_error_t err;
-	char *use = NULL;
+	apr_byte_t rv = is_private ? oidc_jwk_parse_pem_private_key(pool, kid, fname, jwk, &err)
+				   : oidc_jwk_parse_pem_public_key(pool, kid, fname, jwk, &err);
+	if (rv == FALSE)
+		return apr_psprintf(pool, "oidc_jwk_parse_pem_%s_key failed for (kid=%s) \"%s\": %s",
+				    is_private ? "private" : "public", kid ? kid : "", fname, oidc_jose_e2s(pool, err));
+	return NULL;
+}
 
+/*
+ * add the public or private key from a PEM/X.509 file to our list of JWKs
+ *
+ * The tuple is [<use>:][<alg>[+<alg>...]@][<kid>#]<filename>. When more than one "alg" is supplied the
+ * same key is loaded once per algorithm, each duplicate published (and, for private keys, indexed for
+ * decryption) under a distinct, alg-derived "kid" so an OP can select a specific key-management algorithm
+ * from the JWKs (see RFC 7517 section 4.4). Without an "alg" the behaviour is unchanged (single key).
+ */
+static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys,
+					    apr_byte_t is_private) {
+	oidc_jwk_t *jwk = NULL;
+	char *use = NULL;
+	char *alg = NULL;
 	char *kid = NULL;
 	char *name = NULL;
 	char *fname = NULL;
 	int fname_len;
-	const char *rv = oidc_cfg_parse_key_record(pool, arg, &kid, &name, &fname_len, &use, FALSE);
+	char *tok = NULL;
+	char *last = NULL;
+
+	const char *rv = oidc_cfg_parse_key_record(pool, arg, &kid, &name, &fname_len, &use, &alg, FALSE);
 	if (rv != NULL)
 		return rv;
 
@@ -588,18 +630,64 @@ const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, a
 	if (rv != NULL)
 		return rv;
 
-	if (oidc_jwk_parse_pem_public_key(pool, kid, fname, &jwk, &err) == FALSE) {
-		return apr_psprintf(pool, "oidc_jwk_parse_pem_public_key failed for (kid=%s) \"%s\": %s", kid, fname,
-				    oidc_jose_e2s(pool, err));
+	/* split the optional "+"-separated algorithm list; an empty list yields a single pass with alg == NULL */
+	apr_array_header_t *algs = apr_array_make(pool, 2, sizeof(char *));
+	for (tok = alg ? apr_strtok(alg, OIDC_KEY_ALG_LIST_SEPARATOR, &last) : NULL; tok != NULL;
+	     tok = apr_strtok(NULL, OIDC_KEY_ALG_LIST_SEPARATOR, &last))
+		APR_ARRAY_PUSH(algs, char *) = tok;
+	if (algs->nelts == 0)
+		APR_ARRAY_PUSH(algs, char *) = NULL;
+
+	apr_byte_t multi = (algs->nelts > 1);
+
+	/* when duplicating a key without an explicit kid, derive the shared base kid from the key material once */
+	const char *base_kid = kid;
+	if ((base_kid == NULL) && (multi == TRUE)) {
+		rv = oidc_cfg_parse_pem_key(pool, is_private, NULL, fname, &jwk);
+		if (rv != NULL)
+			return rv;
+		base_kid = jwk->kid;
 	}
 
 	if (*keys == NULL)
 		*keys = apr_array_make(pool, 4, sizeof(const oidc_jwk_t *));
-	if (use)
-		jwk->use = apr_pstrdup(pool, use);
-	APR_ARRAY_PUSH(*keys, const oidc_jwk_t *) = jwk;
+
+	for (int i = 0; i < algs->nelts; i++) {
+		char *a = APR_ARRAY_IDX(algs, i, char *);
+		/* keep kids distinct across the per-alg duplicates; a single key keeps its (explicit or derived) kid */
+		const char *this_kid =
+		    ((base_kid != NULL) && (multi == TRUE)) ? apr_psprintf(pool, "%s-%s", base_kid, a) : base_kid;
+
+		rv = oidc_cfg_parse_pem_key(pool, is_private, this_kid, fname, &jwk);
+		if (rv != NULL)
+			return rv;
+
+		if (use)
+			jwk->use = apr_pstrdup(pool, use);
+		if (a != NULL) {
+			if (oidc_alg2kty(a) != jwk->kty)
+				return apr_psprintf(
+				    pool, "algorithm \"%s\" is not compatible with the key type of \"%s\"", a, fname);
+			jwk->alg = apr_pstrdup(pool, a);
+		}
+		APR_ARRAY_PUSH(*keys, const oidc_jwk_t *) = jwk;
+	}
 
 	return NULL;
+}
+
+/*
+ * add a public key from an X.509 file to our list of JWKs with public keys
+ */
+const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys) {
+	return oidc_cfg_parse_key_files(pool, arg, keys, FALSE);
+}
+
+/*
+ * add a private key from an RSA/EC private key file to our list of JWKs with private keys
+ */
+const char *oidc_cfg_parse_private_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys) {
+	return oidc_cfg_parse_key_files(pool, arg, keys, TRUE);
 }
 
 /*

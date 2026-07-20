@@ -213,6 +213,9 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const json_t *json, oidc_jose_error
 
 	result = oidc_jwk_from_cjose(pool, cjose_jwk, use);
 
+	// set alg
+	oidc_jose_get_string(pool, json, OIDC_JOSE_JWK_ALG_STR, FALSE, &result->alg, NULL);
+
 	// set x5c array
 	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
 	if (v && json_is_array(v)) {
@@ -249,6 +252,7 @@ oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
 	dst->kid = apr_pstrdup(pool, src->kid);
 	dst->kty = src->kty;
 	dst->use = apr_pstrdup(pool, src->use);
+	dst->alg = apr_pstrdup(pool, src->alg);
 	dst->x5c = NULL;
 	if (src->x5c) {
 		dst->x5c = apr_array_make(pool, src->x5c->nelts, sizeof(const char *));
@@ -398,6 +402,10 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 
 	if (jwk->use)
 		json_object_set_new(json, OIDC_JOSE_JWK_USE_STR, json_string(jwk->use));
+
+	// set alg (RFC 7517 section 4.4); lets an OP pick this key for the named algorithm
+	if (jwk->alg)
+		json_object_set_new(json, OIDC_JOSE_JWK_ALG_STR, json_string(jwk->alg));
 
 	// set x5c
 	if ((jwk->x5c != NULL) && (jwk->x5c->nelts > 0)) {

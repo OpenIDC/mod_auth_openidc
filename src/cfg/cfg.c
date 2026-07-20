@@ -450,36 +450,7 @@ OIDC_CFG_MEMBER_FUNC_GET(public_keys, const apr_array_header_t *)
  */
 const char *oidc_cmd_private_keys_set(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	oidc_jwk_t *jwk = NULL;
-	oidc_jose_error_t err;
-	char *use = NULL;
-
-	char *kid = NULL;
-	char *name = NULL;
-	char *fname = NULL;
-	int fname_len;
-	const char *rv = oidc_cfg_parse_key_record(cmd->pool, arg, &kid, &name, &fname_len, &use, FALSE);
-	if (rv != NULL)
-		goto end;
-
-	rv = oidc_cfg_parse_filename(cmd->pool, name, &fname);
-	if (rv != NULL)
-		goto end;
-
-	if (oidc_jwk_parse_pem_private_key(cmd->pool, kid, fname, &jwk, &err) == FALSE) {
-		rv = apr_psprintf(cmd->pool, "oidc_jwk_parse_pem_private_key failed for (kid=%s) \"%s\": %s", kid,
-				  fname, oidc_jose_e2s(cmd->pool, err));
-		goto end;
-	}
-
-	if (cfg->private_keys == NULL)
-		cfg->private_keys = apr_array_make(cmd->pool, 4, sizeof(const oidc_jwk_t *));
-	if (use)
-		jwk->use = apr_pstrdup(cmd->pool, use);
-	APR_ARRAY_PUSH(cfg->private_keys, const oidc_jwk_t *) = jwk;
-
-end:
-
+	const char *rv = oidc_cfg_parse_private_key_files(cmd->pool, arg, &cfg->private_keys);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 

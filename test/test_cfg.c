@@ -827,6 +827,63 @@ START_TEST(test_cfg_parse_public_key_files) {
 }
 END_TEST
 
+START_TEST(test_cfg_parse_key_files_alg) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_jose_error_t err;
+	char *s_json = NULL;
+
+	/* a single "<alg>@" publishes the key with a matching "alg" and keeps its explicit kid */
+	apr_array_header_t *keys = NULL;
+	const char *arg = apr_psprintf(pool, "enc:RSA-OAEP@rsa-1#%s/public.pem", dir);
+	ck_assert_ptr_null(oidc_cfg_parse_public_key_files(pool, arg, &keys));
+	ck_assert_int_eq(keys->nelts, 1);
+	oidc_jwk_t *jwk = APR_ARRAY_IDX(keys, 0, oidc_jwk_t *);
+	ck_assert_str_eq(jwk->use, OIDC_JOSE_JWK_ENC_STR);
+	ck_assert_str_eq(jwk->alg, "RSA-OAEP");
+	ck_assert_str_eq(jwk->kid, "rsa-1");
+	/* the "alg" must be published in the JWK JSON so an OP can select the key */
+	ck_assert_int_eq(oidc_jwk_to_json(pool, jwk, &s_json, &err), TRUE);
+	ck_assert_ptr_nonnull(_oidc_strstr(s_json, "\"alg\":\"RSA-OAEP\""));
+
+	/* a "+"-separated list duplicates the same key once per algorithm under distinct, alg-derived kids */
+	keys = NULL;
+	arg = apr_psprintf(pool, "enc:RSA-OAEP+RSA-OAEP-256@k#%s/public.pem", dir);
+	ck_assert_ptr_null(oidc_cfg_parse_public_key_files(pool, arg, &keys));
+	ck_assert_int_eq(keys->nelts, 2);
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->kid, "k-RSA-OAEP");
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->alg, "RSA-OAEP");
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 1, oidc_jwk_t *)->kid, "k-RSA-OAEP-256");
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 1, oidc_jwk_t *)->alg, "RSA-OAEP-256");
+
+	/* the matching private keys fan out under the SAME kids so a JWE referencing them can be decrypted */
+	apr_array_header_t *priv = NULL;
+	arg = apr_psprintf(pool, "enc:RSA-OAEP+RSA-OAEP-256@k#%s/private.pem", dir);
+	ck_assert_ptr_null(oidc_cfg_parse_private_key_files(pool, arg, &priv));
+	ck_assert_int_eq(priv->nelts, 2);
+	ck_assert_str_eq(APR_ARRAY_IDX(priv, 0, oidc_jwk_t *)->kid, "k-RSA-OAEP");
+	ck_assert_str_eq(APR_ARRAY_IDX(priv, 1, oidc_jwk_t *)->kid, "k-RSA-OAEP-256");
+
+	/* without an explicit kid the duplicates get the auto-derived base kid, suffixed per algorithm, and
+	 * the public and private sides derive the same base kid from the (matching) key material */
+	keys = NULL;
+	priv = NULL;
+	ck_assert_ptr_null(oidc_cfg_parse_public_key_files(
+	    pool, apr_psprintf(pool, "enc:RSA-OAEP+RSA1_5@%s/public.pem", dir), &keys));
+	ck_assert_ptr_null(oidc_cfg_parse_private_key_files(
+	    pool, apr_psprintf(pool, "enc:RSA-OAEP+RSA1_5@%s/private.pem", dir), &priv));
+	ck_assert_int_eq(keys->nelts, 2);
+	ck_assert_int_eq(priv->nelts, 2);
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->kid, APR_ARRAY_IDX(priv, 0, oidc_jwk_t *)->kid);
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 1, oidc_jwk_t *)->kid, APR_ARRAY_IDX(priv, 1, oidc_jwk_t *)->kid);
+
+	/* an algorithm incompatible with the key type is rejected at config time */
+	keys = NULL;
+	ck_assert_ptr_nonnull(oidc_cfg_parse_public_key_files(
+	    pool, apr_psprintf(pool, "enc:ES256@%s/public.pem", dir), &keys));
+}
+END_TEST
+
 START_TEST(test_cfg_parse_remote_user_claim) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_remote_user_claim_t claim;
@@ -940,37 +997,37 @@ START_TEST(test_cfg_parse_key_record_encodings) {
 
 	/* base64: 16 bytes */
 	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "b64#k1#AAECAwQFBgcICQoLDA0ODw==", &kid, &key, &key_len, &use, TRUE));
+	    oidc_cfg_parse_key_record(r->pool, "b64#k1#AAECAwQFBgcICQoLDA0ODw==", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_str_eq(kid, "k1");
 	ck_assert_int_eq(key_len, 16);
 
 	/* base64url: 16 bytes, no padding */
 	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "b64url#k2#AAECAwQFBgcICQoLDA0ODw", &kid, &key, &key_len, &use, TRUE));
+	    oidc_cfg_parse_key_record(r->pool, "b64url#k2#AAECAwQFBgcICQoLDA0ODw", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_str_eq(kid, "k2");
 	ck_assert_int_eq(key_len, 16);
 
 	/* hex: 16 bytes */
 	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "hex#k3#000102030405060708090a0b0c0d0e0f", &kid, &key,
-						     &key_len, &use, TRUE));
+						     &key_len, &use, NULL, TRUE));
 	ck_assert_int_eq(key_len, 16);
 	ck_assert_int_eq((unsigned char)key[15], 0x0f);
 
 	/* plain */
-	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_int_eq(key_len, 8);
 
 	/* use prefix */
 	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "sig:plain#k5#mysecret", &kid, &key, &key_len, &use, TRUE));
+	    oidc_cfg_parse_key_record(r->pool, "sig:plain#k5#mysecret", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_ptr_nonnull(use);
 	ck_assert_str_eq(use, "sig");
 
 	/* error branches: invalid base64url, odd-length hex, non-hex input, unknown encoding */
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, TRUE));
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#abc", &kid, &key, &key_len, &use, TRUE));
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#zzzz", &kid, &key, &key_len, &use, TRUE));
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#abc", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#zzzz", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, NULL, TRUE));
 }
 END_TEST
 
@@ -2224,6 +2281,7 @@ int main(void) {
 	tcase_add_test(parse, test_cfg_parse_is_valid_url);
 	tcase_add_test(parse, test_cfg_parse_action_on_error_refresh_as);
 	tcase_add_test(parse, test_cfg_parse_public_key_files);
+	tcase_add_test(parse, test_cfg_parse_key_files_alg);
 	tcase_add_test(parse, test_cfg_parse_remote_user_claim);
 	tcase_add_test(parse, test_cfg_parse_http_timeout);
 	tcase_add_test(parse, test_cfg_parse_key_record_encodings);

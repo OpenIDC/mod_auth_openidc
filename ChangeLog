@@ -1,3 +1,13 @@
+07/20/2026
+- jose/config: support publishing an "alg" (algorithm) parameter on the keys in
+  the client JWKs and duplicating a single RSA/EC key under multiple algorithms;
+  OIDCPublicKeyFiles/OIDCPrivateKeyFiles now accept an optional
+  "<alg>[+<alg>...]@" prefix, e.g. "enc:RSA-OAEP@<file>" publishes the key with
+  "alg":"RSA-OAEP" and "enc:RSA-OAEP+RSA-OAEP-256@<file>" publishes it once per
+  algorithm under distinct, alg-derived "kid"s; this lets an OP (e.g. Keycloak)
+  fetch the key from OIDCClientJwksUri and select a key-management algorithm
+  itself, instead of the RP having to register the encryption JWK inline
+
 07/19/2026
 - request: emit "cty":"JWT" on an encrypted request object and stop appending a
   trailing NUL byte to the JWE plaintext, so that OPs which strictly follow

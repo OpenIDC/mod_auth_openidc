@@ -87,6 +87,7 @@ typedef struct bio_st BIO;
 #define OIDC_JOSE_JWK_X5T256_STR "x5t#S256" // X509 SHA-256 thumbprint
 #define OIDC_JOSE_JWK_SIG_STR "sig"	    // use signature type
 #define OIDC_JOSE_JWK_ENC_STR "enc"	    // use encryption type
+#define OIDC_JOSE_JWK_ALG_STR "alg"	    // algorithm intended for use with the key
 
 /* the OIDC jwks fields from RFC 5741 */
 #define OIDC_JOSE_JWKS_KEYS_STR "keys" // Array of JWKs
@@ -183,6 +184,9 @@ typedef struct oidc_jose_json_t {
 typedef struct oidc_jwk_t {
 	/* use type */
 	char *use;
+	/* JWK "alg" (algorithm) parameter (optional; RFC 7517 section 4.4); when set it is published in the
+	 * JWKs so an OP can select this key for the named algorithm, and it drives per-alg key duplication */
+	char *alg;
 	/* key type */
 	int kty;
 	/* key identifier */
@@ -312,6 +316,8 @@ const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
 apr_byte_t oidc_jwt_hdr_set_json(oidc_jwt_t *jwt, const char *key, const char *raw_json, oidc_jose_error_t *err);
 /* return the key type of a JWT */
 int oidc_jwt_alg2kty(const oidc_jwt_t *jwt);
+/* return the key type (cjose kty) that the provided JWA algorithm name requires, or -1 if unknown */
+int oidc_alg2kty(const char *alg);
 /* return the key size for an algorithm */
 unsigned int oidc_alg2keysize(const char *alg);
 

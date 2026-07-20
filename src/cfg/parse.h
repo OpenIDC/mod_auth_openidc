@@ -75,11 +75,12 @@ const char *oidc_cfg_parse_dirname(apr_pool_t *pool, const char *arg, char **val
 const char *oidc_cfg_parse_filename(apr_pool_t *pool, const char *arg, char **value);
 const char *oidc_cfg_parse_relative_or_absolute_url(apr_pool_t *pool, const char *arg, char **value);
 const char *oidc_cfg_parse_key_record(apr_pool_t *pool, const char *tuple, char **kid, char **key, int *key_len,
-				      char **use, apr_byte_t triplet);
+				      char **use, char **alg, apr_byte_t triplet);
 const char *oidc_cfg_parse_action_on_error_refresh_as(apr_pool_t *pool, const char *arg,
 						      oidc_on_error_action_t *action);
 const char *oidc_cfg_parse_passphrase(apr_pool_t *pool, const char *arg, char **passphrase);
 const char *oidc_cfg_parse_public_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys);
+const char *oidc_cfg_parse_private_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys);
 
 typedef const char *(*oidc_valid_function_t)(apr_pool_t *, const char *);
 
