@@ -498,22 +498,40 @@ end:
 }
 
 /*
+ * map a JOSE signing algorithm to its SHA-2 family: the OpenSSL digest name and the hash
+ * length both derive from this single table so the two mappings cannot go out of sync;
+ * the table is function-local because the CJOSE_HDR_ALG_* values are extern pointers,
+ * not compile-time constants
+ */
+static apr_byte_t _oidc_jose_alg_to_sha2(const char *alg, const char **openssl_digest, int *hash_len) {
+	const struct {
+		const char *algs[4];
+		const char *openssl_digest;
+		int hash_len;
+	} families[] = {
+	    {{CJOSE_HDR_ALG_RS256, CJOSE_HDR_ALG_PS256, CJOSE_HDR_ALG_HS256, CJOSE_HDR_ALG_ES256}, LN_sha256, 32},
+	    {{CJOSE_HDR_ALG_RS384, CJOSE_HDR_ALG_PS384, CJOSE_HDR_ALG_HS384, CJOSE_HDR_ALG_ES384}, LN_sha384, 48},
+	    {{CJOSE_HDR_ALG_RS512, CJOSE_HDR_ALG_PS512, CJOSE_HDR_ALG_HS512, CJOSE_HDR_ALG_ES512}, LN_sha512, 64},
+	};
+	for (int i = 0; i < (int)(sizeof(families) / sizeof(families[0])); i++) {
+		for (int j = 0; j < (int)(sizeof(families[0].algs) / sizeof(const char *)); j++) {
+			if (_oidc_strcmp(alg, families[i].algs[j]) == 0) {
+				*openssl_digest = families[i].openssl_digest;
+				*hash_len = families[i].hash_len;
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+
+/*
  * return the OpenSSL hash algorithm associated with a specified JWT algorithm
  */
-static char *oidc_jose_alg_to_openssl_digest(const char *alg) {
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0) ||
-	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS256) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES256) == 0)) {
-		return LN_sha256;
-	}
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS384) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS384) == 0) ||
-	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS384) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES384) == 0)) {
-		return LN_sha384;
-	}
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS512) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS512) == 0) ||
-	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS512) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES512) == 0)) {
-		return LN_sha512;
-	}
-	return NULL;
+static const char *oidc_jose_alg_to_openssl_digest(const char *alg) {
+	const char *digest = NULL;
+	int len = 0;
+	return _oidc_jose_alg_to_sha2(alg, &digest, &len) ? digest : NULL;
 }
 
 /*
@@ -536,17 +554,7 @@ apr_byte_t oidc_jose_hash_string(apr_pool_t *pool, const char *alg, const char *
  * return hash length for the specified JOSE algorithm
  */
 int oidc_jose_hash_length(const char *alg) {
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS256) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS256) == 0) ||
-	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS256) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES256) == 0)) {
-		return 32;
-	}
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS384) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS384) == 0) ||
-	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS384) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES384) == 0)) {
-		return 48;
-	}
-	if ((_oidc_strcmp(alg, CJOSE_HDR_ALG_RS512) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_PS512) == 0) ||
-	    (_oidc_strcmp(alg, CJOSE_HDR_ALG_HS512) == 0) || (_oidc_strcmp(alg, CJOSE_HDR_ALG_ES512) == 0)) {
-		return 64;
-	}
-	return 0;
+	const char *digest = NULL;
+	int len = 0;
+	return _oidc_jose_alg_to_sha2(alg, &digest, &len) ? len : 0;
 }
