@@ -1,4 +1,22 @@
 07/20/2026
+- metrics: give the revoke-session counter a unique name
+  ("request.revoke_session") instead of colliding with the session-management
+  counter
+- cfg/oauth: fix OIDCOAuthIntrospectionEndpointKeyPassword being lost in
+  merged (virtual host) configurations
+- cfg/cache: fix OIDCCacheShmMax/OIDCCacheShmEntrySizeMax explicitly set to
+  their default value in a vhost not overriding a differing base server value
+- proto/request_object: fix a leak of the parsed OIDCRequestObject
+  configuration on the request-object-type error paths
+- refactor for readability/maintainability: deduplicate security-relevant
+  logic (log-redaction list, HTML/JS escaping, RFC 8705 endpoint-auth
+  selection, JOSE digest/hash-length mapping, refresh-error policy, RFC 7009
+  revocation, no-cache headers, per-flow response-parameter stripping), share
+  one config merge-helper trio, split proto/request_object.c out of
+  proto/request.c, move authentication-request emission into the handle
+  layer, dispatch per-profile behavior through an ops table, add a portable
+  OIDC_STATIC_ASSERT, and table-drive the authz handlers and redirect-URL
+  character checks
 - jose/config: support publishing an "alg" (algorithm) parameter on the keys in
   the client JWKs and duplicating a single RSA/EC key under multiple algorithms;
   OIDCPublicKeyFiles/OIDCPrivateKeyFiles now accept an optional
