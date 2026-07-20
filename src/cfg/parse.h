@@ -55,7 +55,6 @@ char *oidc_cfg_parse_option_ignore_case(apr_pool_t *pool, const oidc_cfg_option_
 					int *v);
 char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t options[], int n);
 
-char *oidc_cfg_parse_flatten_options(apr_pool_t *pool, const char *options[]);
 const char *oidc_cfg_parse_is_valid_option(apr_pool_t *pool, const char *arg, const char *options[]);
 const char *oidc_cfg_parse_is_valid_int(apr_pool_t *pool, int value, int min_value, int max_value);
 const char *oidc_cfg_parse_is_valid_url(apr_pool_t *pool, const char *arg, const char *scheme);

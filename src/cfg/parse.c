@@ -56,22 +56,34 @@
 #define OIDC_LIST_OPTIONS_QUOTE "'"
 
 /*
- * flatten the provided list of string options
+ * flatten the provided list of n {value, string} options into a "['a'|'b']" display string
  */
-char *oidc_cfg_parse_flatten_options(apr_pool_t *pool, const char *options[]) {
-	int i = 0;
-	char *result = OIDC_LIST_OPTIONS_START;
-	while (options[i] != NULL) {
-		if (i == 0)
-			result = apr_psprintf(pool, "%s%s%s%s", OIDC_LIST_OPTIONS_START, OIDC_LIST_OPTIONS_QUOTE,
-					      options[i], OIDC_LIST_OPTIONS_QUOTE);
-		else
-			result = apr_psprintf(pool, "%s%s%s%s%s", result, OIDC_LIST_OPTIONS_SEPARATOR,
-					      OIDC_LIST_OPTIONS_QUOTE, options[i], OIDC_LIST_OPTIONS_QUOTE);
-		i++;
+char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t options[], int n) {
+	char *result = NULL;
+	if (n <= 0)
+		return OIDC_LIST_OPTIONS_START OIDC_LIST_OPTIONS_END;
+	result = apr_psprintf(pool, "%s%s%s%s", OIDC_LIST_OPTIONS_QUOTE, options[--n].str, OIDC_LIST_OPTIONS_QUOTE,
+			      OIDC_LIST_OPTIONS_END);
+	for (--n; n >= 0; --n)
+		result = apr_psprintf(pool, "%s%s%s%s%s", OIDC_LIST_OPTIONS_QUOTE, options[n].str,
+				      OIDC_LIST_OPTIONS_QUOTE, OIDC_LIST_OPTIONS_SEPARATOR, result);
+	return apr_psprintf(pool, "%s%s", OIDC_LIST_OPTIONS_START, result);
+}
+
+/*
+ * flatten the provided NULL-terminated list of plain string options into the same
+ * "['a'|'b']" display format, delegating to oidc_cfg_parse_options_flatten
+ */
+static char *oidc_cfg_parse_string_options_flatten(apr_pool_t *pool, const char *options[]) {
+	int n = 0;
+	while (options[n] != NULL)
+		n++;
+	oidc_cfg_option_t *opts = apr_pcalloc(pool, n * sizeof(oidc_cfg_option_t));
+	for (int i = 0; i < n; i++) {
+		opts[i].val = i;
+		opts[i].str = (char *)options[i];
 	}
-	result = apr_psprintf(pool, "%s%s", result, OIDC_LIST_OPTIONS_END);
-	return result;
+	return oidc_cfg_parse_options_flatten(pool, opts, n);
 }
 
 /*
@@ -86,21 +98,9 @@ const char *oidc_cfg_parse_is_valid_option(apr_pool_t *pool, const char *arg, co
 	}
 	if (options[i] == NULL) {
 		return apr_psprintf(pool, "invalid value %s%s%s, must be one of %s", OIDC_LIST_OPTIONS_QUOTE, arg,
-				    OIDC_LIST_OPTIONS_QUOTE, oidc_cfg_parse_flatten_options(pool, options));
+				    OIDC_LIST_OPTIONS_QUOTE, oidc_cfg_parse_string_options_flatten(pool, options));
 	}
 	return NULL;
-}
-
-/*
- * flatten the provided list of n options
- */
-char *oidc_cfg_parse_options_flatten(apr_pool_t *pool, const oidc_cfg_option_t options[], int n) {
-	char *result = apr_psprintf(pool, "%s%s%s%s", OIDC_LIST_OPTIONS_QUOTE, options[--n].str,
-				    OIDC_LIST_OPTIONS_QUOTE, OIDC_LIST_OPTIONS_END);
-	for (--n; n >= 0; --n)
-		result = apr_psprintf(pool, "%s%s%s%s%s", OIDC_LIST_OPTIONS_QUOTE, options[n].str,
-				      OIDC_LIST_OPTIONS_QUOTE, OIDC_LIST_OPTIONS_SEPARATOR, result);
-	return apr_psprintf(pool, "%s%s", OIDC_LIST_OPTIONS_START, result);
 }
 
 /*
