@@ -536,36 +536,31 @@ typedef struct oidc_http_encode_t {
 
 /*
  * names of protocol parameters that carry secrets or tokens and must be redacted
- * before a request URL/body is written to the debug log
+ * before a request URL/body is written to the debug log; the single source of truth
+ * for both the per-parameter check and the body redaction below
  */
+static const char *_oidc_http_sensitive_params[] = {OIDC_PROTO_CLIENT_SECRET,
+						    OIDC_PROTO_CLIENT_ASSERTION,
+						    OIDC_PROTO_CODE,
+						    OIDC_PROTO_CODE_VERIFIER,
+						    OIDC_PROTO_REFRESH_TOKEN,
+						    OIDC_PROTO_ACCESS_TOKEN,
+						    NULL};
+
 static apr_byte_t oidc_http_param_is_sensitive(const char *key) {
-	static const char *sensitive[] = {OIDC_PROTO_CLIENT_SECRET,
-					  OIDC_PROTO_CLIENT_ASSERTION,
-					  OIDC_PROTO_CODE,
-					  OIDC_PROTO_CODE_VERIFIER,
-					  OIDC_PROTO_REFRESH_TOKEN,
-					  OIDC_PROTO_ACCESS_TOKEN,
-					  NULL};
-	for (int i = 0; sensitive[i] != NULL; i++)
-		if (_oidc_strcmp(key, sensitive[i]) == 0)
+	for (int i = 0; _oidc_http_sensitive_params[i] != NULL; i++)
+		if (_oidc_strcmp(key, _oidc_http_sensitive_params[i]) == 0)
 			return TRUE;
 	return FALSE;
 }
 
 /*
- * best-effort redaction of well-known sensitive parameters (client_secret, client_assertion,
- * code, code_verifier, refresh_token, access_token) inside a URL-form-encoded request body,
- * for debug-log purposes; JSON request bodies do not carry these parameters in this codebase
- * and are therefore left untouched
+ * best-effort redaction of the well-known sensitive parameters listed in
+ * _oidc_http_sensitive_params inside a URL-form-encoded request body, for debug-log
+ * purposes; JSON request bodies do not carry these parameters in this codebase and
+ * are therefore left untouched
  */
 const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
-	static const char *sensitive[] = {OIDC_PROTO_CLIENT_SECRET,
-					  OIDC_PROTO_CLIENT_ASSERTION,
-					  OIDC_PROTO_CODE,
-					  OIDC_PROTO_CODE_VERIFIER,
-					  OIDC_PROTO_REFRESH_TOKEN,
-					  OIDC_PROTO_ACCESS_TOKEN,
-					  NULL};
 	char *result = NULL;
 
 	if (data == NULL)
@@ -573,8 +568,8 @@ const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
 
 	result = apr_pstrdup(pool, data);
 
-	for (int i = 0; sensitive[i] != NULL; i++) {
-		const char *needle = apr_pstrcat(pool, sensitive[i], "=", NULL);
+	for (int i = 0; _oidc_http_sensitive_params[i] != NULL; i++) {
+		const char *needle = apr_pstrcat(pool, _oidc_http_sensitive_params[i], "=", NULL);
 		/* bounded: a well-formed body carries each parameter name at most once */
 		for (int iter = 0; iter < 4; iter++) {
 			const char *pos = _oidc_strstr(result, needle);
