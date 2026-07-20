@@ -833,7 +833,7 @@ START_TEST(test_handle_response_authorization_redirect_code_flow_happy_path) {
 	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
-	/* proto_state mirrors what oidc_proto_request_auth would have stored: response_type=code,
+	/* proto_state mirrors what oidc_request_auth would have stored: response_type=code,
 	 * response_mode=query (matching the default for the redirect handler) and a pkce_state
 	 * so the s256 verifier (the default PKCE method) can derive a verifier */
 	oidc_proto_state_t *ps = oidc_proto_state_new();

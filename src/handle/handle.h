@@ -47,6 +47,7 @@
 #include "const.h" // for the PACKAGE_* defines
 #include "jose.h"
 #include "json.h"
+#include "proto/proto.h"
 #include "session.h"
 #include <http_request.h>
 #include <mod_auth.h>
@@ -102,6 +103,10 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 int oidc_request_uri(request_rec *r, oidc_cfg_t *c);
 
 // request.c
+int oidc_request_auth(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
+		      const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
+		      const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
+		      const char *path_scope);
 int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, const char *original_url,
 				   const char *login_hint, const char *id_token_hint, const char *prompt,
 				   const char *auth_request_params, const char *path_scope);

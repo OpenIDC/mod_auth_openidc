@@ -130,9 +130,8 @@ START_TEST(test_proto_authorization_request) {
 	oidc_proto_state_set_response_type(proto_state, oidc_cfg_provider_response_type_get(provider));
 	oidc_proto_state_set_timestamp_now(proto_state);
 
-	ck_assert_int_eq(
-	    oidc_proto_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL, NULL),
-	    HTTP_MOVED_TEMPORARILY);
+	ck_assert_int_eq(oidc_request_auth(r, provider, NULL, redirect_uri, state, proto_state, NULL, NULL, NULL, NULL),
+			 HTTP_MOVED_TEMPORARILY);
 
 	ck_assert_table_str(
 	    r->headers_out, "Location",
@@ -2339,8 +2338,8 @@ START_TEST(test_proto_request_auth_par_redirect) {
 	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
 	oidc_proto_state_set_timestamp_now(ps);
 
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://rp.example.com/cb", "state-1", ps, NULL, NULL,
-					 NULL, NULL);
+	int rc =
+	    oidc_request_auth(r, provider, NULL, "https://rp.example.com/cb", "state-1", ps, NULL, NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -2424,8 +2423,8 @@ START_TEST(test_proto_request_auth_with_request_object_none) {
 	oidc_cfg_provider_request_object_set(r->pool, provider, "{\"crypto\":{\"sign_alg\":\"none\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-1", ps,
-					 NULL, NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-1", ps, NULL,
+				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -2450,8 +2449,8 @@ START_TEST(test_proto_request_auth_with_request_object_rs256) {
 	oidc_cfg_provider_request_object_set(r->pool, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-2", ps,
-					 NULL, NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-2", ps, NULL,
+				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -2472,8 +2471,8 @@ START_TEST(test_proto_request_auth_with_request_object_encrypted_symmetric) {
 					     "{\"crypto\":{\"sign_alg\":\"none\",\"crypt_alg\":\"A128KW\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-1", ps,
-					 NULL, NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-1", ps, NULL,
+				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -2520,8 +2519,8 @@ START_TEST(test_proto_request_auth_with_request_object_encrypted_rsa) {
 					     "\"crypt_enc\":\"A128CBC-HS256\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-2", ps,
-					 NULL, NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-2", ps, NULL,
+				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -2544,8 +2543,8 @@ START_TEST(test_proto_request_auth_with_request_object_encrypt_bad_alg) {
 					     "{\"crypto\":{\"sign_alg\":\"none\",\"crypt_alg\":\"BOGUS\"}}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-3", ps,
-					 NULL, NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-ro-enc-3", ps, NULL,
+				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -2564,8 +2563,8 @@ START_TEST(test_proto_request_auth_post_html) {
 	oidc_cfg_provider_auth_request_method_int_set(provider, OIDC_AUTH_REQUEST_METHOD_POST);
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
-					 NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL, NULL,
+				   NULL, NULL);
 	/* POST returns OK with an auto-submitting form rather than a 302 redirect */
 	ck_assert_int_eq(rc, OK);
 	ck_assert_table_unset(r->headers_out, "Location");
@@ -2580,8 +2579,8 @@ START_TEST(test_proto_request_auth_no_client_id) {
 	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
-					 NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL, NULL,
+				   NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
 	oidc_proto_state_destroy(ps);
 }
@@ -2597,8 +2596,8 @@ START_TEST(test_proto_request_auth_unknown_method) {
 	oidc_cfg_provider_auth_request_method_int_set(provider, 999);
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
-					 NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL, NULL,
+				   NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
 	oidc_proto_state_destroy(ps);
 }
@@ -2981,8 +2980,8 @@ START_TEST(test_proto_request_auth_with_copy_and_remove_from_request) {
 	    r->pool, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"},\"copy_and_remove_from_request\":[\"state\"]}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-to-strip", ps,
-					 NULL, NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "state-to-strip", ps, NULL,
+				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -3005,8 +3004,8 @@ static oidc_json_t *e2e_request_object_copy_params_payload(request_rec *r) {
 					     "\"copy_from_request\":[\"client_ref\",\"state\"]}");
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_proto_request_auth(r, provider, NULL, "https://www.example.com/protected/", "98765", ps, NULL,
-					 NULL, "client_ref=1234", NULL);
+	int rc = oidc_request_auth(r, provider, NULL, "https://www.example.com/protected/", "98765", ps, NULL, NULL,
+				   "client_ref=1234", NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);

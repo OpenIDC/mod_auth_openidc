@@ -41,7 +41,6 @@
  */
 
 #include "cfg/dir.h"
-#include "handle/handle.h"
 #include "metadata.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
@@ -78,7 +77,7 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 /*
  * send a Pushed Authorization Request (PAR) to the Provider
  */
-static int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provider_t *provider, apr_table_t *params) {
+int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provider_t *provider, apr_table_t *params) {
 	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *response = NULL;
 	char *basic_auth = NULL;
@@ -150,46 +149,6 @@ out:
 	return rv;
 }
 
-/* context structure for encoding parameters */
-typedef struct oidc_proto_form_post_ctx_t {
-	request_rec *r;
-	const char *html_body;
-} oidc_proto_form_post_ctx_t;
-
-/*
- * add a key/value pair post parameter
- */
-static int oidc_proto_request_form_post_param_add(void *rec, const char *key, const char *value) {
-	oidc_proto_form_post_ctx_t *ctx = (oidc_proto_form_post_ctx_t *)rec;
-	oidc_debug(ctx->r, "processing: %s=%s", key, value);
-	ctx->html_body =
-	    apr_psprintf(ctx->r->pool, "%s      <input type=\"hidden\" name=\"%s\" value=\"%s\">\n", ctx->html_body,
-			 oidc_util_html_escape(ctx->r->pool, key), oidc_util_html_escape(ctx->r->pool, value));
-	return 1;
-}
-
-/*
- * make the browser POST parameters through Javascript auto-submit
- */
-static const char *oidc_proto_request_html_post(request_rec *r, const char *url, const apr_table_t *params) {
-
-	oidc_debug(r, "enter");
-
-	const char *html_body = apr_psprintf(r->pool,
-					     "    <p>Submitting Authentication Request...</p>\n"
-					     "    <form method=\"post\" action=\"%s\">\n"
-					     "      <p>\n",
-					     url);
-
-	oidc_proto_form_post_ctx_t data = {r, html_body};
-	apr_table_do(oidc_proto_request_form_post_param_add, &data, params, NULL);
-
-	html_body = apr_psprintf(r->pool, "%s%s", data.html_body,
-				 "      </p>\n"
-				 "    </form>\n");
-
-	return html_body;
-}
 /*
  * concatenate per-path scopes with per-provider scopes, warn if "openid" is missing, and add the result to params
  */
@@ -216,11 +175,11 @@ static void oidc_proto_request_auth_scope_set(request_rec *r, const struct oidc_
 /*
  * assemble all parameters that go into the authentication request
  */
-static void oidc_proto_request_auth_params_set(request_rec *r, const struct oidc_provider_t *provider,
-					       const char *login_hint, const char *redirect_uri, const char *state,
-					       const oidc_proto_state_t *proto_state, const char *id_token_hint,
-					       const char *code_challenge, const char *auth_request_params,
-					       const char *path_scope, apr_table_t *params) {
+void oidc_proto_request_auth_params_set(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
+					const char *redirect_uri, const char *state,
+					const oidc_proto_state_t *proto_state, const char *id_token_hint,
+					const char *code_challenge, const char *auth_request_params,
+					const char *path_scope, apr_table_t *params) {
 
 	/* add the response type */
 	apr_table_setn(params, OIDC_PROTO_RESPONSE_TYPE, oidc_proto_state_get_response_type(proto_state));
@@ -275,104 +234,4 @@ static void oidc_proto_request_auth_params_set(request_rec *r, const struct oidc
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)
 		oidc_proto_request_object_param_add(r, provider, redirect_uri, params);
-}
-
-/*
- * send the authentication request via an HTML form auto-POST page
- */
-static int oidc_proto_request_auth_send_post(request_rec *r, const struct oidc_provider_t *provider,
-					     const apr_table_t *params) {
-	/* construct a HTML POST auto-submit page with the authorization request parameters */
-	const char *html_body =
-	    oidc_proto_request_html_post(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
-
-	/* signal this to the content handler */
-	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_POST, "Submitting...", NULL,
-					   "HTMLFormElement.prototype.submit.call(document.forms[0])", html_body);
-}
-
-/*
- * send the authentication request via an HTTP redirect (or a Javascript-based preserve page)
- */
-static int oidc_proto_request_auth_send_get(request_rec *r, const struct oidc_provider_t *provider,
-					    const apr_table_t *params) {
-
-	/* construct the full authorization request URL */
-	const char *authorization_request =
-	    oidc_http_query_encoded_url(r, oidc_cfg_provider_authorization_endpoint_url_get(provider), params);
-
-	char *javascript = NULL;
-
-	/* see if we need to preserve POST parameters through Javascript/HTML5 storage */
-	if (oidc_response_post_preserve_javascript(r, authorization_request, &javascript, NULL) == FALSE) {
-		/* add the redirect location header */
-		oidc_http_hdr_out_location_set(r, authorization_request);
-		/* and tell Apache to return an HTTP Redirect (302) message */
-		return HTTP_MOVED_TEMPORARILY;
-	}
-
-	// NB: if a template is in use, we should not override
-	// OIDC_REQUEST_STATE_KEY_HTTP with OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_HTTP) != NULL)
-		return OK;
-
-	/* signal this to the content handler */
-	return oidc_util_html_content_prep(r, OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE, "Preserving...", javascript,
-					   "preserveOnLoad()", "<p>Preserving...</p>");
-}
-
-/*
- * send an OpenID Connect authorization request to the specified provider
- */
-int oidc_proto_request_auth(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
-			    const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
-			    const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
-			    const char *path_scope) {
-	int rv;
-
-	/* log some stuff */
-	oidc_debug(r,
-		   "enter, issuer=%s, redirect_uri=%s, state=%s, proto_state=%s, code_challenge=%s, "
-		   "auth_request_params=%s, path_scope=%s",
-		   oidc_cfg_provider_issuer_get(provider), redirect_uri, state,
-		   oidc_proto_state_to_string(r, proto_state), code_challenge, auth_request_params, path_scope);
-
-	if (oidc_cfg_provider_client_id_get(provider) == NULL) {
-		oidc_error(r, "no Client ID set for the provider: perhaps you are accessing an endpoint protected with "
-			      "\"AuthType openid-connect\" instead of \"AuthType oauth20\"?)");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	/* assemble parameters to call the authorization endpoint */
-	apr_table_t *params = apr_table_make(r->pool, 4);
-	oidc_proto_request_auth_params_set(r, provider, login_hint, redirect_uri, state, proto_state, id_token_hint,
-					   code_challenge, auth_request_params, path_scope, params);
-
-	/* send the full authentication request via POST, PAR or GET */
-	switch (oidc_proto_profile_auth_request_method_get(provider)) {
-	case OIDC_AUTH_REQUEST_METHOD_POST:
-		rv = oidc_proto_request_auth_send_post(r, provider, params);
-		break;
-	case OIDC_AUTH_REQUEST_METHOD_PAR:
-		rv = oidc_proto_request_auth_push(r, provider, params);
-		break;
-	case OIDC_AUTH_REQUEST_METHOD_GET:
-		rv = oidc_proto_request_auth_send_get(r, provider, params);
-		break;
-	default:
-		oidc_error(r, "oidc_cfg_provider_auth_request_method_get(provider) set to an unknown value: %d",
-			   oidc_proto_profile_auth_request_method_get(provider));
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	/* cleanup */
-	oidc_proto_state_destroy(proto_state);
-
-	/* no cache */
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store, max-age=0");
-
-	/* log our exit code */
-	oidc_debug(r, "return: %d", rv);
-
-	return rv;
 }
