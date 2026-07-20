@@ -871,8 +871,8 @@ START_TEST(test_cfg_parse_key_files_alg) {
 	 * the public and private sides derive the same base kid from the (matching) key material */
 	keys = NULL;
 	priv = NULL;
-	ck_assert_ptr_null(oidc_cfg_parse_public_key_files(
-	    pool, apr_psprintf(pool, "enc:RSA-OAEP+RSA1_5@%s/public.pem", dir), &keys));
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_public_key_files(pool, apr_psprintf(pool, "enc:RSA-OAEP+RSA1_5@%s/public.pem", dir), &keys));
 	ck_assert_ptr_null(oidc_cfg_parse_private_key_files(
 	    pool, apr_psprintf(pool, "enc:RSA-OAEP+RSA1_5@%s/private.pem", dir), &priv));
 	ck_assert_int_eq(keys->nelts, 2);
@@ -884,8 +884,8 @@ START_TEST(test_cfg_parse_key_files_alg) {
 
 	/* an algorithm incompatible with the key type is rejected at config time */
 	keys = NULL;
-	ck_assert_ptr_nonnull(oidc_cfg_parse_public_key_files(
-	    pool, apr_psprintf(pool, "enc:ES256@%s/public.pem", dir), &keys));
+	ck_assert_ptr_nonnull(
+	    oidc_cfg_parse_public_key_files(pool, apr_psprintf(pool, "enc:ES256@%s/public.pem", dir), &keys));
 	oidc_jwk_list_destroy(keys);
 }
 END_TEST
@@ -1002,14 +1002,14 @@ START_TEST(test_cfg_parse_key_record_encodings) {
 	char *use = NULL;
 
 	/* base64: 16 bytes */
-	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "b64#k1#AAECAwQFBgcICQoLDA0ODw==", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "b64#k1#AAECAwQFBgcICQoLDA0ODw==", &kid, &key, &key_len,
+						     &use, NULL, TRUE));
 	ck_assert_str_eq(kid, "k1");
 	ck_assert_int_eq(key_len, 16);
 
 	/* base64url: 16 bytes, no padding */
-	ck_assert_ptr_null(
-	    oidc_cfg_parse_key_record(r->pool, "b64url#k2#AAECAwQFBgcICQoLDA0ODw", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "b64url#k2#AAECAwQFBgcICQoLDA0ODw", &kid, &key, &key_len,
+						     &use, NULL, TRUE));
 	ck_assert_str_eq(kid, "k2");
 	ck_assert_int_eq(key_len, 16);
 
@@ -1020,7 +1020,8 @@ START_TEST(test_cfg_parse_key_record_encodings) {
 	ck_assert_int_eq((unsigned char)key[15], 0x0f);
 
 	/* plain */
-	ck_assert_ptr_null(oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_key_record(r->pool, "plain#k4#mysecret", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_int_eq(key_len, 8);
 
 	/* use prefix */
@@ -1030,10 +1031,12 @@ START_TEST(test_cfg_parse_key_record_encodings) {
 	ck_assert_str_eq(use, "sig");
 
 	/* error branches: invalid base64url, odd-length hex, non-hex input, unknown encoding */
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_nonnull(
+	    oidc_cfg_parse_key_record(r->pool, "b64url#k#!!!!", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#abc", &kid, &key, &key_len, &use, NULL, TRUE));
 	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "hex#k#zzzz", &kid, &key, &key_len, &use, NULL, TRUE));
-	ck_assert_ptr_nonnull(oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, NULL, TRUE));
+	ck_assert_ptr_nonnull(
+	    oidc_cfg_parse_key_record(r->pool, "bogus#k#value", &kid, &key, &key_len, &use, NULL, TRUE));
 }
 END_TEST
 
@@ -1406,6 +1409,24 @@ START_TEST(test_cfg_server_merge_and_merged_get) {
 	ck_assert_int_eq(merged->state_timeout, 120);
 
 	/* clean up the merged config (registers its own pool cleanup, no other action needed) */
+}
+END_TEST
+
+START_TEST(test_cfg_oauth_merge_introspection_key_pwd) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	server_rec *s = oidc_test_request_get()->server;
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointKeyPassword);
+
+	/* set the introspection TLS client key password on the fixture config (the "base" side) */
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_key_pwd_set(cmd, NULL, "key-pwd-base"));
+
+	oidc_cfg_t *base = oidc_test_cfg_get();
+	oidc_cfg_t *add = oidc_cfg_server_create(pool, s);
+
+	/* a vhost that does not set the password itself must inherit it from the base server config */
+	oidc_cfg_t *merged = (oidc_cfg_t *)oidc_cfg_server_merge(pool, base, add);
+	ck_assert_ptr_nonnull(merged->oauth);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_tls_client_key_pwd_get(merged), "key-pwd-base");
 }
 END_TEST
 
@@ -2210,6 +2231,7 @@ int main(void) {
 	tcase_add_test(core, test_cmd_redirect_and_slo_urls);
 	tcase_add_test(core, test_cmd_http_timeout_long_short);
 	tcase_add_test(core, test_cfg_server_merge_and_merged_get);
+	tcase_add_test(core, test_cfg_oauth_merge_introspection_key_pwd);
 	tcase_add_test(core, test_cfg_server_merge_crypto_passphrase_derived_keys);
 	tcase_add_test(core, test_cfg_crypto_passphrase_derive_keys_cached);
 	tcase_add_test(core, test_cfg_child_init);

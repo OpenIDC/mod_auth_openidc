@@ -357,6 +357,7 @@ oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool) {
 	o->client_secret = NULL;
 	o->introspection_endpoint_tls_client_cert = NULL;
 	o->introspection_endpoint_tls_client_key = NULL;
+	o->introspection_endpoint_tls_client_key_pwd = NULL;
 	o->introspection_endpoint_url = NULL;
 	o->introspection_endpoint_method = OIDC_CONFIG_POS_INT_UNSET;
 	o->introspection_endpoint_params = NULL;
@@ -387,6 +388,9 @@ void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_
 	dst->introspection_endpoint_tls_client_key = add->introspection_endpoint_tls_client_key != NULL
 							 ? add->introspection_endpoint_tls_client_key
 							 : base->introspection_endpoint_tls_client_key;
+	dst->introspection_endpoint_tls_client_key_pwd = add->introspection_endpoint_tls_client_key_pwd != NULL
+							     ? add->introspection_endpoint_tls_client_key_pwd
+							     : base->introspection_endpoint_tls_client_key_pwd;
 	dst->introspection_endpoint_tls_client_cert = add->introspection_endpoint_tls_client_cert != NULL
 							  ? add->introspection_endpoint_tls_client_cert
 							  : base->introspection_endpoint_tls_client_cert;
