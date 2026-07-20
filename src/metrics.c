@@ -152,7 +152,7 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
   { OM_CLASS_REDIRECT_URI, "request.refresh",         "refresh access token requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.request_uri",     "Request URI calls to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.remove_at_cache", "access token cache removal requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.session",         "revoke session requests to the redirect URI", },
+  { OM_CLASS_REDIRECT_URI, "request.revoke_session",  "revoke session requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.info",            "info hook requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "request.dpop",            "DPoP requests to the redirect URI", },
   { OM_CLASS_REDIRECT_URI, "error.provider",          "provider authentication response errors received at the redirect URI", },
@@ -172,6 +172,9 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
 };
 
 // clang-format on
+
+_Static_assert(sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_counter_info_t) == OM_NUMBER_OF_COUNTERS,
+	       "_oidc_metrics_counters_info must have one entry per oidc_metrics_counter_type_t value");
 
 typedef struct oidc_metrics_t {
 	apr_hash_t *counters;

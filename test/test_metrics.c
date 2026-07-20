@@ -81,6 +81,21 @@ START_TEST(test_metrics_is_valid_classname_unknown) {
 }
 END_TEST
 
+START_TEST(test_metrics_counter_names_unique) {
+	/* the exported class.metric name must be unique per counter or two series collide in the output */
+	int i, j;
+	for (i = 0; i < OM_NUMBER_OF_COUNTERS; i++)
+		for (j = i + 1; j < OM_NUMBER_OF_COUNTERS; j++)
+			ck_assert_msg((_oidc_strcmp(_oidc_metrics_counters_info[i].class_name,
+						    _oidc_metrics_counters_info[j].class_name) != 0) ||
+					  (_oidc_strcmp(_oidc_metrics_counters_info[i].metric_name,
+							_oidc_metrics_counters_info[j].metric_name) != 0),
+				      "counters %d and %d both export \"%s.%s\"", i, j,
+				      _oidc_metrics_counters_info[i].class_name,
+				      _oidc_metrics_counters_info[i].metric_name);
+}
+END_TEST
+
 /*
  * Lifecycle tests for the metrics subsystem: bring it up via
  * oidc_metrics_post_config, push a counter + timing sample through the
@@ -430,6 +445,7 @@ int main(void) {
 	tcase_add_test(classname, test_metrics_is_valid_classname_known);
 	tcase_add_test(classname, test_metrics_is_valid_classname_claim_wildcard);
 	tcase_add_test(classname, test_metrics_is_valid_classname_unknown);
+	tcase_add_test(classname, test_metrics_counter_names_unique);
 
 	TCase *lifecycle = tcase_create("lifecycle");
 	tcase_add_checked_fixture(lifecycle, oidc_test_setup, oidc_test_teardown);

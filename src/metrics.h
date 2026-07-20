@@ -188,6 +188,8 @@ typedef enum {
 	OM_CONTENT_REQUEST_AUTHN_POST,
 	OM_CONTENT_REQUEST_UNKNOWN,
 
+	OM_NUMBER_OF_COUNTERS
+
 } oidc_metrics_counter_type_t;
 
 typedef struct oidc_metrics_counter_info_t {
