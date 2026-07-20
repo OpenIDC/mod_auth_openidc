@@ -733,6 +733,22 @@ static void oidc_idtoken_pass_as(request_rec *r, const oidc_cfg_t *cfg, const oi
 /*
  * handle the case where we have identified an existing authentication session for a user
  */
+/*
+ * apply the configured action after a failed access-token or userinfo refresh in an existing
+ * session: single logout, forced re-authentication, or a 502 towards the application
+ */
+static int oidc_handle_session_refresh_error(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
+					     oidc_on_error_action_t action) {
+	if (action == OIDC_ON_ERROR_LOGOUT)
+		return oidc_logout_request(r, cfg, session,
+					   oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)), FALSE);
+	if (action == OIDC_ON_ERROR_AUTH) {
+		oidc_session_kill(r, session);
+		return oidc_handle_unauthenticated_user(r, cfg);
+	}
+	return HTTP_BAD_GATEWAY;
+}
+
 static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
 					apr_byte_t extend_session, apr_byte_t *needs_save) {
 
@@ -782,16 +798,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 			*needs_save = FALSE;
 			oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh_get(r));
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN);
-			if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_LOGOUT) {
-				return oidc_logout_request(r, cfg, session,
-							   oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
-							   FALSE);
-			}
-			if (oidc_cfg_dir_action_on_error_refresh_get(r) == OIDC_ON_ERROR_AUTH) {
-				oidc_session_kill(r, session);
-				return oidc_handle_unauthenticated_user(r, cfg);
-			}
-			return HTTP_BAD_GATEWAY;
+			return oidc_handle_session_refresh_error(r, cfg, session,
+								 oidc_cfg_dir_action_on_error_refresh_get(r));
 		}
 
 		/* if needed, refresh claims from the user info endpoint */
@@ -800,16 +808,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 			*needs_save = FALSE;
 			oidc_debug(r, "action_on_userinfo_error: %d", oidc_cfg_action_on_userinfo_error_get(cfg));
 			OIDC_METRICS_COUNTER_INC(r, cfg, OM_SESSION_ERROR_REFRESH_USERINFO);
-			if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_LOGOUT) {
-				return oidc_logout_request(r, cfg, session,
-							   oidc_util_url_abs(r, cfg, oidc_cfg_default_slo_url_get(cfg)),
-							   FALSE);
-			}
-			if (oidc_cfg_action_on_userinfo_error_get(cfg) == OIDC_ON_ERROR_AUTH) {
-				oidc_session_kill(r, session);
-				return oidc_handle_unauthenticated_user(r, cfg);
-			}
-			return HTTP_BAD_GATEWAY;
+			return oidc_handle_session_refresh_error(r, cfg, session,
+								 oidc_cfg_action_on_userinfo_error_get(cfg));
 		}
 	}
 
