@@ -98,77 +98,9 @@ const oidc_metrics_timing_info_t _oidc_metrics_timings_info[] = {
 // NB: order must match the oidc_metrics_counter_type_t enum type in metrics.h
 
 const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
-
-   // KEEP THIS: start-of-counters
-
-  { OM_CLASS_AUTH_TYPE, "mod_auth_openidc", "requests handled by mod_auth_openidc" },
-  { OM_CLASS_AUTH_TYPE, "openid-connect",   "requests handled by AuthType openid-connect" },
-  { OM_CLASS_AUTH_TYPE, "oauth20",          "requests handled by AuthType oauth20" },
-  { OM_CLASS_AUTH_TYPE, "auth-openidc",     "requests handled by AuthType auth-openidc" },
-  { OM_CLASS_AUTH_TYPE, "declined",         "requests not handled by mod_auth_openidc"},
-
-  { OM_CLASS_AUTHN, "request.error.url", "errors matching the incoming request URL against the configuration" },
-
-  { OM_CLASS_AUTHN, "response.error.state-mismatch", "state mismatch errors in authentication responses" },
-  { OM_CLASS_AUTHN, "response.error.state-expired",  "state expired errors in authentication responses" },
-  { OM_CLASS_AUTHN, "response.error.provider",       "errors returned by the provider in authentication responses" },
-  { OM_CLASS_AUTHN, "response.error.protocol",       "protocol errors handling authentication responses" },
-  { OM_CLASS_AUTHN, "response.error.remote-user",    "errors identifying the remote user based on provided claims" },
-
-  { OM_CLASS_AUTHZ, "action.auth",          "step-up authentication requests" },
-  { OM_CLASS_AUTHZ, "action.401",           "401 authorization errors" },
-  { OM_CLASS_AUTHZ, "action.403",           "403 authorization errors" },
-  { OM_CLASS_AUTHZ, "action.302",           "302 authorization errors" },
-  { OM_CLASS_AUTHZ, "error.oauth20",        "AuthType oauth20 (401) authorization errors" },
-
-  { OM_CLASS_REQUIRE_CLAIM, "match", "(per-) Require claim authorization matches" },
-  { OM_CLASS_REQUIRE_CLAIM, "error", "(per-) Require claim authorization errors" },
-
-  { OM_CLASS_CLAIM, "id_token",  "claim values in the ID Token" },
-  { OM_CLASS_CLAIM, "userinfo", "claim values returned from the Userinfo Endpoint" },
-
-  { OM_CLASS_PROVIDER, "metadata.error",     "errors retrieving a provider discovery document" },
-  { OM_CLASS_PROVIDER, "token.error",        "errors making a token request to a provider" },
-  { OM_CLASS_PROVIDER, "refresh.error",      "errors refreshing the access token at the token endpoint" },
-  { OM_CLASS_PROVIDER, "userinfo.error",     "errors calling a provider userinfo endpoint" },
-  { OM_CLASS_PROVIDER, "http.connect.error", "(libcurl) provider/network connectivity errors" },
-  { OM_CLASS_PROVIDER, "http.response.code", "HTTP response code calling a provider endpoint" },
-
-  { OM_CLASS_SESSION, "error.cookie-domain",        "cookie domain validation errors for existing sessions" },
-  { OM_CLASS_SESSION, "error.expired",              "sessions that exceeded the maximum duration" },
-  { OM_CLASS_SESSION, "error.refresh-access-token", "errors refreshing the access token before expiry in existing sessions" },
-  { OM_CLASS_SESSION, "error.refresh-user-info",    "errors refreshing claims from the userinfo endpoint in existing sessions" },
-  { OM_CLASS_SESSION, "error.general",              "existing sessions that failed validation" },
-
-  { OM_CLASS_CACHE, "cache.error", "cache read/write errors" },
-
-  { OM_CLASS_REDIRECT_URI, "authn.response.redirect", "authentication responses received in a redirect", },
-  { OM_CLASS_REDIRECT_URI, "authn.response.post",     "authentication responses received in a HTTP POST", },
-  { OM_CLASS_REDIRECT_URI, "authn.response.implicit", "(presumed) implicit authentication responses to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "discovery.response",      "discovery responses to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.logout",          "logout requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.jwks",            "JWKs retrieval requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.session",         "session management requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.refresh",         "refresh access token requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.request_uri",     "Request URI calls to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.remove_at_cache", "access token cache removal requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.revoke_session",  "revoke session requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.info",            "info hook requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "request.dpop",            "DPoP requests to the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "error.provider",          "provider authentication response errors received at the redirect URI", },
-  { OM_CLASS_REDIRECT_URI, "error.invalid",           "invalid requests to the redirect URI", },
-
-  { OM_CLASS_CONTENT, "request.declined",      "requests declined by the content handler" },
-  { OM_CLASS_CONTENT, "request.info",          "info hook requests to the content handler" },
-  { OM_CLASS_CONTENT, "request.dpop",          "DPoP requests to the content handler" },
-  { OM_CLASS_CONTENT, "request.jwks",          "JWKs requests to the content handler" },
-  { OM_CLASS_CONTENT, "request.discovery",     "discovery requests to the content handler" },
-  { OM_CLASS_CONTENT, "request.post-preserve", "HTTP POST preservation requests to the content handler" },
-  { OM_CLASS_CONTENT, "request.authn-post",    "HTTP POST authentication requests to the content handler" },
-  { OM_CLASS_CONTENT, "request.unknown",       "unknown requests to the content handler" },
-
-  // KEEP THIS: end-of-counters
-
+#define OIDC_METRICS_COUNTER_INFO(id, class, name, desc) {class, name, desc},
+    OIDC_METRICS_COUNTERS_LIST(OIDC_METRICS_COUNTER_INFO)
+#undef OIDC_METRICS_COUNTER_INFO
 };
 
 // clang-format on

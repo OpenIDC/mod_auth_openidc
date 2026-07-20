@@ -120,76 +120,109 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	}
 
 // NB: order must match what is defined in metrics.c in array _oidc_metrics_counters_info
+/*
+ * single source of truth binding each counter's enum value to its exported class, metric name
+ * and description: the oidc_metrics_counter_type_t enum below and the
+ * _oidc_metrics_counters_info table in metrics.c are both generated from this list, so the
+ * index correspondence between them can no longer skew (the OM_CLASS_* string constants are
+ * defined in metrics.c, where the table is expanded)
+ */
+#define OIDC_METRICS_COUNTERS_LIST(X)                                                                                  \
+	X(OM_AUTHTYPE_MOD_AUTH_OPENIDC, OM_CLASS_AUTH_TYPE, "mod_auth_openidc",                                        \
+	  "requests handled by mod_auth_openidc")                                                                      \
+	X(OM_AUTHTYPE_OPENID_CONNECT, OM_CLASS_AUTH_TYPE, "openid-connect",                                            \
+	  "requests handled by AuthType openid-connect")                                                               \
+	X(OM_AUTHTYPE_OAUTH20, OM_CLASS_AUTH_TYPE, "oauth20", "requests handled by AuthType oauth20")                  \
+	X(OM_AUTHTYPE_AUTH_OPENIDC, OM_CLASS_AUTH_TYPE, "auth-openidc", "requests handled by AuthType auth-openidc")   \
+	X(OM_AUTHTYPE_DECLINED, OM_CLASS_AUTH_TYPE, "declined", "requests not handled by mod_auth_openidc")            \
+	X(OM_AUTHN_REQUEST_ERROR_URL, OM_CLASS_AUTHN, "request.error.url",                                             \
+	  "errors matching the incoming request URL against the configuration")                                        \
+	X(OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH, OM_CLASS_AUTHN, "response.error.state-mismatch",                     \
+	  "state mismatch errors in authentication responses")                                                         \
+	X(OM_AUTHN_RESPONSE_ERROR_STATE_EXPIRED, OM_CLASS_AUTHN, "response.error.state-expired",                       \
+	  "state expired errors in authentication responses")                                                          \
+	X(OM_AUTHN_RESPONSE_ERROR_PROVIDER, OM_CLASS_AUTHN, "response.error.provider",                                 \
+	  "errors returned by the provider in authentication responses")                                               \
+	X(OM_AUTHN_RESPONSE_ERROR_PROTOCOL, OM_CLASS_AUTHN, "response.error.protocol",                                 \
+	  "protocol errors handling authentication responses")                                                         \
+	X(OM_AUTHN_RESPONSE_ERROR_REMOTE_USER, OM_CLASS_AUTHN, "response.error.remote-user",                           \
+	  "errors identifying the remote user based on provided claims")                                               \
+	X(OM_AUTHZ_ACTION_AUTH, OM_CLASS_AUTHZ, "action.auth", "step-up authentication requests")                      \
+	X(OM_AUTHZ_ACTION_401, OM_CLASS_AUTHZ, "action.401", "401 authorization errors")                               \
+	X(OM_AUTHZ_ACTION_403, OM_CLASS_AUTHZ, "action.403", "403 authorization errors")                               \
+	X(OM_AUTHZ_ACTION_302, OM_CLASS_AUTHZ, "action.302", "302 authorization errors")                               \
+	X(OM_AUTHZ_ERROR_OAUTH20, OM_CLASS_AUTHZ, "error.oauth20", "AuthType oauth20 (401) authorization errors")      \
+	X(OM_AUTHZ_MATCH_REQUIRE_CLAIM, OM_CLASS_REQUIRE_CLAIM, "match", "(per-) Require claim authorization matches") \
+	X(OM_AUTHZ_ERROR_REQUIRE_CLAIM, OM_CLASS_REQUIRE_CLAIM, "error", "(per-) Require claim authorization errors")  \
+	X(OM_CLAIM_ID_TOKEN, OM_CLASS_CLAIM, "id_token", "claim values in the ID Token")                               \
+	X(OM_CLAIM_USER_INFO, OM_CLASS_CLAIM, "userinfo", "claim values returned from the Userinfo Endpoint")          \
+	X(OM_PROVIDER_METADATA_ERROR, OM_CLASS_PROVIDER, "metadata.error",                                             \
+	  "errors retrieving a provider discovery document")                                                           \
+	X(OM_PROVIDER_TOKEN_ERROR, OM_CLASS_PROVIDER, "token.error", "errors making a token request to a provider")    \
+	X(OM_PROVIDER_REFRESH_ERROR, OM_CLASS_PROVIDER, "refresh.error",                                               \
+	  "errors refreshing the access token at the token endpoint")                                                  \
+	X(OM_PROVIDER_USERINFO_ERROR, OM_CLASS_PROVIDER, "userinfo.error",                                             \
+	  "errors calling a provider userinfo endpoint")                                                               \
+	X(OM_PROVIDER_CONNECT_ERROR, OM_CLASS_PROVIDER, "http.connect.error",                                          \
+	  "(libcurl) provider/network connectivity errors")                                                            \
+	X(OM_PROVIDER_HTTP_RESPONSE_CODE, OM_CLASS_PROVIDER, "http.response.code",                                     \
+	  "HTTP response code calling a provider endpoint")                                                            \
+	X(OM_SESSION_ERROR_COOKIE_DOMAIN, OM_CLASS_SESSION, "error.cookie-domain",                                     \
+	  "cookie domain validation errors for existing sessions")                                                     \
+	X(OM_SESSION_ERROR_EXPIRED, OM_CLASS_SESSION, "error.expired", "sessions that exceeded the maximum duration")  \
+	X(OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN, OM_CLASS_SESSION, "error.refresh-access-token",                       \
+	  "errors refreshing the access token before expiry in existing sessions")                                     \
+	X(OM_SESSION_ERROR_REFRESH_USERINFO, OM_CLASS_SESSION, "error.refresh-user-info",                              \
+	  "errors refreshing claims from the userinfo endpoint in existing sessions")                                  \
+	X(OM_SESSION_ERROR_GENERAL, OM_CLASS_SESSION, "error.general", "existing sessions that failed validation")     \
+	X(OM_CACHE_ERROR, OM_CLASS_CACHE, "cache.error", "cache read/write errors")                                    \
+	X(OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT, OM_CLASS_REDIRECT_URI, "authn.response.redirect",                   \
+	  "authentication responses received in a redirect")                                                           \
+	X(OM_REDIRECT_URI_AUTHN_RESPONSE_POST, OM_CLASS_REDIRECT_URI, "authn.response.post",                           \
+	  "authentication responses received in a HTTP POST")                                                          \
+	X(OM_REDIRECT_URI_AUTHN_RESPONSE_IMPLICIT, OM_CLASS_REDIRECT_URI, "authn.response.implicit",                   \
+	  "(presumed) implicit authentication responses to the redirect URI")                                          \
+	X(OM_REDIRECT_URI_DISCOVERY_RESPONSE, OM_CLASS_REDIRECT_URI, "discovery.response",                             \
+	  "discovery responses to the redirect URI")                                                                   \
+	X(OM_REDIRECT_URI_REQUEST_LOGOUT, OM_CLASS_REDIRECT_URI, "request.logout",                                     \
+	  "logout requests to the redirect URI")                                                                       \
+	X(OM_REDIRECT_URI_REQUEST_JWKS, OM_CLASS_REDIRECT_URI, "request.jwks",                                         \
+	  "JWKs retrieval requests to the redirect URI")                                                               \
+	X(OM_REDIRECT_URI_REQUEST_SESSION, OM_CLASS_REDIRECT_URI, "request.session",                                   \
+	  "session management requests to the redirect URI")                                                           \
+	X(OM_REDIRECT_URI_REQUEST_REFRESH, OM_CLASS_REDIRECT_URI, "request.refresh",                                   \
+	  "refresh access token requests to the redirect URI")                                                         \
+	X(OM_REDIRECT_URI_REQUEST_REQUEST_URI, OM_CLASS_REDIRECT_URI, "request.request_uri",                           \
+	  "Request URI calls to the redirect URI")                                                                     \
+	X(OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, OM_CLASS_REDIRECT_URI, "request.remove_at_cache",                   \
+	  "access token cache removal requests to the redirect URI")                                                   \
+	X(OM_REDIRECT_URI_REQUEST_REVOKE_SESSION, OM_CLASS_REDIRECT_URI, "request.revoke_session",                     \
+	  "revoke session requests to the redirect URI")                                                               \
+	X(OM_REDIRECT_URI_REQUEST_INFO, OM_CLASS_REDIRECT_URI, "request.info",                                         \
+	  "info hook requests to the redirect URI")                                                                    \
+	X(OM_REDIRECT_URI_REQUEST_DPOP, OM_CLASS_REDIRECT_URI, "request.dpop", "DPoP requests to the redirect URI")    \
+	X(OM_REDIRECT_URI_ERROR_PROVIDER, OM_CLASS_REDIRECT_URI, "error.provider",                                     \
+	  "provider authentication response errors received at the redirect URI")                                      \
+	X(OM_REDIRECT_URI_ERROR_INVALID, OM_CLASS_REDIRECT_URI, "error.invalid",                                       \
+	  "invalid requests to the redirect URI")                                                                      \
+	X(OM_CONTENT_REQUEST_DECLINED, OM_CLASS_CONTENT, "request.declined",                                           \
+	  "requests declined by the content handler")                                                                  \
+	X(OM_CONTENT_REQUEST_INFO, OM_CLASS_CONTENT, "request.info", "info hook requests to the content handler")      \
+	X(OM_CONTENT_REQUEST_DPOP, OM_CLASS_CONTENT, "request.dpop", "DPoP requests to the content handler")           \
+	X(OM_CONTENT_REQUEST_JWKS, OM_CLASS_CONTENT, "request.jwks", "JWKs requests to the content handler")           \
+	X(OM_CONTENT_REQUEST_DISCOVERY, OM_CLASS_CONTENT, "request.discovery",                                         \
+	  "discovery requests to the content handler")                                                                 \
+	X(OM_CONTENT_REQUEST_POST_PRESERVE, OM_CLASS_CONTENT, "request.post-preserve",                                 \
+	  "HTTP POST preservation requests to the content handler")                                                    \
+	X(OM_CONTENT_REQUEST_AUTHN_POST, OM_CLASS_CONTENT, "request.authn-post",                                       \
+	  "HTTP POST authentication requests to the content handler")                                                  \
+	X(OM_CONTENT_REQUEST_UNKNOWN, OM_CLASS_CONTENT, "request.unknown", "unknown requests to the content handler")
+
 typedef enum {
-
-	OM_AUTHTYPE_MOD_AUTH_OPENIDC = 0,
-	OM_AUTHTYPE_OPENID_CONNECT,
-	OM_AUTHTYPE_OAUTH20,
-	OM_AUTHTYPE_AUTH_OPENIDC,
-	OM_AUTHTYPE_DECLINED,
-
-	OM_AUTHN_REQUEST_ERROR_URL,
-
-	OM_AUTHN_RESPONSE_ERROR_STATE_MISMATCH,
-	OM_AUTHN_RESPONSE_ERROR_STATE_EXPIRED,
-	OM_AUTHN_RESPONSE_ERROR_PROVIDER,
-	OM_AUTHN_RESPONSE_ERROR_PROTOCOL,
-	OM_AUTHN_RESPONSE_ERROR_REMOTE_USER,
-
-	OM_AUTHZ_ACTION_AUTH,
-	OM_AUTHZ_ACTION_401,
-	OM_AUTHZ_ACTION_403,
-	OM_AUTHZ_ACTION_302,
-	OM_AUTHZ_ERROR_OAUTH20,
-
-	OM_AUTHZ_MATCH_REQUIRE_CLAIM,
-	OM_AUTHZ_ERROR_REQUIRE_CLAIM,
-
-	OM_CLAIM_ID_TOKEN,
-	OM_CLAIM_USER_INFO,
-
-	OM_PROVIDER_METADATA_ERROR,
-	OM_PROVIDER_TOKEN_ERROR,
-	OM_PROVIDER_REFRESH_ERROR,
-	OM_PROVIDER_USERINFO_ERROR,
-	OM_PROVIDER_CONNECT_ERROR,
-	OM_PROVIDER_HTTP_RESPONSE_CODE,
-
-	OM_SESSION_ERROR_COOKIE_DOMAIN,
-	OM_SESSION_ERROR_EXPIRED,
-	OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN,
-	OM_SESSION_ERROR_REFRESH_USERINFO,
-	OM_SESSION_ERROR_GENERAL,
-
-	OM_CACHE_ERROR,
-
-	OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT,
-	OM_REDIRECT_URI_AUTHN_RESPONSE_POST,
-	OM_REDIRECT_URI_AUTHN_RESPONSE_IMPLICIT,
-	OM_REDIRECT_URI_DISCOVERY_RESPONSE,
-	OM_REDIRECT_URI_REQUEST_LOGOUT,
-	OM_REDIRECT_URI_REQUEST_JWKS,
-	OM_REDIRECT_URI_REQUEST_SESSION,
-	OM_REDIRECT_URI_REQUEST_REFRESH,
-	OM_REDIRECT_URI_REQUEST_REQUEST_URI,
-	OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE,
-	OM_REDIRECT_URI_REQUEST_REVOKE_SESSION,
-	OM_REDIRECT_URI_REQUEST_INFO,
-	OM_REDIRECT_URI_REQUEST_DPOP,
-	OM_REDIRECT_URI_ERROR_PROVIDER,
-	OM_REDIRECT_URI_ERROR_INVALID,
-
-	OM_CONTENT_REQUEST_DECLINED,
-	OM_CONTENT_REQUEST_INFO,
-	OM_CONTENT_REQUEST_DPOP,
-	OM_CONTENT_REQUEST_JWKS,
-	OM_CONTENT_REQUEST_DISCOVERY,
-	OM_CONTENT_REQUEST_POST_PRESERVE,
-	OM_CONTENT_REQUEST_AUTHN_POST,
-	OM_CONTENT_REQUEST_UNKNOWN,
-
-	OM_NUMBER_OF_COUNTERS
-
+#define OIDC_METRICS_COUNTER_ENUM(id, class, name, desc) id,
+	OIDC_METRICS_COUNTERS_LIST(OIDC_METRICS_COUNTER_ENUM)
+#undef OIDC_METRICS_COUNTER_ENUM
+	    OM_NUMBER_OF_COUNTERS
 } oidc_metrics_counter_type_t;
 
 typedef struct oidc_metrics_counter_info_t {
