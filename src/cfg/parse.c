@@ -646,7 +646,10 @@ static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, a
 		rv = oidc_cfg_parse_pem_key(pool, is_private, NULL, fname, &jwk);
 		if (rv != NULL)
 			return rv;
-		base_kid = jwk->kid;
+		/* keep a pool copy of the derived kid; the probe JWK itself is re-parsed per algorithm below */
+		base_kid = apr_pstrdup(pool, jwk->kid);
+		oidc_jwk_destroy(jwk);
+		jwk = NULL;
 	}
 
 	if (*keys == NULL)
@@ -665,9 +668,12 @@ static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, a
 		if (use)
 			jwk->use = apr_pstrdup(pool, use);
 		if (a != NULL) {
-			if (oidc_alg2kty(a) != jwk->kty)
-				return apr_psprintf(
+			if (oidc_alg2kty(a) != jwk->kty) {
+				const char *msg = apr_psprintf(
 				    pool, "algorithm \"%s\" is not compatible with the key type of \"%s\"", a, fname);
+				oidc_jwk_destroy(jwk);
+				return msg;
+			}
 			jwk->alg = apr_pstrdup(pool, a);
 		}
 		APR_ARRAY_PUSH(*keys, const oidc_jwk_t *) = jwk;

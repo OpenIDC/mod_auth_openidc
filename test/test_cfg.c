@@ -845,6 +845,7 @@ START_TEST(test_cfg_parse_key_files_alg) {
 	/* the "alg" must be published in the JWK JSON so an OP can select the key */
 	ck_assert_int_eq(oidc_jwk_to_json(pool, jwk, &s_json, &err), TRUE);
 	ck_assert_ptr_nonnull(_oidc_strstr(s_json, "\"alg\":\"RSA-OAEP\""));
+	oidc_jwk_list_destroy(keys);
 
 	/* a "+"-separated list duplicates the same key once per algorithm under distinct, alg-derived kids */
 	keys = NULL;
@@ -855,6 +856,7 @@ START_TEST(test_cfg_parse_key_files_alg) {
 	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->alg, "RSA-OAEP");
 	ck_assert_str_eq(APR_ARRAY_IDX(keys, 1, oidc_jwk_t *)->kid, "k-RSA-OAEP-256");
 	ck_assert_str_eq(APR_ARRAY_IDX(keys, 1, oidc_jwk_t *)->alg, "RSA-OAEP-256");
+	oidc_jwk_list_destroy(keys);
 
 	/* the matching private keys fan out under the SAME kids so a JWE referencing them can be decrypted */
 	apr_array_header_t *priv = NULL;
@@ -863,6 +865,7 @@ START_TEST(test_cfg_parse_key_files_alg) {
 	ck_assert_int_eq(priv->nelts, 2);
 	ck_assert_str_eq(APR_ARRAY_IDX(priv, 0, oidc_jwk_t *)->kid, "k-RSA-OAEP");
 	ck_assert_str_eq(APR_ARRAY_IDX(priv, 1, oidc_jwk_t *)->kid, "k-RSA-OAEP-256");
+	oidc_jwk_list_destroy(priv);
 
 	/* without an explicit kid the duplicates get the auto-derived base kid, suffixed per algorithm, and
 	 * the public and private sides derive the same base kid from the (matching) key material */
@@ -876,11 +879,14 @@ START_TEST(test_cfg_parse_key_files_alg) {
 	ck_assert_int_eq(priv->nelts, 2);
 	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->kid, APR_ARRAY_IDX(priv, 0, oidc_jwk_t *)->kid);
 	ck_assert_str_eq(APR_ARRAY_IDX(keys, 1, oidc_jwk_t *)->kid, APR_ARRAY_IDX(priv, 1, oidc_jwk_t *)->kid);
+	oidc_jwk_list_destroy(keys);
+	oidc_jwk_list_destroy(priv);
 
 	/* an algorithm incompatible with the key type is rejected at config time */
 	keys = NULL;
 	ck_assert_ptr_nonnull(oidc_cfg_parse_public_key_files(
 	    pool, apr_psprintf(pool, "enc:ES256@%s/public.pem", dir), &keys));
+	oidc_jwk_list_destroy(keys);
 }
 END_TEST
 
