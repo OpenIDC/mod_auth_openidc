@@ -943,23 +943,40 @@ static apr_byte_t oidc_validate_redirect_url_relative(request_rec *r, const char
 /*
  * reject the URL when it contains characters used for HTTP header splitting or other smuggling tricks
  */
+/*
+ * substrings that must not occur in a URL that is redirected to: URL-smuggling and scheme-injection
+ * vectors such as (percent-encoded) tab/slash/backslash separators, embedded scheme prefixes, and
+ * CJK look-alike separator characters; each entry states whether it is matched case-insensitively
+ */
+static const struct {
+	const char *needle;
+	apr_byte_t case_insensitive;
+} _oidc_redirect_url_illegal_substrings[] = {
+    {"/%09", FALSE},  {"/%2f", TRUE},	 {"/\t", FALSE},	 {"/%68", FALSE},
+    {"/http:", TRUE}, {"/https:", TRUE}, {"/javascript:", TRUE}, {"%01javascript:", TRUE},
+    {"/〱", FALSE},   {"/〵", FALSE},	 {"/ゝ", FALSE},	 {"/ー", FALSE},
+    {"/ｰ", FALSE},    {"/<", FALSE},	 {"/%5c", FALSE},	 {"/\\", FALSE},
+    {NULL, FALSE},
+};
+
 static apr_byte_t oidc_validate_redirect_url_chars(request_rec *r, const char *url, char **err_str, char **err_desc) {
+	int i = 0;
+
 	if ((_oidc_strstr(url, "\n") != NULL) || (_oidc_strstr(url, "\r") != NULL))
 		return oidc_validate_redirect_url_fail(
 		    r, err_str, err_desc, "Invalid URL",
 		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal \"\n\" or \"\r\" character(s)", url));
 
-	if ((_oidc_strstr(url, "/%09") != NULL) || (oidc_util_strcasestr(url, "/%2f") != NULL) ||
-	    (_oidc_strstr(url, "/\t") != NULL) || (_oidc_strstr(url, "/%68") != NULL) ||
-	    (oidc_util_strcasestr(url, "/http:") != NULL) || (oidc_util_strcasestr(url, "/https:") != NULL) ||
-	    (oidc_util_strcasestr(url, "/javascript:") != NULL) || (_oidc_strstr(url, "/〱") != NULL) ||
-	    (_oidc_strstr(url, "/〵") != NULL) || (_oidc_strstr(url, "/ゝ") != NULL) ||
-	    (_oidc_strstr(url, "/ー") != NULL) || (_oidc_strstr(url, "/ｰ") != NULL) ||
-	    (_oidc_strstr(url, "/<") != NULL) || (oidc_util_strcasestr(url, "%01javascript:") != NULL) ||
-	    (_oidc_strstr(url, "/%5c") != NULL) || (_oidc_strstr(url, "/\\") != NULL))
-		return oidc_validate_redirect_url_fail(
-		    r, err_str, err_desc, "Invalid URL",
-		    apr_psprintf(r->pool, "URL value \"%s\" contains illegal character(s)", url));
+	for (i = 0; _oidc_redirect_url_illegal_substrings[i].needle != NULL; i++) {
+		const char *needle = _oidc_redirect_url_illegal_substrings[i].needle;
+		const char *found = _oidc_redirect_url_illegal_substrings[i].case_insensitive
+					? oidc_util_strcasestr(url, needle)
+					: _oidc_strstr(url, needle);
+		if (found != NULL)
+			return oidc_validate_redirect_url_fail(
+			    r, err_str, err_desc, "Invalid URL",
+			    apr_psprintf(r->pool, "URL value \"%s\" contains illegal character(s)", url));
+	}
 
 	return TRUE;
 }
