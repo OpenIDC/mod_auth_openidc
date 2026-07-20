@@ -63,9 +63,9 @@
  * cjose enum so that no translation is needed at the boundary; assert that invariant at compile time so a
  * future cjose renumbering fails the build loudly instead of silently breaking key selection
  */
-_Static_assert(OIDC_JOSE_JWK_KTY_RSA == CJOSE_JWK_KTY_RSA, "OIDC_JOSE_JWK_KTY_RSA must match cjose");
-_Static_assert(OIDC_JOSE_JWK_KTY_EC == CJOSE_JWK_KTY_EC, "OIDC_JOSE_JWK_KTY_EC must match cjose");
-_Static_assert(OIDC_JOSE_JWK_KTY_OCT == CJOSE_JWK_KTY_OCT, "OIDC_JOSE_JWK_KTY_OCT must match cjose");
+OIDC_STATIC_ASSERT(OIDC_JOSE_JWK_KTY_RSA == CJOSE_JWK_KTY_RSA, kty_rsa);
+OIDC_STATIC_ASSERT(OIDC_JOSE_JWK_KTY_EC == CJOSE_JWK_KTY_EC, kty_ec);
+OIDC_STATIC_ASSERT(OIDC_JOSE_JWK_KTY_OCT == CJOSE_JWK_KTY_OCT, kty_oct);
 
 /* assemble an error report; the oidc_jose_error* macros in jose.h expand to this */
 void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const int line, const char *function,

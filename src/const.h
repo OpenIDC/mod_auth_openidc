@@ -57,6 +57,12 @@
 #define __STDC_WANT_LIB_EXT1__ 1
 #include <string.h>
 
+/*
+ * compile-time assertion; uses the portable negative-array-size idiom rather than C11 _Static_assert,
+ * since the Visual Studio C compiler used for the Windows build does not accept _Static_assert
+ */
+#define OIDC_STATIC_ASSERT(cond, name) typedef char oidc_static_assert_##name[(cond) ? 1 : -1]
+
 #include <apr_strings.h>
 
 // clang-format off

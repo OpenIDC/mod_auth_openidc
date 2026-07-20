@@ -173,8 +173,9 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
 
 // clang-format on
 
-_Static_assert(sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_counter_info_t) == OM_NUMBER_OF_COUNTERS,
-	       "_oidc_metrics_counters_info must have one entry per oidc_metrics_counter_type_t value");
+/* one entry per oidc_metrics_counter_type_t value */
+OIDC_STATIC_ASSERT(sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_counter_info_t) == OM_NUMBER_OF_COUNTERS,
+		   counters_info_matches_enum);
 
 typedef struct oidc_metrics_t {
 	apr_hash_t *counters;
