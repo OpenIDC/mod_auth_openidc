@@ -180,11 +180,8 @@ int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t 
 		if (smax == 0) {
 			smax = hmax;
 		}
-		// a default min value of 1 does not work at least on Mac OS X
-		// so retain backwards compatibility for now with 0
-		// if (min == 0) {
-		//	min = hmax;
-		//}
+		// NB: min is deliberately left at 0: defaulting it to hmax (or 1) does not
+		// work at least on Mac OS X, so retain backwards compatibility with 0
 	} else {
 		if (hmax == 0) {
 			hmax = 1;

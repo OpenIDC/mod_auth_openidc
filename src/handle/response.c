@@ -679,11 +679,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
 
-	// TOOD: actually need to compare sub? (need to store it in the session separately then
-	// const char *sub = NULL;
-	// oidc_session_get(r, session, "sub", &sub);
-	// if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
-	/* session management: if the user in the new response is not equal to the old one, error out */
+	/* session management: if the user in the new response is not equal to the old one, error out;
+	 * NB: this compares the (possibly claim/regexp-derived) remote user rather than the "sub" claim */
 	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0) &&
 	    (_oidc_strcmp(session->remote_user, r->user) != 0)) {
 		oidc_warn(r, "user set from new id_token is different from current one");
