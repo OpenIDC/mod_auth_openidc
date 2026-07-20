@@ -247,6 +247,15 @@ void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const cha
 }
 
 /*
+ * mark a response that may carry tokens or other sensitive material as non-cacheable,
+ * on all responses including errors and redirects
+ */
+void oidc_http_set_no_cache_headers(const request_rec *r) {
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
+	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+}
+
+/*
  * set an HTTP request header
  */
 void oidc_http_hdr_in_set(const request_rec *r, const char *name, const char *value) {

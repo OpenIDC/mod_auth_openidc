@@ -243,8 +243,7 @@ static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, cons
 	}
 
 	/* set recommended cache control headers */
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+	oidc_http_set_no_cache_headers(r);
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_P3P, "CAO PSA OUR");
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_EXPIRES, "0");
 	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_X_FRAME_OPTIONS, oidc_cfg_logout_x_frame_options_get(c));
@@ -291,8 +290,7 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 	if (oidc_logout_is_front_channel(url))
 		return oidc_logout_request_front_channel(r, c, url, revoke_tokens, no_session_provided);
 
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+	oidc_http_set_no_cache_headers(r);
 
 	/* see if we don't need to go somewhere special after killing the session locally */
 	if (url == NULL)
@@ -513,8 +511,7 @@ out:
 	if (jwt != NULL)
 		oidc_jwt_destroy(jwt);
 
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+	oidc_http_set_no_cache_headers(r);
 
 	return rc;
 }

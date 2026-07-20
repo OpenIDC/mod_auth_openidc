@@ -121,6 +121,7 @@ char *oidc_http_url_encode(const request_rec *r, const char *str);
 char *oidc_http_url_decode(const request_rec *r, const char *str);
 
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
+void oidc_http_set_no_cache_headers(const request_rec *r);
 void oidc_http_hdr_in_set(const request_rec *r, const char *name, const char *value);
 const char *oidc_http_hdr_in_cookie_get(const request_rec *r);
 void oidc_http_hdr_in_cookie_set(const request_rec *r, const char *value);

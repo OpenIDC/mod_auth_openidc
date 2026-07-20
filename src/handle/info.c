@@ -187,8 +187,7 @@ static int oidc_info_send_response(request_rec *r, const oidc_json_t *json, cons
 
 	/* the response may carry the access/refresh/id token and session claims; prevent it from being
 	 * stored by the browser or any intermediary cache */
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_CACHE_CONTROL, "no-cache, no-store");
-	oidc_http_hdr_err_out_add(r, OIDC_HTTP_HDR_PRAGMA, "no-cache");
+	oidc_http_set_no_cache_headers(r);
 
 	if (_oidc_strcmp(OIDC_HOOK_INFO_FORMAT_JSON, s_format) == 0) {
 		r_value = oidc_json_encode(r->pool, json, OIDC_JSON_PRESERVE_ORDER);
