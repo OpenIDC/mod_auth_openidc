@@ -78,6 +78,21 @@
 #define OIDC_PROTO_CLAIMS_LOCALES "claims_locales"
 #define OIDC_PROTO_REQUEST_URI "request_uri"
 #define OIDC_PROTO_REQUEST_OBJECT "request"
+
+/*
+ * keys in the OIDCRequestObject JSON configuration value; parsed in proto/request.c and
+ * advertised during dynamic client registration in metadata/client.c
+ */
+#define OIDC_REQUEST_OBJECT_COPY_FROM_REQUEST "copy_from_request"
+#define OIDC_REQUEST_OBJECT_COPY_AND_REMOVE_FROM_REQUEST "copy_and_remove_from_request"
+#define OIDC_REQUEST_OBJECT_TTL "ttl"
+#define OIDC_REQUEST_OBJECT_STATIC "static"
+#define OIDC_REQUEST_OBJECT_URL "url"
+#define OIDC_REQUEST_OBJECT_TYPE "request_object_type"
+#define OIDC_REQUEST_OBJECT_CRYPTO "crypto"
+#define OIDC_REQUEST_OBJECT_CRYPTO_SIGN_ALG "sign_alg"
+#define OIDC_REQUEST_OBJECT_CRYPTO_CRYPT_ALG "crypt_alg"
+#define OIDC_REQUEST_OBJECT_CRYPTO_CRYPT_ENC "crypt_enc"
 #define OIDC_PROTO_SESSION_STATE "session_state"
 #define OIDC_PROTO_ACTIVE "active"
 #define OIDC_PROTO_LOGOUT_TOKEN "logout_token"

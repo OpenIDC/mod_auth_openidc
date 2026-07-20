@@ -89,6 +89,7 @@
 #define OIDC_METADATA_USERINFO_SIGNED_RESPONSE_ALG "userinfo_signed_response_alg"
 #define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ALG "userinfo_encrypted_response_alg"
 #define OIDC_METADATA_USERINFO_ENCRYPTED_RESPONSE_ENC "userinfo_encrypted_response_enc"
+#define OIDC_METADATA_REQUEST_OBJECT_SIGNING_ALG "request_object_signing_alg"
 #define OIDC_METADATA_SSL_VALIDATE_SERVER "ssl_validate_server"
 #define OIDC_METADATA_VALIDATE_ISSUER "validate_issuer"
 #define OIDC_METADATA_SCOPE "scope"

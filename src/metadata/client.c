@@ -178,10 +178,11 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 		oidc_json_t *request_object_config = NULL;
 		if (oidc_json_decode_object(r, oidc_cfg_provider_request_object_get(provider),
 					    &request_object_config) == TRUE) {
-			const oidc_json_t *crypto = oidc_json_object_get(request_object_config, "crypto");
+			const oidc_json_t *crypto =
+			    oidc_json_object_get(request_object_config, OIDC_REQUEST_OBJECT_CRYPTO);
 			char *alg = "none";
-			oidc_json_object_get_string(r->pool, crypto, "sign_alg", &alg, "none");
-			oidc_json_object_set_new(data, "request_object_signing_alg", oidc_json_string(alg));
+			oidc_json_object_get_string(r->pool, crypto, OIDC_REQUEST_OBJECT_CRYPTO_SIGN_ALG, &alg, "none");
+			oidc_json_object_set_new(data, OIDC_METADATA_REQUEST_OBJECT_SIGNING_ALG, oidc_json_string(alg));
 			oidc_json_decref(request_object_config);
 		}
 	}
