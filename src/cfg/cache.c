@@ -360,7 +360,7 @@ void oidc_cfg_cache_create_server_config(oidc_cfg_t *c) {
 #endif
 }
 
-void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add) {
+void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add) {
 	c->cache.impl = _oidc_cfg_merge_ptr(add->cache.impl, base->cache.impl);
 	c->cache.encrypt = _oidc_cfg_merge_pos_int(add->cache.encrypt, base->cache.encrypt);
 	c->cache.cfg = NULL;

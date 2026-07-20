@@ -46,7 +46,7 @@
 #include "cfg/cfg.h"
 
 void oidc_cfg_cache_create_server_config(oidc_cfg_t *c);
-void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, oidc_cfg_t *base, oidc_cfg_t *add);
+void oidc_cfg_cache_merge_server_config(oidc_cfg_t *c, const oidc_cfg_t *base, const oidc_cfg_t *add);
 
 // NB: the OIDC* directive name strings live in cfg/directives.h; the custom
 //     set-routine declarations are needed here because cfg/cmds.c references
