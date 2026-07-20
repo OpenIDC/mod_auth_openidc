@@ -445,7 +445,6 @@ out:
 
 	oidc_jwt_destroy(request_object);
 	oidc_jwt_destroy(jwe);
-	oidc_json_decref(request_object_config);
 
 	if (serialized_request_object != NULL) {
 		oidc_debug(r, "serialized request object JWT header = \"%s\"",
@@ -507,6 +506,7 @@ void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provi
 
 	/* request_uri is used as default parameter for sending Request Object */
 	const char *parameter = OIDC_PROTO_REQUEST_URI;
+	const char *value = NULL;
 
 	/* get request_object_type parameter from config */
 	const oidc_json_t *request_object_type = oidc_json_object_get(request_object_config, OIDC_REQUEST_OBJECT_TYPE);
@@ -514,7 +514,7 @@ void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provi
 		const char *request_object_type_str = oidc_json_string_value(request_object_type);
 		if (request_object_type_str == NULL) {
 			oidc_error(r, "Value of request_object_type in request_object config is not a string");
-			return;
+			goto end;
 		}
 
 		/* ensure parameter variable to have a valid value */
@@ -522,12 +522,11 @@ void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provi
 			parameter = OIDC_PROTO_REQUEST_OBJECT;
 		} else if (_oidc_strcmp(request_object_type_str, OIDC_PROTO_REQUEST_URI) != 0) {
 			oidc_error(r, "Bad request_object_type in config: %s", request_object_type_str);
-			return;
+			goto end;
 		}
 	}
 
 	/* create request value */
-	const char *value = NULL;
 	int ttl = OIDC_REQUEST_OBJECT_TTL_DEFAULT;
 	oidc_json_object_get_int(request_object_config, OIDC_REQUEST_OBJECT_TTL, &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
@@ -539,11 +538,14 @@ void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provi
 	}
 
 	/* don't add an empty parameter when creating the request object failed */
-	if (value == NULL) {
+	if (value != NULL)
+		apr_table_set(params, parameter, value);
+	else
 		oidc_warn(r, "creating the \"%s\" parameter value failed; the authorization request is sent without it",
 			  parameter);
-		return;
-	}
 
-	apr_table_set(params, parameter, value);
+end:
+
+	/* the configuration object is owned here: none of the helpers above keeps a reference */
+	oidc_json_decref(request_object_config);
 }
