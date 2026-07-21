@@ -797,6 +797,33 @@ START_TEST(test_metadata_client_parse_response_type_explicitly_set) {
 }
 END_TEST
 
+/* conf metadata without an explicit "response_type" must leave it unset so the client-metadata
+ * fallback still runs; conf_parse runs before client_parse, exactly as oidc_metadata_get() does */
+START_TEST(test_metadata_conf_then_client_response_type_fallback) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_json_t *j_conf = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, "{}", &j_conf), TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j_conf, provider), TRUE);
+	/* conf parse must not pin response_type to the default */
+	ck_assert_int_eq(oidc_cfg_provider_response_type_is_set(provider), FALSE);
+	oidc_json_decref(j_conf);
+
+	oidc_json_t *j_client = NULL;
+	/* the global default response_type ("code") is not advertised, so the fallback must apply */
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
+						 "\"response_types\":[\"id_token\",\"id_token token\"]}",
+						 &j_client),
+			 TRUE);
+	ck_assert_int_eq(oidc_metadata_client_parse(r, c, j_client, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_response_type_get(provider), "id_token");
+	oidc_json_decref(j_client);
+}
+END_TEST
+
 /* a client secret with an expires_at in the past invalidates the client
  * metadata; without a registration endpoint re-registration then fails */
 START_TEST(test_metadata_disk_client_secret_expired) {
@@ -1312,6 +1339,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_post_logout_redirect_uris);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_not_advertised);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_explicitly_set);
+	tcase_add_test(disk, test_metadata_conf_then_client_response_type_fallback);
 	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
 	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);
 	tcase_add_test(disk, test_metadata_disk_provider_get_live_discovery);

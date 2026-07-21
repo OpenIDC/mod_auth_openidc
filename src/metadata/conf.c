@@ -239,7 +239,15 @@ static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, c
 				    oidc_proto_profile_pkce_get(provider)->method);
 	OIDC_METADATA_PROVIDER_SET(pkce, value);
 
-	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_RESPONSE_TYPE, response_type);
+	/*
+	 * only override response_type when it is explicitly present in the .conf; unlike the other string
+	 * members we must NOT substitute the global-config default here, because that would make
+	 * oidc_cfg_provider_response_type_is_set() true and defeat the fallback to the first advertised
+	 * "response_types" entry that oidc_metadata_client_parse_response_type() applies afterwards (the
+	 * global-config default is applied there too)
+	 */
+	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_RESPONSE_TYPE, &value, NULL);
+	OIDC_METADATA_PROVIDER_SET(response_type, value);
 
 	oidc_metadata_parse_boolean(r, j_conf, OIDC_METADATA_RESPONSE_REQUIRE_ISS, &ivalue,
 				    oidc_proto_profile_response_require_iss_get(provider));

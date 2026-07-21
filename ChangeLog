@@ -8,6 +8,10 @@
   verification keys being silently dropped in metadata-directory mode when a
   provider's .conf did not itself supply a "signed_jwks_uri_key", which caused
   the signed JWKs signature verification to be skipped
+- metadata: fix the client-metadata "response_types" fallback never running in
+  metadata-directory mode; .conf parsing pre-set response_type to the "code"
+  default, so an OP that only advertises other response types (e.g. implicit)
+  was still sent response_type=code
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name
