@@ -557,8 +557,13 @@ START_TEST(test_metadata_signed_jwks_uri_keys_global_fallback) {
 
 	apr_array_header_t *def = signed_jwks_make_verifier_list(r, "signed-jwks-shared-secret-long-enough");
 	ck_assert_ptr_eq((void *)oidc_cfg_provider_signed_jwks_uri_keys_set(r->pool, provider, NULL, def), NULL);
-	ck_assert_ptr_eq(oidc_cfg_provider_signed_jwks_uri_keys_get(provider), def);
+	/* the fallback inherits a private (retaining) copy of the global keys, not the same array */
+	apr_array_header_t *got = oidc_cfg_provider_signed_jwks_uri_keys_get(provider);
+	ck_assert_ptr_nonnull(got);
+	ck_assert_ptr_ne(got, def);
+	ck_assert_int_eq(got->nelts, def->nelts);
 
+	signed_jwks_destroy_verifier_list(got);
 	signed_jwks_destroy_verifier_list(def);
 }
 END_TEST
@@ -1209,6 +1214,31 @@ START_TEST(test_metadata_conf_parse_inline_keys_no_leak) {
 }
 END_TEST
 
+/* an inline .conf "signed_jwks_uri_key" is parsed into an owned key set that must be released with the
+ * request pool (verified under valgrind), the same as the inline "keys" above */
+START_TEST(test_metadata_conf_parse_signed_jwks_key_no_leak) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"signed_jwks_uri_key\":{\"kty\":\"EC\",\"crv\":\"P-256\","
+						 "\"x\":\"MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4\","
+						 "\"y\":\"4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM\","
+						 "\"kid\":\"ec1\"}}",
+						 &j),
+			 TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	const apr_array_header_t *keys = oidc_cfg_provider_signed_jwks_uri_keys_get(provider);
+	ck_assert_ptr_nonnull(keys);
+	ck_assert_int_eq(keys->nelts, 1);
+
+	oidc_json_decref(j);
+}
+END_TEST
+
 START_TEST(test_metadata_conf_parse_dpop_and_auth_request_method) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1399,6 +1429,7 @@ int main(void) {
 	tcase_add_test(conf, test_metadata_conf_parse_int_fields);
 	tcase_add_test(conf, test_metadata_conf_parse_id_token_aud_values);
 	tcase_add_test(conf, test_metadata_conf_parse_inline_keys_no_leak);
+	tcase_add_test(conf, test_metadata_conf_parse_signed_jwks_key_no_leak);
 	tcase_add_test(conf, test_metadata_conf_parse_dpop_and_auth_request_method);
 	tcase_add_test(conf, test_metadata_conf_parse_userinfo_token_method);
 

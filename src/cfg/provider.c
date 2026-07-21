@@ -618,12 +618,14 @@ const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_pr
 end:
 
 	/*
-	 * fall back to the default (globally configured OIDCProviderSignedJwksUri) verification keys when
-	 * the .conf supplied no "signed_jwks_uri_key" (json == NULL) or an unparseable one (rv != NULL);
-	 * a successfully parsed key set is left in place
+	 * fall back to a private (cjose-retaining) copy of the default (globally configured
+	 * OIDCProviderSignedJwksUri) verification keys when the .conf supplied no "signed_jwks_uri_key"
+	 * (json == NULL) or an unparseable one (rv != NULL); copying rather than aliasing the global keys
+	 * keeps jwk_list uniformly owned by this provider so a per-request caller can always release it
+	 * (a successfully parsed key set is already owned and left in place)
 	 */
 	if ((json == NULL) || (rv != NULL))
-		provider->jwks_uri.jwk_list = def_val;
+		provider->jwks_uri.jwk_list = oidc_jwk_list_copy(pool, def_val);
 
 	return rv;
 }

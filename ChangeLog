@@ -35,6 +35,9 @@
 - metadata: fix a per-authentication heap leak of the inline "keys" from a
   provider .conf in metadata-directory mode (the parsed cjose keys were never
   released); release them with the request pool
+- metadata: also release the signed-JWKs verification keys per request; a .conf
+  "signed_jwks_uri_key" was parsed into an owned key set that leaked, and the
+  global-keys fallback now inherits a private copy so it is cleaned up uniformly
 - json: fix oidc_json_object_get_string_array pushing a NULL entry for each
   non-string array element instead of skipping it (e.g. a numeric value in a
   .conf "id_token_aud_values" array)
