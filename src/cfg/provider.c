@@ -756,6 +756,12 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
 			     const oidc_provider_t *add) {
 	OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(OIDC_PROVIDER_M_MERGE_PTR, OIDC_PROVIDER_M_MERGE_INT)
+	/* token_endpoint_auth carries an optional ":<alg>" suffix parsed into token_endpoint_auth_alg;
+	 * merge the pair as a unit, so a vhost that re-sets the method takes its (possibly absent) alg
+	 * instead of inheriting the base server's alg. When add did not set the method the macro above
+	 * already inherited both from base. */
+	if (add->token_endpoint_auth != NULL)
+		dst->token_endpoint_auth_alg = add->token_endpoint_auth_alg;
 	dst->jwks_uri.uri = _oidc_cfg_merge_ptr(add->jwks_uri.uri, base->jwks_uri.uri);
 	dst->jwks_uri.refresh_interval =
 	    _oidc_cfg_merge_pos_int(add->jwks_uri.refresh_interval, base->jwks_uri.refresh_interval);

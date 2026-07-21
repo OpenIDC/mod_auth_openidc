@@ -29,6 +29,9 @@
   config view instead of mutating the shared server config with request-pool
   memory, which was a cross-request use-after-free / data race under threaded
   MPMs (worker/event)
+- cfg: fix the "method[:alg]" token/introspection endpoint-authentication pair
+  merging member-wise across virtual hosts, so a vhost that re-set only the
+  method wrongly inherited the base server's algorithm instead of resetting it
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name

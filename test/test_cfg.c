@@ -106,6 +106,33 @@ START_TEST(test_cmd_provider_token_endpoint_auth_no_private_keys) {
 }
 END_TEST
 
+/* the token_endpoint_auth "method[:alg]" pair must merge as a unit across a vhost: a vhost that
+ * re-sets the method resets the algorithm rather than inheriting the base server's algorithm */
+START_TEST(test_cfg_provider_merge_endpoint_auth_pair) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_provider_t *base = oidc_cfg_provider_create(pool);
+	ck_assert_ptr_null((void *)oidc_cfg_provider_token_endpoint_auth_set(pool, c, base, "private_key_jwt:PS512"));
+
+	oidc_provider_t *add = oidc_cfg_provider_create(pool);
+	ck_assert_ptr_null((void *)oidc_cfg_provider_token_endpoint_auth_set(pool, c, add, "private_key_jwt"));
+
+	oidc_provider_t *dst = oidc_cfg_provider_create(pool);
+	oidc_cfg_provider_merge(pool, dst, base, add);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(dst), "private_key_jwt");
+	/* the vhost set the method without an alg, so the alg must reset -- not inherit PS512 from base */
+	ck_assert_ptr_null((void *)oidc_cfg_provider_token_endpoint_auth_alg_get(dst));
+
+	/* when the vhost does not set the method at all, both method and alg still inherit from base */
+	oidc_provider_t *add2 = oidc_cfg_provider_create(pool);
+	oidc_provider_t *dst2 = oidc_cfg_provider_create(pool);
+	oidc_cfg_provider_merge(pool, dst2, base, add2);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(dst2), "private_key_jwt");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_alg_get(dst2), "PS512");
+}
+END_TEST
+
 #ifdef USE_MEMCACHE
 
 START_TEST(test_cfg_cache_connections_ttl) {
@@ -2254,6 +2281,7 @@ int main(void) {
 	tcase_add_checked_fixture(core, oidc_test_setup, oidc_test_teardown);
 
 	tcase_add_test(core, test_cmd_provider_token_endpoint_auth_set);
+	tcase_add_test(core, test_cfg_provider_merge_endpoint_auth_pair);
 	tcase_add_test(core, test_cmd_provider_token_endpoint_auth_no_private_keys);
 #ifdef USE_MEMCACHE
 	tcase_add_test(core, test_cfg_cache_connections_ttl);

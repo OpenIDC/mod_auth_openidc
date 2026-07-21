@@ -391,6 +391,11 @@ oidc_oauth_t *oidc_cfg_oauth_shallow_copy(apr_pool_t *pool, const oidc_oauth_t *
 
 void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_t *base, const oidc_oauth_t *add) {
 	OIDC_OAUTH_CFG_SIMPLE_MEMBERS(OIDC_OAUTH_M_MERGE_PTR, OIDC_OAUTH_M_MERGE_INT)
+	/* introspection_endpoint_auth carries an optional ":<alg>" suffix parsed into
+	 * introspection_endpoint_auth_alg; merge the pair as a unit so a vhost that re-sets the method
+	 * takes its (possibly absent) alg instead of inheriting the base server's alg */
+	if (add->introspection_endpoint_auth != NULL)
+		dst->introspection_endpoint_auth_alg = add->introspection_endpoint_auth_alg;
 
 	dst->verify_public_keys =
 	    oidc_jwk_list_copy(pool, _oidc_cfg_merge_ptr(add->verify_public_keys, base->verify_public_keys));
