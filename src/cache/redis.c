@@ -76,8 +76,8 @@ int oidc_cache_redis_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cf
 
 	/* check that a Redis server has been configured */
 	if (cfg->cache.redis_server == NULL) {
-		oidc_serror(s,
-			    "cache type is set to \"redis\", but no valid " OIDCRedisCacheServer " setting was found");
+		oidc_serror(s, "cache type is set to \"%s\", but no valid " OIDCRedisCacheServer " setting was found",
+			    name);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
