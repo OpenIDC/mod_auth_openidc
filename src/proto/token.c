@@ -128,6 +128,10 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_
 
 	char *dpop = NULL;
 
+	/* without response headers there is no server-provided DPoP nonce to pick up (DPoP is disabled) */
+	if (response_hdrs == NULL)
+		return FALSE;
+
 	if (oidc_proto_dpop_use_nonce(r, cfg, *j_result, response_hdrs,
 				      oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL, &dpop) == FALSE)
 		return FALSE;

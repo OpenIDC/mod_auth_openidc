@@ -1,3 +1,7 @@
+07/21/2026
+- proto/token: fix a NULL-pointer dereference (Apache worker crash) when the
+  token endpoint returns a "use_dpop_nonce" error while DPoP is disabled
+
 07/20/2026
 - metrics: give the revoke-session counter a unique name
   ("request.revoke_session") instead of colliding with the session-management
