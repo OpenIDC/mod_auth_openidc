@@ -160,7 +160,7 @@ const char *oidc_util_jq_filter(request_rec *r, const oidc_json_t *json, const c
 
 	result = oidc_util_jq_exec(r, jq, parser);
 
-	if ((result != NULL) && (ttl != 0)) {
+	if ((result != NULL) && (ttl > 0)) {
 		oidc_debug(r, "caching result: %s", result);
 		oidc_cache_set_jq_filter(r, key, result, apr_time_now() + apr_time_from_sec(ttl));
 	}
