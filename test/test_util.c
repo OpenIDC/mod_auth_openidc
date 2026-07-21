@@ -108,8 +108,7 @@ START_TEST(test_util_base64url_decode) {
 	len = oidc_util_base64url_decode(oidc_test_pool_get(), &dst, src);
 	ck_assert_msg(dst != NULL, "dst value is NULL");
 	ck_assert_int_eq(len, 17);
-	// TODO: need binary compare
-	// ck_assert_str_eq(dst, "subjects?_d=1���");
+	ck_assert_mem_eq(dst, "subjects?_d=1\x0f\x93\x97\x9b", 17);
 }
 END_TEST
 
@@ -1086,7 +1085,7 @@ START_TEST(test_util_legacy_json_decode_object) {
 	request_rec *r = oidc_test_request_get();
 	oidc_json_t *json = NULL;
 
-	/* embedded NUL via a   escape must be rejected */
+	/* embedded NUL via a \u0000 escape must be rejected */
 	ck_assert_int_eq(oidc_json_decode_object(r, "{ \"n\": \"\\u0000<?php echo 'Hello' ?>\"}", &json), FALSE);
 
 	/* an oversized JSON blob (>4 KiB of garbage) must be rejected by the size guard */
