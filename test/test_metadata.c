@@ -548,6 +548,21 @@ START_TEST(test_metadata_jwks_get_signed_not_a_jwt) {
 }
 END_TEST
 
+/* when the .conf supplies no "signed_jwks_uri_key", the setter must fall back to the globally
+ * configured (OIDCProviderSignedJwksUri) verification keys passed as the default, not leave them
+ * unset — otherwise a provider that advertises a signed_jwks_uri would skip signature verification */
+START_TEST(test_metadata_signed_jwks_uri_keys_global_fallback) {
+	request_rec *r = oidc_test_request_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	apr_array_header_t *def = signed_jwks_make_verifier_list(r, "signed-jwks-shared-secret-long-enough");
+	ck_assert_ptr_eq((void *)oidc_cfg_provider_signed_jwks_uri_keys_set(r->pool, provider, NULL, def), NULL);
+	ck_assert_ptr_eq(oidc_cfg_provider_signed_jwks_uri_keys_get(provider), def);
+
+	signed_jwks_destroy_verifier_list(def);
+}
+END_TEST
+
 /*
  * Tests for oidc_oauth_metadata_provider_parse — populates cfg->oauth from
  * an AS metadata document.
@@ -1277,6 +1292,7 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_jwks_get_signed_happy);
 	tcase_add_test(retrieve, test_metadata_jwks_get_signed_bad_signature);
 	tcase_add_test(retrieve, test_metadata_jwks_get_signed_not_a_jwt);
+	tcase_add_test(retrieve, test_metadata_signed_jwks_uri_keys_global_fallback);
 
 	TCase *conf = tcase_create("conf");
 	tcase_add_checked_fixture(conf, oidc_test_setup, oidc_test_teardown);

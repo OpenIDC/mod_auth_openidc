@@ -617,7 +617,12 @@ const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_pr
 
 end:
 
-	if (rv != NULL)
+	/*
+	 * fall back to the default (globally configured OIDCProviderSignedJwksUri) verification keys when
+	 * the .conf supplied no "signed_jwks_uri_key" (json == NULL) or an unparseable one (rv != NULL);
+	 * a successfully parsed key set is left in place
+	 */
+	if ((json == NULL) || (rv != NULL))
 		provider->jwks_uri.jwk_list = def_val;
 
 	return rv;

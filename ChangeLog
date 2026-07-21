@@ -4,6 +4,10 @@
 - util/jq: fix a negative OIDC_JQ_FILTER_CACHE_TTL causing jq filter results to
   be cached under a NULL key with an already-past expiry; only cache when the
   TTL is positive, matching the cache-read guard
+- cfg/metadata: fix the globally configured OIDCProviderSignedJwksUri
+  verification keys being silently dropped in metadata-directory mode when a
+  provider's .conf did not itself supply a "signed_jwks_uri_key", which caused
+  the signed JWKs signature verification to be skipped
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name
