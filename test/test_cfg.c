@@ -140,6 +140,10 @@ START_TEST(test_cfg_cache_connections_ttl) {
 	rv = oidc_cmd_cache_memcache_ttl_set(cmd, ptr, arg);
 	ck_assert_msg(rv == NULL, "set to 4294 failed");
 
+	/* 4294s = 4.294e9 us exceeds INT_MAX: a stray (int) cast would truncate it to a negative value */
+	ttl = oidc_cfg_cache_memcache_ttl_get(cfg);
+	ck_assert_msg(ttl == apr_time_from_sec(4294), "4294s stored truncated: %" APR_TIME_T_FMT, ttl);
+
 	arg = "4295";
 	rv = oidc_cmd_cache_memcache_ttl_set(cmd, ptr, arg);
 	ck_assert_msg(rv != NULL, "set to 4295 did not fail");
@@ -929,6 +933,38 @@ START_TEST(test_cfg_parse_http_timeout) {
 	ck_assert_ptr_null(oidc_cfg_parse_http_timeout(pool, NULL, NULL, "7", &t));
 	ck_assert_int_eq(t.retries, 7);
 	ck_assert_int_eq(t.retry_interval, 999);
+
+	/* non-numeric, trailing-junk and overflowing values must be rejected rather than silently
+	 * accepted as 0 (an infinite curl timeout) or a wrapped-around value */
+	t.request_timeout = 42;
+	ck_assert_ptr_nonnull(oidc_cfg_parse_http_timeout(pool, "abc", NULL, NULL, &t));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_http_timeout(pool, "30x", NULL, NULL, &t));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_http_timeout(pool, "9999999999999", NULL, NULL, &t));
+	ck_assert_int_eq(t.request_timeout, 42);
+}
+END_TEST
+
+/* oidc_cfg_parse_int rejects trailing junk and overflow that sscanf("%d") accepted */
+START_TEST(test_cfg_parse_int) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	int v = -1;
+
+	ck_assert_ptr_null(oidc_cfg_parse_int(pool, "300", &v));
+	ck_assert_int_eq(v, 300);
+	ck_assert_ptr_null(oidc_cfg_parse_int(pool, "-5", &v));
+	ck_assert_int_eq(v, -5);
+
+	ck_assert_ptr_nonnull(oidc_cfg_parse_int(pool, "", &v));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_int(pool, "abc", &v));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_int(pool, "300x", &v));
+	ck_assert_ptr_nonnull(oidc_cfg_parse_int(pool, "4294967297", &v));
+
+	/* the lenient wrapper shares the same strict core and now falls back to the default (not 0) */
+	ck_assert_int_eq(_oidc_str_to_int("300", 7), 300);
+	ck_assert_int_eq(_oidc_str_to_int("abc", 7), 7);
+	ck_assert_int_eq(_oidc_str_to_int("300x", 7), 7);
+	ck_assert_int_eq(_oidc_str_to_int("4294967297", 7), 7);
+	ck_assert_int_eq(_oidc_str_to_int(NULL, 7), 7);
 }
 END_TEST
 
@@ -2330,6 +2366,7 @@ int main(void) {
 	tcase_add_test(parse, test_cfg_parse_key_files_alg);
 	tcase_add_test(parse, test_cfg_parse_remote_user_claim);
 	tcase_add_test(parse, test_cfg_parse_http_timeout);
+	tcase_add_test(parse, test_cfg_parse_int);
 	tcase_add_test(parse, test_cfg_parse_key_record_encodings);
 
 	TCase *oauth = tcase_create("oauth");

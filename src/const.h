@@ -53,7 +53,10 @@
 #undef PACKAGE_BUGREPORT
 #endif
 
+#include <errno.h>
+#include <limits.h>
 #include <stdint.h>
+#include <stdlib.h>
 #define __STDC_WANT_LIB_EXT1__ 1
 #include <string.h>
 
@@ -126,10 +129,27 @@ static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t defau
 		sscanf(s, "%" APR_TIME_T_FMT, &v);
 	return v;
 }
+/*
+ * strict string->int: sets *out and returns TRUE only when the whole string is a valid, in-range
+ * integer; rejects NULL/empty, non-numeric input, trailing junk ("300x") and overflow. This is the
+ * shared core for both the lenient _oidc_str_to_int() below and the config-time oidc_cfg_parse_int().
+ */
+static inline apr_byte_t _oidc_str_to_int_checked(const char *s, int *out) {
+	char *endptr = NULL;
+	long v = 0;
+	if ((s == NULL) || (*s == '\0'))
+		return FALSE;
+	errno = 0;
+	v = strtol(s, &endptr, 10);
+	if ((endptr == s) || (*endptr != '\0') || (errno == ERANGE) || (v < INT_MIN) || (v > INT_MAX))
+		return FALSE;
+	*out = (int)v;
+	return TRUE;
+}
 static inline int _oidc_str_to_int(const char *s, const int default_value) {
 	int v = default_value;
-	if (s)
-		v = (int)strtol(s, NULL, 10);
+	/* leave v at default_value on any parse failure, rather than the old strtol() 0-on-garbage */
+	(void)_oidc_str_to_int_checked(s, &v);
 	return v;
 }
 

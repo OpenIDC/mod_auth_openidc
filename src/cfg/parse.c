@@ -170,12 +170,12 @@ const char *oidc_cfg_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_
  * parse a string into an integer
  */
 const char *oidc_cfg_parse_int(apr_pool_t *pool, const char *arg, int *int_value) {
-	int v = -1;
-	if ((arg == NULL) || (*arg == '\0') || (_oidc_strcmp(arg, "") == 0))
+	if ((arg == NULL) || (*arg == '\0'))
 		return apr_psprintf(pool, "no integer value");
-	if (sscanf(arg, "%d", &v) != 1)
-		return apr_psprintf(pool, "invalid integer value: %s", arg);
-	*int_value = v;
+	/* the shared core rejects non-numeric input, trailing junk ("300x") and overflow, all of which
+	 * the previous sscanf("%d") accepted silently */
+	if (_oidc_str_to_int_checked(arg, int_value) == FALSE)
+		return apr_psprintf(pool, "invalid or out-of-range integer value: %s", arg);
 	return NULL;
 }
 
@@ -233,7 +233,7 @@ const char *oidc_cfg_parse_timeout_min_max(apr_pool_t *pool, const char *arg, ap
 				    " is greater than the maximum allowed value %" APR_TIME_T_FMT,
 				    timeout, max_value);
 	}
-	*timeout_value = (int)timeout;
+	*timeout_value = timeout;
 	return NULL;
 }
 
@@ -719,21 +719,33 @@ const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const
  */
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,
 					oidc_http_timeout_t *http_timeout) {
-	const char *s = NULL;
+	const char *rv = NULL;
+	char *s = NULL;
 	char *p = NULL;
-	if (arg1)
-		http_timeout->request_timeout = _oidc_str_to_int(arg1, http_timeout->request_timeout);
-	if (arg2)
-		http_timeout->connect_timeout = _oidc_str_to_int(arg2, http_timeout->connect_timeout);
+	/* validate strictly rather than defaulting a typo silently to 0 (= an infinite curl timeout) */
+	if (arg1) {
+		rv = oidc_cfg_parse_int(pool, arg1, &http_timeout->request_timeout);
+		if (rv != NULL)
+			return rv;
+	}
+	if (arg2) {
+		rv = oidc_cfg_parse_int(pool, arg2, &http_timeout->connect_timeout);
+		if (rv != NULL)
+			return rv;
+	}
 	if (arg3) {
 		s = apr_pstrdup(pool, arg3);
 		p = _oidc_strstr(s, OIDC_STR_COLON);
 		if (p) {
 			*p = '\0';
 			p++;
-			http_timeout->retry_interval = _oidc_str_to_int(p, http_timeout->retry_interval);
+			rv = oidc_cfg_parse_int(pool, p, &http_timeout->retry_interval);
+			if (rv != NULL)
+				return rv;
 		}
-		http_timeout->retries = _oidc_str_to_int(s, http_timeout->retries);
+		rv = oidc_cfg_parse_int(pool, s, &http_timeout->retries);
+		if (rv != NULL)
+			return rv;
 	}
 	return NULL;
 }

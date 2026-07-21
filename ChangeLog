@@ -19,6 +19,12 @@
 - metadata: fix several JSON/JWT memory leaks on the provider-metadata refresh,
   dynamic client (re-)registration and signed-JWKs validation error paths that
   accumulated over a worker process's lifetime
+- cfg/parse: reject overflowing and trailing-junk integer values ("300x",
+  out-of-range) that were silently accepted before, share one strict parse core
+  so the lenient _oidc_str_to_int() falls back to its default (not 0) on bad
+  input, stop truncating timeout values above INT_MAX microseconds, and make an
+  invalid OIDCHTTPTimeoutLong/Short value fail config load instead of becoming a
+  0 (infinite) curl timeout
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name
