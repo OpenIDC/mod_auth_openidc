@@ -126,6 +126,15 @@ static void oidc_metadata_conf_parse_profile(request_rec *r, oidc_cfg_t *cfg, co
 }
 
 /*
+ * release the heap cjose keys wrapped in a JWK list; registered as a request-pool cleanup because the
+ * per-request provider built by oidc_metadata_get() is never oidc_cfg_provider_destroy'd
+ */
+static apr_status_t oidc_metadata_conf_jwk_list_cleanup(void *data) {
+	oidc_jwk_list_destroy((apr_array_header_t *)data);
+	return APR_SUCCESS;
+}
+
+/*
  * apply the client JWKS settings: jwks_uri, inline keys and signed-jwks-uri verification keys
  */
 static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
@@ -140,6 +149,10 @@ static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, const
 		rv = oidc_cfg_provider_client_keys_set_keys(r->pool, provider, keys);
 		if (rv != NULL)
 			oidc_error(r, "oidc_cfg_provider_client_keys_set: %s", rv);
+		/* the inline .conf "keys" are freshly parsed and owned by this per-request provider (unlike
+		 * the signed_jwks_uri fallback, which may share the global config's keys), so free them when
+		 * the request pool is destroyed rather than leaking one cjose key set per authentication */
+		apr_pool_cleanup_register(r->pool, keys, oidc_metadata_conf_jwk_list_cleanup, apr_pool_cleanup_null);
 	}
 
 	rv = oidc_cfg_provider_signed_jwks_uri_keys_set(

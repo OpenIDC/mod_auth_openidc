@@ -32,6 +32,12 @@
 - cfg: fix the "method[:alg]" token/introspection endpoint-authentication pair
   merging member-wise across virtual hosts, so a vhost that re-set only the
   method wrongly inherited the base server's algorithm instead of resetting it
+- metadata: fix a per-authentication heap leak of the inline "keys" from a
+  provider .conf in metadata-directory mode (the parsed cjose keys were never
+  released); release them with the request pool
+- json: fix oidc_json_object_get_string_array pushing a NULL entry for each
+  non-string array element instead of skipping it (e.g. a numeric value in a
+  .conf "id_token_aud_values" array)
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name

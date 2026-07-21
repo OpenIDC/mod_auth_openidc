@@ -1170,6 +1170,42 @@ START_TEST(test_metadata_conf_parse_id_token_aud_values) {
 	ck_assert_str_eq(APR_ARRAY_IDX(auds, 1, const char *), "aud-two");
 
 	oidc_json_decref(j);
+
+	/* non-string array elements must be skipped, not pushed as NULL entries */
+	oidc_provider_t *provider2 = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j2 = json_pack("{s:[i,s,i]}", "id_token_aud_values", 1, "aud-real", 3);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j2, provider2), TRUE);
+	const apr_array_header_t *auds2 = oidc_cfg_provider_id_token_aud_values_get(provider2);
+	ck_assert_ptr_nonnull(auds2);
+	ck_assert_int_eq(auds2->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(auds2, 0, const char *), "aud-real");
+	oidc_json_decref(j2);
+}
+END_TEST
+
+/* inline .conf "keys" wrap heap cjose objects that are not pool-managed; the per-request provider is
+ * never cfg_provider_destroy'd, so without a request-pool cleanup they leak one key set per
+ * authentication -- valgrind reports the leak without the fix and is clean with it */
+START_TEST(test_metadata_conf_parse_inline_keys_no_leak) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\","
+						 "\"x\":\"MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4\","
+						 "\"y\":\"4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM\","
+						 "\"kid\":\"ectest\"}]}",
+						 &j),
+			 TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+
+	const apr_array_header_t *keys = oidc_cfg_provider_client_keys_get(provider);
+	ck_assert_ptr_nonnull(keys);
+	ck_assert_int_eq(keys->nelts, 1);
+
+	oidc_json_decref(j);
 }
 END_TEST
 
@@ -1362,6 +1398,7 @@ int main(void) {
 	tcase_add_test(conf, test_metadata_conf_parse_token_endpoint_auth_alg_inherited);
 	tcase_add_test(conf, test_metadata_conf_parse_int_fields);
 	tcase_add_test(conf, test_metadata_conf_parse_id_token_aud_values);
+	tcase_add_test(conf, test_metadata_conf_parse_inline_keys_no_leak);
 	tcase_add_test(conf, test_metadata_conf_parse_dpop_and_auth_request_method);
 	tcase_add_test(conf, test_metadata_conf_parse_userinfo_token_method);
 

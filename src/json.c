@@ -431,7 +431,11 @@ apr_byte_t oidc_json_object_get_string_array(apr_pool_t *pool, const oidc_json_t
 			*value = apr_array_make(pool, (int)oidc_json_array_size(arr), sizeof(const char *));
 			for (size_t i = 0; i < oidc_json_array_size(arr); i++) {
 				v = oidc_json_array_get(arr, i);
-				APR_ARRAY_PUSH(*value, const char *) = apr_pstrdup(pool, oidc_json_string_value(v));
+				/* skip non-string elements rather than pushing a NULL (oidc_json_string_value
+				 * returns NULL for them), matching the single-string getter above */
+				if (oidc_json_is_string(v))
+					APR_ARRAY_PUSH(*value, const char *) =
+					    apr_pstrdup(pool, oidc_json_string_value(v));
 			}
 		}
 	}
