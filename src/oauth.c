@@ -79,15 +79,22 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 
 /*
  * obtain the OAuth 2.0 configuration settings, possibly by retrieving the metadata document
+ *
+ * returns the config to use for the rest of the request: the shared config unchanged when no
+ * metadata URL is configured (or on a retrieve/parse failure), or a per-request view whose oauth
+ * struct carries the metadata-derived endpoints. The metadata is deliberately parsed into a private
+ * per-request copy rather than into the shared, process-lifetime server config, which would be a
+ * cross-request use-after-free / data race under threaded MPMs (the strings are request-pool-scoped).
  */
-static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
+static oidc_cfg_t *oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 
 	oidc_json_t *j_provider = NULL;
 	char *s_json = NULL;
+	oidc_cfg_t *rc = NULL;
 
 	/* see if we should configure a static provider based on external (cached) metadata */
 	if (oidc_cfg_oauth_metadata_url_get(c) == NULL)
-		return TRUE;
+		return c;
 
 	oidc_cache_get_oauth_provider(r, oidc_cfg_oauth_metadata_url_get(c), &s_json);
 
@@ -96,7 +103,7 @@ static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 		if (oidc_oauth_metadata_provider_retrieve(r, c, NULL, oidc_cfg_oauth_metadata_url_get(c), &j_provider,
 							  &s_json) == FALSE) {
 			oidc_error(r, "could not retrieve metadata from url: %s", oidc_cfg_oauth_metadata_url_get(c));
-			return FALSE;
+			return c;
 		}
 
 		oidc_cache_set_oauth_provider(
@@ -112,16 +119,17 @@ static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 		/* check to see if it is valid metadata */
 	}
 
-	if (oidc_oauth_metadata_provider_parse(r, c, j_provider) == FALSE) {
+	/* parse into a private per-request view; on failure fall back to the (unmutated) shared config */
+	rc = oidc_cfg_request_view(r->pool, c);
+	if (oidc_oauth_metadata_provider_parse(r, rc, j_provider) == FALSE) {
 		oidc_error(r, "could not parse metadata from url: %s", oidc_cfg_oauth_metadata_url_get(c));
-		if (j_provider)
-			oidc_json_decref(j_provider);
-		return FALSE;
+		rc = c;
 	}
 
-	oidc_json_decref(j_provider);
+	if (j_provider)
+		oidc_json_decref(j_provider);
 
-	return TRUE;
+	return rc;
 }
 
 /*
@@ -756,8 +764,9 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 
 	/* we don't have a session yet */
 
-	/* obtain/refresh metadata from OAuth metadata document URL if configured */
-	oidc_oauth_provider_config(r, c);
+	/* obtain/refresh metadata from OAuth metadata document URL if configured; from here on use the
+	 * returned per-request view so metadata-derived endpoints never mutate the shared server config */
+	c = oidc_oauth_provider_config(r, c);
 
 	/* get the bearer access token from the Authorization header */
 	if ((access_token == NULL) && (oidc_oauth_get_bearer_token(r, &access_token) == FALSE)) {

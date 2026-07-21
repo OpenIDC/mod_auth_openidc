@@ -574,6 +574,50 @@ START_TEST(test_oauth_metadata_cache_expiry_seconds) {
 }
 END_TEST
 
+/* metadata-derived introspection endpoints must land in a per-request config view and never mutate
+ * the shared, process-lifetime server config (which would be a cross-request use-after-free under
+ * threaded MPMs, since the strings are request-pool-scoped) */
+START_TEST(test_oauth_metadata_does_not_mutate_shared_config) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	oidc_test_http_response_t intro_resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = "{\"active\":true,\"sub\":\"alice\",\"scope\":\"openid\",\"client_id\":\"rp-1\"}"};
+	oidc_test_http_server_t *intro_srv = oidc_test_http_server_start(r->pool, &intro_resp);
+	ck_assert_ptr_nonnull(intro_srv);
+
+	const char *metadata_body =
+	    apr_psprintf(r->pool, "{\"issuer\":\"https://idp.example.com\",\"introspection_endpoint\":\"%s\"}",
+			 oidc_test_http_server_url(intro_srv, r->pool));
+	oidc_test_http_response_t md_resp = {
+	    .status_code = 200, .content_type = "application/json", .body = metadata_body};
+	oidc_test_http_server_t *md_srv = oidc_test_http_server_start(r->pool, &md_resp);
+	ck_assert_ptr_nonnull(md_srv);
+
+	cmd_parms *cmd_md = oidc_test_cmd_get(OIDCOAuthServerMetadataURL);
+	ck_assert_ptr_null(oidc_cmd_oauth_metadata_url_set(cmd_md, NULL, oidc_test_http_server_url(md_srv, r->pool)));
+	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
+
+	/* no statically-configured introspection endpoint on the shared config to start with */
+	ck_assert_ptr_null((void *)oidc_cfg_oauth_introspection_endpoint_url_get(c));
+
+	int rc = oidc_oauth_check_userid(r, c, "AT-SHARED-1");
+	ck_assert_int_eq(rc, OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	/* the metadata-derived endpoint drove introspection above but must NOT have leaked into the
+	 * shared server config; with the per-request view it stays unset */
+	ck_assert_ptr_null((void *)oidc_cfg_oauth_introspection_endpoint_url_get(c));
+
+	oidc_test_http_server_stop(md_srv);
+	oidc_test_http_server_stop(intro_srv);
+}
+END_TEST
+
 /* sub-requests and internal redirects recycle the user from the initial request */
 START_TEST(test_oauth_check_userid_subrequest) {
 	request_rec *r = oidc_test_request_get();
@@ -705,6 +749,7 @@ int main(void) {
 	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_invalid_json);
 	tcase_add_test(metadata, test_oauth_check_userid_metadata_url);
 	tcase_add_test(metadata, test_oauth_metadata_cache_expiry_seconds);
+	tcase_add_test(metadata, test_oauth_metadata_does_not_mutate_shared_config);
 
 	Suite *s = suite_create("oauth");
 	suite_add_tcase(s, bearer);

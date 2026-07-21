@@ -164,6 +164,7 @@ void oidc_pre_config_init();
 
 void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *s);
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD);
+oidc_cfg_t *oidc_cfg_request_view(apr_pool_t *pool, const oidc_cfg_t *c);
 apr_byte_t oidc_cfg_server_destroy(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg);
 int oidc_cfg_post_config(apr_pool_t *pool, oidc_cfg_t *cfg, server_rec *s);
 void oidc_cfg_child_init(apr_pool_t *pool, const oidc_cfg_t *cfg, server_rec *s);

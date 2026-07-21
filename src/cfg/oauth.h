@@ -124,6 +124,7 @@ OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(introspection_endpoint_auth_alg, const char 
 typedef struct oidc_oauth_t oidc_oauth_t;
 
 oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool);
+oidc_oauth_t *oidc_cfg_oauth_shallow_copy(apr_pool_t *pool, const oidc_oauth_t *src);
 void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_t *base, const oidc_oauth_t *add);
 void oidc_cfg_oauth_destroy(oidc_oauth_t *o);
 

@@ -25,6 +25,10 @@
   input, stop truncating timeout values above INT_MAX microseconds, and make an
   invalid OIDCHTTPTimeoutLong/Short value fail config load instead of becoming a
   0 (infinite) curl timeout
+- oauth: parse OIDCOAuthServerMetadataURL metadata into a private per-request
+  config view instead of mutating the shared server config with request-pool
+  memory, which was a cross-request use-after-free / data race under threaded
+  MPMs (worker/event)
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name

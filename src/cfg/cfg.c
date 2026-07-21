@@ -1007,6 +1007,19 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 }
 
 /*
+ * build a shallow, request-scoped view of the server config with a private oauth struct. The view
+ * shares every allocation with the (process-lifetime) server config; only its oauth member is a
+ * separate shallow copy, so a request can overwrite the metadata-derived introspection endpoints
+ * without mutating the shared config (which is unsafe under threaded MPMs). Read-only for everything
+ * else -- never write non-oauth members through the returned pointer.
+ */
+oidc_cfg_t *oidc_cfg_request_view(apr_pool_t *pool, const oidc_cfg_t *c) {
+	oidc_cfg_t *rc = apr_pmemdup(pool, c, sizeof(*c));
+	rc->oauth = oidc_cfg_oauth_shallow_copy(pool, c->oauth);
+	return rc;
+}
+
+/*
  * initialize before the post config handler runs
  */
 void oidc_pre_config_init() {

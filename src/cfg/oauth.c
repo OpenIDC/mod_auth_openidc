@@ -379,6 +379,16 @@ oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool) {
 	return o;
 }
 
+/*
+ * shallow per-request copy: the returned struct is a byte copy of src, so every member still points
+ * at src's (process-lifetime) allocations. It exists so a request can overwrite the few
+ * metadata-derived endpoint members (via the setters) without mutating the shared server config; the
+ * caller must not free src's members through it. See oidc_cfg_request_view().
+ */
+oidc_oauth_t *oidc_cfg_oauth_shallow_copy(apr_pool_t *pool, const oidc_oauth_t *src) {
+	return apr_pmemdup(pool, src, sizeof(*src));
+}
+
 void oidc_cfg_oauth_merge(apr_pool_t *pool, oidc_oauth_t *dst, const oidc_oauth_t *base, const oidc_oauth_t *add) {
 	OIDC_OAUTH_CFG_SIMPLE_MEMBERS(OIDC_OAUTH_M_MERGE_PTR, OIDC_OAUTH_M_MERGE_INT)
 
