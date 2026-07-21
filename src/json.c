@@ -420,23 +420,25 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, const oidc_json_t *json
 /*
  * get (optional) string array from a JSON object
  */
+static void oidc_json_string_array_append(apr_pool_t *pool, const oidc_json_t *arr, apr_array_header_t *value) {
+	for (size_t i = 0; i < oidc_json_array_size(arr); i++) {
+		const oidc_json_t *v = oidc_json_array_get(arr, i);
+		/* skip non-string elements rather than pushing a NULL (oidc_json_string_value returns NULL
+		 * for them), matching the single-string getter above */
+		if (oidc_json_is_string(v))
+			APR_ARRAY_PUSH(value, const char *) = apr_pstrdup(pool, oidc_json_string_value(v));
+	}
+}
+
 apr_byte_t oidc_json_object_get_string_array(apr_pool_t *pool, const oidc_json_t *json, const char *name,
 					     apr_array_header_t **value, const apr_array_header_t *default_value) {
-	const oidc_json_t *v = NULL;
 	const oidc_json_t *arr = NULL;
 	*value = (default_value != NULL) ? apr_array_copy(pool, default_value) : NULL;
 	if (json != NULL) {
 		arr = oidc_json_object_get(json, name);
 		if ((arr != NULL) && (oidc_json_is_array(arr))) {
 			*value = apr_array_make(pool, (int)oidc_json_array_size(arr), sizeof(const char *));
-			for (size_t i = 0; i < oidc_json_array_size(arr); i++) {
-				v = oidc_json_array_get(arr, i);
-				/* skip non-string elements rather than pushing a NULL (oidc_json_string_value
-				 * returns NULL for them), matching the single-string getter above */
-				if (oidc_json_is_string(v))
-					APR_ARRAY_PUSH(*value, const char *) =
-					    apr_pstrdup(pool, oidc_json_string_value(v));
-			}
+			oidc_json_string_array_append(pool, arr, *value);
 		}
 	}
 	return TRUE;

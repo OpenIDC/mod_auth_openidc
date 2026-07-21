@@ -720,7 +720,7 @@ const char *oidc_parse_remote_user_claim(apr_pool_t *pool, const char *v1, const
 const char *oidc_cfg_parse_http_timeout(apr_pool_t *pool, const char *arg1, const char *arg2, const char *arg3,
 					oidc_http_timeout_t *http_timeout) {
 	const char *rv = NULL;
-	char *s = NULL;
+	const char *s = NULL;
 	char *p = NULL;
 	/* validate strictly rather than defaulting a typo silently to 0 (= an infinite curl timeout) */
 	if (arg1) {
