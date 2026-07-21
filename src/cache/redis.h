@@ -74,6 +74,7 @@ typedef struct oidc_cache_cfg_redis_t {
 
 int oidc_cache_redis_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg, const char *name);
 int oidc_cache_redis_child_init(apr_pool_t *p, server_rec *s);
+int oidc_cache_redis_destroy(apr_pool_t *pool, server_rec *s);
 redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
 				     va_list ap);
 apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char *key, char **value);

@@ -515,7 +515,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	return rv;
 }
 
-static int oidc_cache_redis_destroy_impl(apr_pool_t *pool, server_rec *s) {
+int oidc_cache_redis_destroy(apr_pool_t *pool, server_rec *s) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(s->module_config, &auth_openidc_module);
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 
@@ -541,7 +541,7 @@ oidc_cache_t oidc_cache_redis = {
 	oidc_cache_redis_child_init,
 	oidc_cache_redis_get,
 	oidc_cache_redis_set,
-	oidc_cache_redis_destroy_impl
+	oidc_cache_redis_destroy
 };
 
 // clang-format on
