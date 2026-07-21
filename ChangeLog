@@ -16,6 +16,9 @@
   the OAuth AS metadata cache expiry as microseconds instead of seconds, which
   made the metadata document re-fetched over HTTP on almost every bearer-token
   request
+- metadata: fix several JSON/JWT memory leaks on the provider-metadata refresh,
+  dynamic client (re-)registration and signed-JWKs validation error paths that
+  accumulated over a worker process's lifetime
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name

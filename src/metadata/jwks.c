@@ -108,8 +108,10 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 			return FALSE;
 		}
 
-		if (oidc_proto_jwt_validate(r, jwt, NULL, FALSE, FALSE, -1) == FALSE)
+		if (oidc_proto_jwt_validate(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
+			oidc_jwt_destroy(jwt);
 			return FALSE;
+		}
 
 		oidc_debug(r, "successfully verified and validated JWKs JWT");
 

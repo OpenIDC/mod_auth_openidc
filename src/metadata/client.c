@@ -212,8 +212,10 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 	if (oidc_cfg_provider_registration_endpoint_json_get(provider) != NULL) {
 		oidc_json_t *json = NULL;
 		if (oidc_json_decode_object(r, oidc_cfg_provider_registration_endpoint_json_get(provider), &json) ==
-		    FALSE)
+		    FALSE) {
+			oidc_json_decref(data);
 			return FALSE;
+		}
 		oidc_json_merge(r, json, data);
 		oidc_json_decref(json);
 	}
@@ -248,11 +250,14 @@ apr_byte_t oidc_metadata_client_get(request_rec *r, oidc_cfg_t *cfg, const char 
 	/* get the full file path to the client metadata for this issuer */
 	const char *client_path = oidc_metadata_client_file_path(r, issuer);
 
-	/* see if we have valid metadata already, if so, return it */
 	/* if we have valid client metadata already, return it */
-	if ((oidc_metadata_file_read_json(r, client_path, j_client) == TRUE) &&
-	    (oidc_metadata_client_is_valid(r, *j_client, issuer) == TRUE))
-		return TRUE;
+	if (oidc_metadata_file_read_json(r, client_path, j_client) == TRUE) {
+		if (oidc_metadata_client_is_valid(r, *j_client, issuer) == TRUE)
+			return TRUE;
+		/* stale/invalid on-disk metadata: release it before re-registering overwrites *j_client */
+		oidc_json_decref(*j_client);
+		*j_client = NULL;
+	}
 
 	/* at this point we have no valid client metadata, see if there's a registration endpoint for this provider */
 	if (oidc_cfg_provider_registration_endpoint_url_get(provider) == NULL) {

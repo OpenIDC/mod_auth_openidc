@@ -238,6 +238,11 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 		return FALSE;
 	}
 
+	/* live discovery produced fresh metadata into *j_provider; drop the stale cached document
+	 * we may have read above (it is only handed back to the caller on the retrieve-failure paths) */
+	if (j_cache != NULL)
+		oidc_json_decref(j_cache);
+
 	/* since it is valid, write the obtained provider metadata file */
 	if (oidc_util_file_write(r, provider_path, response) == FALSE)
 		return FALSE;

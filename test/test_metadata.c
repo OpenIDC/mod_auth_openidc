@@ -976,6 +976,41 @@ START_TEST(test_metadata_disk_dyn_registration_success) {
 }
 END_TEST
 
+/* an invalid on-disk .client (expired secret) plus a registration endpoint triggers re-registration;
+ * the stale client document read from disk must be released, not leaked (verified under valgrind) */
+START_TEST(test_metadata_disk_stale_client_reregistration) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\",\"id_token\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+	/* an on-disk client whose secret already expired: read but invalid, forcing re-registration */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"old-rp\",\"client_secret\":\"old\",\"client_secret_expires_at\":100}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_client_id_get(provider), "dyn-rp");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 /*
  * Tests for oidc_metadata_conf_parse — exercise the static conf_parse_* helpers
  * by driving them through the public wrapper.
@@ -1346,6 +1381,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_with_empty_conf_file);
 	tcase_add_test(disk, test_metadata_disk_get_with_invalid_conf_alg);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);
+	tcase_add_test(disk, test_metadata_disk_stale_client_reregistration);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_payload_fields);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_custom_json_merge);
 	tcase_add_test(disk, test_metadata_disk_provider_get_missing_no_discovery);
