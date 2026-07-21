@@ -525,6 +525,55 @@ START_TEST(test_oauth_check_userid_metadata_url) {
 }
 END_TEST
 
+/* a positive OIDCProviderMetadataRefreshInterval must be treated as seconds when computing the
+ * AS-metadata cache expiry; without apr_time_from_sec() on that branch the entry would expire in
+ * microseconds and be re-fetched on almost every request */
+START_TEST(test_oauth_metadata_cache_expiry_seconds) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	/* introspection endpoint: one "active" response so the initial call succeeds */
+	oidc_test_http_response_t intro_resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = "{\"active\":true,\"sub\":\"alice\",\"scope\":\"openid\",\"client_id\":\"rp-1\"}"};
+	oidc_test_http_server_t *intro_srv = oidc_test_http_server_start(r->pool, &intro_resp);
+	ck_assert_ptr_nonnull(intro_srv);
+
+	const char *metadata_body =
+	    apr_psprintf(r->pool, "{\"issuer\":\"https://idp.example.com\",\"introspection_endpoint\":\"%s\"}",
+			 oidc_test_http_server_url(intro_srv, r->pool));
+	oidc_test_http_response_t md_resp = {
+	    .status_code = 200, .content_type = "application/json", .body = metadata_body};
+	oidc_test_http_server_t *md_srv = oidc_test_http_server_start(r->pool, &md_resp);
+	ck_assert_ptr_nonnull(md_srv);
+
+	const char *md_url = oidc_test_http_server_url(md_srv, r->pool);
+	cmd_parms *cmd_md = oidc_test_cmd_get(OIDCOAuthServerMetadataURL);
+	ck_assert_ptr_null(oidc_cmd_oauth_metadata_url_set(cmd_md, NULL, md_url));
+	cmd_parms *cmd_ssl = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd_ssl, NULL, "Off"));
+	/* the minimum accepted interval (30s) selects the configured-interval expiry branch and far
+	 * outlives this test, so with a correct seconds->microseconds conversion the entry stays cached */
+	cmd_parms *cmd_ri = oidc_test_cmd_get(OIDCProviderMetadataRefreshInterval);
+	ck_assert_ptr_null(oidc_cmd_provider_metadata_refresh_interval_set(cmd_ri, NULL, "30"));
+
+	/* retrieves the metadata over HTTP and caches it with the interval-based expiry */
+	int rc = oidc_oauth_check_userid(r, c, "AT-CACHE-1");
+	ck_assert_int_eq(rc, OK);
+
+	(void)oidc_test_http_server_wait(md_srv);
+	oidc_test_http_server_stop(md_srv);
+	oidc_test_http_server_stop(intro_srv);
+
+	/* a 30s TTL cannot have elapsed; a 30us one (seconds mistaken for microseconds) already has */
+	char *s_json = NULL;
+	oidc_cache_get_oauth_provider(r, md_url, &s_json);
+	ck_assert_ptr_nonnull(s_json);
+}
+END_TEST
+
 /* sub-requests and internal redirects recycle the user from the initial request */
 START_TEST(test_oauth_check_userid_subrequest) {
 	request_rec *r = oidc_test_request_get();
@@ -655,6 +704,7 @@ int main(void) {
 	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_success);
 	tcase_add_test(metadata, test_oauth_metadata_provider_retrieve_invalid_json);
 	tcase_add_test(metadata, test_oauth_check_userid_metadata_url);
+	tcase_add_test(metadata, test_oauth_metadata_cache_expiry_seconds);
 
 	Suite *s = suite_create("oauth");
 	suite_add_tcase(s, bearer);

@@ -12,6 +12,10 @@
   metadata-directory mode; .conf parsing pre-set response_type to the "code"
   default, so an OP that only advertises other response types (e.g. implicit)
   was still sent response_type=code
+- oauth: fix a configured OIDCProviderMetadataRefreshInterval being applied to
+  the OAuth AS metadata cache expiry as microseconds instead of seconds, which
+  made the metadata document re-fetched over HTTP on almost every bearer-token
+  request
 
 07/20/2026
 - metrics: give the revoke-session counter a unique name

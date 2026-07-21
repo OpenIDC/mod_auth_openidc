@@ -99,11 +99,11 @@ static apr_byte_t oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 			return FALSE;
 		}
 
-		oidc_cache_set_oauth_provider(r, oidc_cfg_oauth_metadata_url_get(c), s_json,
-					      apr_time_now() +
-						  (oidc_cfg_provider_metadata_refresh_interval_get(c) <= 0
-						       ? apr_time_from_sec(OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT)
-						       : oidc_cfg_provider_metadata_refresh_interval_get(c)));
+		oidc_cache_set_oauth_provider(
+		    r, oidc_cfg_oauth_metadata_url_get(c), s_json,
+		    apr_time_now() + apr_time_from_sec(oidc_cfg_provider_metadata_refresh_interval_get(c) <= 0
+							   ? OIDC_CACHE_PROVIDER_METADATA_EXPIRY_DEFAULT
+							   : oidc_cfg_provider_metadata_refresh_interval_get(c)));
 
 	} else {
 
