@@ -1,6 +1,6 @@
 [![Build Status](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml/badge.svg)](https://github.com/OpenIDC/mod_auth_openidc/actions/workflows/build.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=OpenIDC_mod_auth_openidc&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=OpenIDC_mod_auth_openidc)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=OpenIDC_mod_auth_openidc&metric=coverage)](https://sonarcloud.io/component_measures?id=OpenIDC_mod_auth_openidc&metric=coverage)
+[![Coverage](https://img.shields.io/sonar/coverage/OpenIDC_mod_auth_openidc?server=https%3A%2F%2Fsonarcloud.io)](https://sonarcloud.io/component_measures?id=OpenIDC_mod_auth_openidc&metric=coverage)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.txt)
 [<img width="184" height="96" align="right" src="https://openid.net/wordpress-content/uploads/2016/05/oid-l-certification-mark-l-cmyk-150dpi-90mm.jpg" alt="OpenID Certification">](https://openid.net/certification)
 
