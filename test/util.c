@@ -213,6 +213,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	oidc_proto_jwks_cache_init(request->server->process->pconf);
 	oidc_metadata_provider_cache_init(request->server->process->pconf);
 	oidc_session_cache_init(request->server->process->pconf);
+	oidc_util_appinfo_cache_init(request->server->process->pconf);
 
 	return request;
 }

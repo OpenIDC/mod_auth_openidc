@@ -134,9 +134,16 @@ START_TEST(test_util_appinfo_set) {
 				     &claims);
 	ck_assert_int_eq(rc, TRUE);
 
-	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
+				  TRUE);
 
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	/* cacheable=TRUE: the first call flattens and stores, the repeated (identical) call below
+	 * is served from the flattened-pairs cache and must produce the exact same headers */
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
+				  TRUE);
+	apr_table_clear(r->headers_in);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
+				  TRUE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "hans");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\u00DCnther");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D\u2020gÿger");
@@ -152,7 +159,7 @@ START_TEST(test_util_appinfo_set) {
 	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_names");
 
 	oidc_util_appinfo_set_all(r, claims, "MYPREFIX_", "#", OIDC_APPINFO_PASS_HEADERS | OIDC_APPINFO_PASS_ENVVARS,
-				  OIDC_APPINFO_ENCODING_NONE);
+				  OIDC_APPINFO_ENCODING_NONE, TRUE);
 	ck_assert_table_str(r->headers_in, "MYPREFIX_simple", "hans");
 	ck_assert_table_str(r->headers_in, "MYPREFIX_name", "G\u00DCnther");
 	ck_assert_table_str(r->headers_in, "MYPREFIX_dagger", "D\u2020gÿger");
@@ -162,14 +169,14 @@ START_TEST(test_util_appinfo_set) {
 	ck_assert_table_str(r->subprocess_env, "MYPREFIX_anarr", "0#hans#piet#1");
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
-				  OIDC_APPINFO_ENCODING_BASE64URL);
+				  OIDC_APPINFO_ENCODING_BASE64URL, TRUE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "aGFucw");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "R8OcbnRoZXI");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "ROKAoGfDv2dlcg");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_anarr", "MCxoYW5zLHBpZXQsMQ");
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
-				  OIDC_APPINFO_ENCODING_LATIN1);
+				  OIDC_APPINFO_ENCODING_LATIN1, TRUE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "hans");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\xDCnther");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D?g\xFFger");
@@ -193,13 +200,14 @@ START_TEST(test_util_appinfo_array_delimiter_escape) {
 
 	/* a delimiter (or the backslash escape char) inside an element value is escaped so it cannot be
 	 * mistaken for an element separator: "a,b" -> "a\,b", "c\d" -> "c\\d" */
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
+				  TRUE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_roles", "a\\,b,c\\\\d,e");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins\\,OU=Groups,plain");
 
 	/* a multi-character delimiter is matched and escaped as a unit (no delimiter present => unchanged) */
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS,
-				  OIDC_APPINFO_ENCODING_NONE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
+				  TRUE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins,OU=Groups::plain");
 
 	oidc_json_decref(claims);

@@ -1,4 +1,12 @@
 07/22/2026
+- perf: cache the flattened claim name/value pairs (header-name construction,
+  value rendering of object/array claims, base64url/latin1 encoding) keyed by
+  the identity of the shared claims object from the parsed-session cache, so
+  the per-claim flattening work runs once per session change instead of on
+  every request; each entry pins its claims object through a JSON reference
+  so the pointer key cannot be reused while cached; a full authenticated
+  request measures another 8% faster (18.1us -> 16.6us), more with
+  object/array-heavy claim sets
 - perf: release the Redis serialization mutex while sleeping between
   connect-retry attempts (default 300ms): other worker threads in the process
   can then proceed (and fail fast themselves) instead of queueing behind the

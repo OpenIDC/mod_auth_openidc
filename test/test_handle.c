@@ -2332,7 +2332,7 @@ START_TEST(test_handle_mod_set_app_claims_pass_none) {
 
 	/* PASS_NONE short-circuits => returns TRUE without populating env vars */
 	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
-	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
+	ck_assert_int_eq(oidc_set_app_claims(r, c, NULL, claims), TRUE);
 	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_sub");
 	oidc_json_decref(claims);
 }
@@ -2344,7 +2344,7 @@ START_TEST(test_handle_mod_set_app_claims_pass_both) {
 
 	/* default OIDCPassClaimsAs is "both" => the claim ends up as an env var */
 	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
-	ck_assert_int_eq(oidc_set_app_claims(r, c, claims), TRUE);
+	ck_assert_int_eq(oidc_set_app_claims(r, c, NULL, claims), TRUE);
 	ck_assert_table_str(r->subprocess_env, "OIDC_CLAIM_sub", "alice");
 	oidc_json_decref(claims);
 }

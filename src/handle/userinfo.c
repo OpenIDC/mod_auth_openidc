@@ -408,7 +408,7 @@ static void oidc_userinfo_pass_entry(request_rec *r, oidc_cfg_t *cfg, const oidc
 	switch (p->type) {
 	case OIDC_PASS_USERINFO_AS_CLAIMS:
 		/* set the userinfo claims in the app headers */
-		oidc_set_app_claims(r, cfg, claims);
+		oidc_set_app_claims(r, cfg, session, claims);
 		break;
 	case OIDC_PASS_USERINFO_AS_JSON_OBJECT:
 		/* pass the userinfo JSON object to the app in a header or environment variable */

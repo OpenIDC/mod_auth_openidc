@@ -760,8 +760,9 @@ static void oidc_oauth_pass_info_to_app(request_rec *r, const oidc_cfg_t *c, oid
 	if ((r->user != NULL) && (authn_header != NULL))
 		oidc_http_hdr_in_set(r, authn_header, r->user);
 
+	/* the claims object is a per-request parse here, so its flattened form is not cacheable */
 	oidc_util_appinfo_set_all(r, claims, oidc_cfg_claim_prefix_get(c), oidc_cfg_claim_delimiter_get(c), pass_in,
-				  encoding);
+				  encoding, FALSE);
 
 	if (access_token != NULL)
 		oidc_util_appinfo_set(r, OIDC_APP_INFO_ACCESS_TOKEN, access_token, OIDC_DEFAULT_HEADER_PREFIX, pass_in,

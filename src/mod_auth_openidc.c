@@ -440,7 +440,8 @@ void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_jso
  * set the claims from a JSON object (c.q. id_token or user_info response) stored
  * in the session in to HTTP headers passed on to the application
  */
-apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, oidc_json_t *claims) {
+apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
+			       oidc_json_t *claims) {
 
 	oidc_appinfo_pass_in_t pass_in = oidc_cfg_dir_pass_info_in_get(r);
 
@@ -448,10 +449,13 @@ apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, oidc_json_
 	if (pass_in == OIDC_APPINFO_PASS_NONE)
 		return TRUE;
 
-	/* set the resolved claims a HTTP headers for the application */
+	/* set the resolved claims a HTTP headers for the application; when the session state is
+	 * shared with the parsed-session cache the claims object is stable across requests and
+	 * its flattened form may be cached and replayed */
 	if (claims != NULL) {
 		oidc_util_appinfo_set_all(r, claims, oidc_cfg_claim_prefix_get(cfg), oidc_cfg_claim_delimiter_get(cfg),
-					  pass_in, oidc_cfg_dir_pass_info_encoding_get(r));
+					  pass_in, oidc_cfg_dir_pass_info_encoding_get(r),
+					  (session != NULL) && (session->state_shared == TRUE));
 	}
 
 	return TRUE;
@@ -722,7 +726,7 @@ static void oidc_idtoken_pass_as(request_rec *r, const oidc_cfg_t *cfg, const oi
 
 	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_CLAIMS) {
 		/* set the id_token in the app headers */
-		oidc_set_app_claims(r, cfg, oidc_session_get_idtoken_claims(r, session));
+		oidc_set_app_claims(r, cfg, session, oidc_session_get_idtoken_claims(r, session));
 	}
 
 	if (oidc_cfg_dir_pass_idtoken_as_get(r) & OIDC_PASS_IDTOKEN_AS_PAYLOAD) {
@@ -1877,6 +1881,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 	oidc_proto_jwks_cache_init(pool);
 	oidc_metadata_provider_cache_init(pool);
 	oidc_session_cache_init(pool);
+	oidc_util_appinfo_cache_init(pool);
 
 #if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();

@@ -169,6 +169,7 @@ int oidc_clean_expired_state_cookies(request_rec *r, oidc_cfg_t *c, const char *
 apr_byte_t oidc_is_auth_capable_request(const request_rec *r);
 apr_byte_t oidc_validate_redirect_url(request_rec *r, const oidc_cfg_t *c, const char *redirect_to_url,
 				      oidc_redirect_url_scope_t scope, char **err_str, char **err_desc);
-apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, oidc_json_t *claims);
+apr_byte_t oidc_set_app_claims(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
+			       oidc_json_t *claims);
 
 #endif /* _MOD_AUTH_OPENIDC_H_ */
