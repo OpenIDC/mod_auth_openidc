@@ -46,7 +46,7 @@
 #include "mod_auth_openidc.h"
 #include "util/util.h"
 
-#include <apr_thread_rwlock.h>
+#include "util/cache_local.h"
 
 /*
  * process-lifetime cache of parsed session state for server-cache sessions, keyed by session id
@@ -55,132 +55,76 @@
  * is handed out as a shared read-only reference (requires atomic JSON reference counting - the
  * init function leaves the cache disabled otherwise) and the session setters copy-on-write, so
  * the rare mutating request works on a private copy. Each entry owns a private subpool so
- * evicted/replaced entries return their memory.
+ * evicted/replaced entries return their (multi-KB raw-string) memory.
  */
 typedef struct oidc_session_cache_entry_t {
 	apr_pool_t *pool;
-	char *uuid;
 	char *raw;
 	oidc_json_t *state;
 } oidc_session_cache_entry_t;
 
-static apr_hash_t *_oidc_session_cache = NULL;
-static apr_pool_t *_oidc_session_cache_pool = NULL;
-#if APR_HAS_THREADS
-static apr_thread_rwlock_t *_oidc_session_cache_rwlock = NULL;
-#endif
+static oidc_cache_local_t *_oidc_session_cache = NULL;
 
 /* bounds the per-process cache; on overflow it is reset and repopulates with the hot sessions */
 #define OIDC_SESSION_CACHE_MAX_ENTRIES 500
 
-static void oidc_session_cache_rdlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_rdlock(_oidc_session_cache_rwlock);
-#endif
+/* release an entry: drop the (atomic) state reference and return the subpool holding raw+entry */
+static void oidc_session_cache_free(void *value) {
+	oidc_session_cache_entry_t *entry = value;
+	oidc_json_decref(entry->state);
+	apr_pool_destroy(entry->pool);
 }
 
-static void oidc_session_cache_wrlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_wrlock(_oidc_session_cache_rwlock);
-#endif
+/* freshness: the parsed state is valid while the raw session document is byte-for-byte unchanged */
+static int oidc_session_cache_valid(void *value, void *ctx) {
+	return _oidc_strcmp(((oidc_session_cache_entry_t *)value)->raw, (const char *)ctx) == 0;
 }
 
-static void oidc_session_cache_unlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_unlock(_oidc_session_cache_rwlock);
-#endif
+/* under the read lock: hand out a new (atomic) reference to the cached state */
+static void oidc_session_cache_use(void *value, void *baton) {
+	*(oidc_json_t **)baton = oidc_json_incref(((oidc_session_cache_entry_t *)value)->state);
 }
 
-/* release all cached entries; must be called with the write lock held (or at pool cleanup);
- * in-flight requests keep their state alive through their own (atomic) references */
-static void oidc_session_cache_clear_unlocked(void) {
-	void *val = NULL;
-	if (_oidc_session_cache == NULL)
-		return;
-	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_session_cache); hi; hi = apr_hash_next(hi)) {
-		oidc_session_cache_entry_t *entry = NULL;
-		apr_hash_this(hi, NULL, NULL, &val);
-		entry = (oidc_session_cache_entry_t *)val;
-		oidc_json_decref(entry->state);
-		/* NB: safe while iterating: the hash nodes themselves live in the cache pool */
-		apr_pool_destroy(entry->pool);
-	}
-	apr_hash_clear(_oidc_session_cache);
-}
+struct oidc_session_cache_build_ctx {
+	const char *raw;
+	oidc_json_t *state;
+};
 
-static apr_status_t oidc_session_cache_cleanup(void *data) {
-	oidc_session_cache_clear_unlocked();
-	_oidc_session_cache = NULL;
-	_oidc_session_cache_pool = NULL;
-#if APR_HAS_THREADS
-	_oidc_session_cache_rwlock = NULL;
-#endif
-	return APR_SUCCESS;
+/* under the write lock: build an entry in its own subpool, copying the raw string and referencing
+ * the parsed state; returns NULL (not cached) when the subpool cannot be created */
+static void *oidc_session_cache_build(apr_pool_t *pool, const char *key, void *baton) {
+	const struct oidc_session_cache_build_ctx *ctx = baton;
+	apr_pool_t *entry_pool = NULL;
+	oidc_session_cache_entry_t *entry = NULL;
+	if (apr_pool_create(&entry_pool, pool) != APR_SUCCESS)
+		return NULL;
+	entry = apr_pcalloc(entry_pool, sizeof(oidc_session_cache_entry_t));
+	entry->pool = entry_pool;
+	entry->raw = apr_pstrdup(entry_pool, ctx->raw);
+	entry->state = oidc_json_incref(ctx->state);
+	return entry;
 }
 
 void oidc_session_cache_init(apr_pool_t *pool) {
-	if (_oidc_session_cache != NULL)
-		return;
 	/* sharing parsed JSON across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
-#if APR_HAS_THREADS
-	if (apr_thread_rwlock_create(&_oidc_session_cache_rwlock, pool) != APR_SUCCESS)
-		return;
-#endif
-	_oidc_session_cache = apr_hash_make(pool);
-	_oidc_session_cache_pool = pool;
-	/* must be a PRE-cleanup: it destroys the per-entry subpools itself, which a regular
-	 * cleanup would touch after apr_pool_clear had already destroyed them (children are
-	 * destroyed before regular cleanups run) */
-	apr_pool_pre_cleanup_register(pool, NULL, oidc_session_cache_cleanup);
+	oidc_cache_local_create(&_oidc_session_cache, pool, "session", OIDC_SESSION_CACHE_MAX_ENTRIES, TRUE,
+				oidc_session_cache_free);
 }
 
 /* return a new reference to the cached parsed state when the raw session document is unchanged */
 static oidc_json_t *oidc_session_cache_get(const char *uuid, const char *raw) {
-	oidc_session_cache_entry_t *entry = NULL;
 	oidc_json_t *json = NULL;
-
-	if (_oidc_session_cache == NULL)
-		return NULL;
-
-	oidc_session_cache_rdlock();
-	entry = apr_hash_get(_oidc_session_cache, uuid, APR_HASH_KEY_STRING);
-	if ((entry != NULL) && (_oidc_strcmp(entry->raw, raw) == 0))
-		json = oidc_json_incref(entry->state);
-	oidc_session_cache_unlock();
-
+	oidc_cache_local_get_use(_oidc_session_cache, uuid, oidc_session_cache_valid, (void *)raw,
+				 oidc_session_cache_use, &json);
 	return json;
 }
 
 /* store a new reference to the parsed state, keyed by session id and validated by the raw string */
 static void oidc_session_cache_set(const char *uuid, const char *raw, oidc_json_t *state) {
-	oidc_session_cache_entry_t *entry = NULL;
-	apr_pool_t *entry_pool = NULL;
-
-	if (_oidc_session_cache == NULL)
-		return;
-
-	oidc_session_cache_wrlock();
-	if (apr_hash_count(_oidc_session_cache) >= OIDC_SESSION_CACHE_MAX_ENTRIES)
-		oidc_session_cache_clear_unlocked();
-	entry = apr_hash_get(_oidc_session_cache, uuid, APR_HASH_KEY_STRING);
-	if (entry != NULL) {
-		/* remove the entry this store replaces before destroying the pool holding its key */
-		apr_hash_set(_oidc_session_cache, entry->uuid, APR_HASH_KEY_STRING, NULL);
-		oidc_json_decref(entry->state);
-		apr_pool_destroy(entry->pool);
-	}
-	/* pool operations happen under the write lock only (pools/allocators are not thread-safe) */
-	if (apr_pool_create(&entry_pool, _oidc_session_cache_pool) == APR_SUCCESS) {
-		entry = apr_pcalloc(entry_pool, sizeof(oidc_session_cache_entry_t));
-		entry->pool = entry_pool;
-		entry->uuid = apr_pstrdup(entry_pool, uuid);
-		entry->raw = apr_pstrdup(entry_pool, raw);
-		entry->state = oidc_json_incref(state);
-		apr_hash_set(_oidc_session_cache, entry->uuid, APR_HASH_KEY_STRING, entry);
-	}
-	oidc_session_cache_unlock();
+	struct oidc_session_cache_build_ctx ctx = {.raw = raw, .state = state};
+	oidc_cache_local_set_build(_oidc_session_cache, uuid, oidc_session_cache_build, &ctx);
 }
 
 /* the name of the remote-user attribute in the session  */
