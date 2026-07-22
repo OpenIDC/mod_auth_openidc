@@ -33,8 +33,10 @@
 
 #include "util/cache_local.h"
 
+/* for the old-libcheck assertion shims only; the oidc_test fixture is not used here */
+#include "check_util.h"
+
 #include <apr_pools.h>
-#include <check.h>
 #include <stdlib.h>
 #include <string.h>
 

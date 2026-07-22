@@ -45,6 +45,7 @@
 
 #include <apr_tables.h>
 #include <check.h>
+#include <string.h>
 
 #ifndef _ck_assert_ptr_null
 #define _ck_assert_ptr_null(X, OP)                                                                                     \
@@ -67,6 +68,26 @@
 	} while (0)
 #define ck_assert_ptr_eq(X, Y) _ck_assert_ptr(X, ==, Y)
 #define ck_assert_ptr_ne(X, Y) _ck_assert_ptr(X, !=, Y)
+#endif
+
+/* check < 0.9.10 has the _ck_assert_int internal (used by ck_assert_int_eq/ne) but not yet the
+ * lt/le/gt/ge wrappers, so guard on a wrapper name rather than the internal one */
+#ifndef ck_assert_int_lt
+#define _ck_assert_int_cmp(X, OP, Y)                                                                                   \
+	do {                                                                                                           \
+		long _ck_x = (X);                                                                                      \
+		long _ck_y = (Y);                                                                                      \
+		ck_assert_msg(_ck_x OP _ck_y, "Assertion '%s' failed: %s == %ld, %s == %ld", #X " " #OP " " #Y, #X,    \
+			      _ck_x, #Y, _ck_y);                                                                       \
+	} while (0)
+#define ck_assert_int_lt(X, Y) _ck_assert_int_cmp(X, <, Y)
+#define ck_assert_int_le(X, Y) _ck_assert_int_cmp(X, <=, Y)
+#define ck_assert_int_gt(X, Y) _ck_assert_int_cmp(X, >, Y)
+#define ck_assert_int_ge(X, Y) _ck_assert_int_cmp(X, >=, Y)
+#endif
+
+#ifndef _ck_assert_mem
+#define ck_assert_mem_eq(X, Y, L) ck_assert_msg(memcmp((X), (Y), (L)) == 0, "Assertion '%s' failed", #X " == " #Y)
 #endif
 
 /*
