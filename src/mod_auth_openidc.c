@@ -1877,6 +1877,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 		     _OIDC_USE_REDIS, _OIDC_USE_JQ);
 
 	oidc_http_init();
+	oidc_http_curl_pool_init(pool);
 	oidc_authz_pcre_cache_init(pool);
 	oidc_proto_jwks_cache_init(pool);
 	oidc_metadata_provider_cache_init(pool);
@@ -1975,6 +1976,9 @@ static const authz_provider oidc_authz_claims_expr_provider = {
  */
 static void oidc_child_init(apr_pool_t *p, server_rec *s) {
 	server_rec *sp = s;
+	/* drop any curl handles inherited over fork(): their connections share descriptors and
+	 * TLS state with the parent process */
+	oidc_http_curl_pool_child_init();
 	while (sp != NULL) {
 		const oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);
 		oidc_cfg_child_init(p, cfg, sp);

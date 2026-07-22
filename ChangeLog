@@ -1,4 +1,13 @@
 07/22/2026
+- perf: keep a small pool of reusable libcurl easy handles instead of creating
+  and destroying one per outbound call: a reused handle retains its connection
+  cache, DNS cache and TLS session cache, so consecutive requests to the same
+  endpoint (token, userinfo, introspection, JWKs, metadata) reuse the TCP/TLS
+  connection instead of paying DNS + TCP + TLS handshake every time; handles
+  whose request failed are destroyed rather than reused, handles inherited
+  over fork() are dropped in the child (their connections share descriptors
+  and TLS state with the parent), and TCP keepalive is enabled on outbound
+  connections
 - perf: index the shm cache with an in-segment hash table (bucket chains plus
   a free list, 1-based slot indexes) instead of linearly scanning all slots on
   every get/set while holding the global mutex: operations become O(chain)

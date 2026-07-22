@@ -59,6 +59,10 @@
 #include "proto/proto.h"
 #include "util/util.h"
 
+/* the reusable-handle pool lives at the bottom of this file */
+static CURL *oidc_http_curl_acquire(void);
+static void oidc_http_curl_release(CURL *curl, apr_byte_t reuse);
+
 /*
  * URL-encode a string: percent-encode every byte outside of the RFC 3986 unreserved set,
  * matching curl_easy_escape which was used here before (but required a throwaway CURL handle
@@ -929,9 +933,9 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		   outgoing_proxy->username_password ? "****" : "(null)", (int)outgoing_proxy->auth_type, pass_cookies,
 		   ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
 
-	curl = curl_easy_init();
+	curl = oidc_http_curl_acquire();
 	if (curl == NULL) {
-		oidc_error(r, "curl_easy_init() error");
+		oidc_error(r, "could not obtain a curl handle");
 		goto end;
 	}
 
@@ -942,6 +946,8 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_HEADER, 0L);
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_NOPROGRESS, 1L);
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_NOSIGNAL, 1L);
+	/* keep reused connections alive across the (potentially long) intervals between calls */
+	OIDC_HTTP_CURL_SETOPT(CURLOPT_TCP_KEEPALIVE, 1L);
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_ERRORBUFFER, curl_err);
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_FOLLOWLOCATION, 1L);
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_MAXREDIRS, 5L);
@@ -1051,11 +1057,11 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 
 end:
 
-	/* cleanup and return the result */
+	/* cleanup and return the result; a handle that performed successfully goes back to the
+	 * pool with its connection kept alive for the next request to the same endpoint */
 	if (h_list != NULL)
 		curl_slist_free_all(h_list);
-	if (curl != NULL)
-		curl_easy_cleanup(curl);
+	oidc_http_curl_release(curl, rv);
 
 	return rv;
 }
@@ -1425,4 +1431,96 @@ void oidc_http_init(void) {
  */
 void oidc_http_cleanup(void) {
 	curl_global_cleanup();
+}
+
+/*
+ * a small pool of reusable libcurl easy handles: curl_easy_reset clears all options but keeps
+ * the handle's connection cache, DNS cache and TLS session cache, so consecutive requests to
+ * the same endpoint (token, userinfo, introspection, JWKs, metadata) reuse the TCP/TLS
+ * connection instead of paying DNS + TCP + TLS handshake on every call; curl easy handles must
+ * not be used concurrently, so idle handles are kept in a mutex-protected stack
+ */
+#define OIDC_HTTP_CURL_POOL_MAX 16
+
+static CURL *_oidc_http_curl_pool[OIDC_HTTP_CURL_POOL_MAX];
+static int _oidc_http_curl_pool_num = 0;
+static apr_byte_t _oidc_http_curl_pool_enabled = FALSE;
+#if APR_HAS_THREADS
+static apr_thread_mutex_t *_oidc_http_curl_pool_mutex = NULL;
+#endif
+
+static void oidc_http_curl_pool_lock(void) {
+#if APR_HAS_THREADS
+	apr_thread_mutex_lock(_oidc_http_curl_pool_mutex);
+#endif
+}
+
+static void oidc_http_curl_pool_unlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_mutex_unlock(_oidc_http_curl_pool_mutex);
+#endif
+}
+
+static apr_status_t oidc_http_curl_pool_cleanup(void *data) {
+	for (int i = 0; i < _oidc_http_curl_pool_num; i++)
+		curl_easy_cleanup(_oidc_http_curl_pool[i]);
+	_oidc_http_curl_pool_num = 0;
+	_oidc_http_curl_pool_enabled = FALSE;
+#if APR_HAS_THREADS
+	_oidc_http_curl_pool_mutex = NULL;
+#endif
+	return APR_SUCCESS;
+}
+
+void oidc_http_curl_pool_init(apr_pool_t *pool) {
+	if (_oidc_http_curl_pool_enabled == TRUE)
+		return;
+#if APR_HAS_THREADS
+	if (apr_thread_mutex_create(&_oidc_http_curl_pool_mutex, APR_THREAD_MUTEX_DEFAULT, pool) != APR_SUCCESS)
+		return;
+#endif
+	_oidc_http_curl_pool_num = 0;
+	_oidc_http_curl_pool_enabled = TRUE;
+	apr_pool_cleanup_register(pool, NULL, oidc_http_curl_pool_cleanup, apr_pool_cleanup_null);
+}
+
+/*
+ * forget any handles inherited over fork(): their connections share file descriptors and TLS
+ * state with the parent, so the child must neither use nor curl_easy_cleanup them (a cleanup
+ * would write a TLS close-notify into a socket the parent may still be using)
+ */
+void oidc_http_curl_pool_child_init(void) {
+	_oidc_http_curl_pool_num = 0;
+}
+
+static CURL *oidc_http_curl_acquire(void) {
+	CURL *curl = NULL;
+	if (_oidc_http_curl_pool_enabled == FALSE)
+		return curl_easy_init();
+	oidc_http_curl_pool_lock();
+	if (_oidc_http_curl_pool_num > 0)
+		curl = _oidc_http_curl_pool[--_oidc_http_curl_pool_num];
+	oidc_http_curl_pool_unlock();
+	return (curl != NULL) ? curl : curl_easy_init();
+}
+
+/*
+ * return a handle to the pool after a successful request: the reset clears its options but
+ * keeps the connection/DNS/TLS-session caches; a handle whose request failed is destroyed
+ * rather than reused so a poisoned connection state cannot carry over
+ */
+static void oidc_http_curl_release(CURL *curl, apr_byte_t reuse) {
+	if (curl == NULL)
+		return;
+	if ((reuse == TRUE) && (_oidc_http_curl_pool_enabled == TRUE)) {
+		curl_easy_reset(curl);
+		oidc_http_curl_pool_lock();
+		if (_oidc_http_curl_pool_num < OIDC_HTTP_CURL_POOL_MAX) {
+			_oidc_http_curl_pool[_oidc_http_curl_pool_num++] = curl;
+			curl = NULL;
+		}
+		oidc_http_curl_pool_unlock();
+	}
+	if (curl != NULL)
+		curl_easy_cleanup(curl);
 }

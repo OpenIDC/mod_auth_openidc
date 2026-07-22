@@ -185,5 +185,7 @@ unsigned long oidc_http_proxy_s2auth(const char *arg);
 
 void oidc_http_init(void);
 void oidc_http_cleanup(void);
+void oidc_http_curl_pool_init(apr_pool_t *pool);
+void oidc_http_curl_pool_child_init(void);
 
 #endif /* _MOD_AUTH_OPENIDC_HTTP_H_ */
