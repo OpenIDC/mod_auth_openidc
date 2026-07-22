@@ -30,6 +30,7 @@
 #include <apr_hash.h>
 #include <apr_strings.h>
 #include <apr_thread_rwlock.h>
+#include <apr_time.h>
 
 /* an entry accessed within this window of its eviction means the cache is too small for the working
  * set (we are throwing out entries that are still hot) - a signal worth warning the operator about */
