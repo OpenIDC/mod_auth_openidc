@@ -295,9 +295,14 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 	zlib.next_in = (Bytef *)input;
 	zlib.avail_in = input_len;
 
-	status = deflateInit(&zlib, Z_BEST_COMPRESSION);
+	/* the inputs here are small internal payloads (state/session cookies, cache values of at
+	 * most a few (dozen) KB): a 4KB window (windowBits 12) and modest memLevel cut the ~256KB
+	 * of per-call zlib allocations by an order of magnitude and the default level compresses
+	 * such short JSON inputs within a few percent of Z_BEST_COMPRESSION at a fraction of the
+	 * cost; zlib streams are self-describing so any inflate side decodes them unchanged */
+	status = deflateInit2(&zlib, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 12, 5, Z_DEFAULT_STRATEGY);
 	if (status != Z_OK) {
-		oidc_jose_error(err, "deflateInit() failed: %d", status);
+		oidc_jose_error(err, "deflateInit2() failed: %d", status);
 		goto end;
 	}
 

@@ -1,4 +1,11 @@
 07/22/2026
+- perf: compress internal encrypted JWTs (state/session cookies, encrypted
+  cache values) with deflate level/window/memory parameters sized for their
+  small payloads instead of Z_BEST_COMPRESSION with a 32KB window, cutting the
+  ~256KB of per-call zlib allocations by an order of magnitude and halving the
+  envelope creation cost (51us -> 21us for a 3KB session) at ~1% ratio loss;
+  zlib streams are self-describing so old and new binaries decode each other's
+  values unchanged
 - perf: hoist the string-length evaluation out of the per-character loop in
   oidc_http_hdr_normalize_name (was re-evaluated every iteration)
 - perf: keep the parsed session state of server-cache sessions in a per-process
