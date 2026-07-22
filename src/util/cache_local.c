@@ -205,7 +205,7 @@ void *oidc_cache_local_get_or_compute(oidc_cache_local_t *cache, const char *key
 }
 
 apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
-				    void *vctx, oidc_cache_local_use_fn use, void *ubaton) {
+				    const void *vctx, oidc_cache_local_use_fn use, void *ubaton) {
 	apr_byte_t rv = FALSE;
 
 	if ((cache == NULL) || (key == NULL) || (use == NULL))

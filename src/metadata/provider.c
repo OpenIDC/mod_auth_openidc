@@ -62,7 +62,7 @@ static void oidc_metadata_provider_cache_free(void *value) {
 }
 
 /* freshness: the cached document is valid while the file's mtime and size are unchanged */
-static int oidc_metadata_provider_cache_valid(void *value, void *ctx) {
+static int oidc_metadata_provider_cache_valid(void *value, const void *ctx) {
 	const oidc_metadata_provider_cache_entry_t *entry = value;
 	const apr_finfo_t *fi = ctx;
 	return (entry->mtime == fi->mtime) && (entry->size == fi->size);
@@ -99,8 +99,8 @@ void oidc_metadata_provider_cache_init(apr_pool_t *pool) {
 
 /* return a new reference to the cached parsed document when the file is unchanged */
 static apr_byte_t oidc_metadata_provider_cache_get(const char *path, const apr_finfo_t *fi, oidc_json_t **json) {
-	return oidc_cache_local_get_use(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_valid,
-					(void *)fi, oidc_metadata_provider_cache_use, json);
+	return oidc_cache_local_get_use(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_valid, fi,
+					oidc_metadata_provider_cache_use, json);
 }
 
 /* store a new reference to the parsed document keyed by path, stamped with the file's mtime+size */

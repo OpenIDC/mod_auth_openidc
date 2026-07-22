@@ -57,7 +57,7 @@ typedef void *(*oidc_cache_local_compute_fn)(apr_pool_t *pool, const char *key, 
 
 /* return non-zero when the stored value is still fresh for `ctx` (e.g. an mtime+size or raw-string
  * check); used to invalidate stale entries on lookup */
-typedef int (*oidc_cache_local_validate_fn)(void *value, void *ctx);
+typedef int (*oidc_cache_local_validate_fn)(void *value, const void *ctx);
 
 /* use the (validated) stored value while the read lock is held - e.g. take a reference to it or copy
  * it out into `baton` - so it cannot be evicted/freed between the lookup and the caller using it */
@@ -107,7 +107,7 @@ void *oidc_cache_local_get_or_compute(oidc_cache_local_t *cache, const char *key
  * replace.
  */
 apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
-				    void *vctx, oidc_cache_local_use_fn use, void *ubaton);
+				    const void *vctx, oidc_cache_local_use_fn use, void *ubaton);
 
 /*
  * store the entry for `key` produced by `build` (called under the write lock so the cache pool is

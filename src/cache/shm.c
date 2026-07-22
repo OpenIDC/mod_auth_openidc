@@ -114,7 +114,7 @@ static oidc_cache_shm_entry_t *oidc_cache_shm_slot(oidc_cache_shm_header_t *hdr,
  * absorb the shift, and, being anonymous and inherited across fork, maps at the same base with the
  * same alignment in every worker process, so all processes compute identical slot addresses.
  */
-static oidc_cache_shm_header_t *oidc_cache_shm_base(oidc_cache_cfg_shm_t *context) {
+static oidc_cache_shm_header_t *oidc_cache_shm_base(const oidc_cache_cfg_shm_t *context) {
 	return (oidc_cache_shm_header_t *)APR_ALIGN((uintptr_t)apr_shm_baseaddr_get(context->shm), 64);
 }
 

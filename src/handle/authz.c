@@ -83,7 +83,7 @@ void oidc_authz_pcre_cache_init(apr_pool_t *pool) {
  * cache is full or the pattern does not compile - the caller then compiles per-request as before
  */
 static struct oidc_pcre *oidc_authz_pcre_cache_get(request_rec *r, const char *spec) {
-	struct oidc_pcre *cached =
+	const struct oidc_pcre *cached =
 	    oidc_cache_local_get_or_compute(_oidc_authz_pcre_cache, spec, oidc_authz_pcre_compile, NULL);
 	return (cached != NULL) ? oidc_pcre_alias(r->pool, cached) : NULL;
 }

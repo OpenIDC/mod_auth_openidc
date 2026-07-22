@@ -78,7 +78,7 @@ static void oidc_util_appinfo_cache_free(void *value) {
 
 /* freshness: the flattened pairs are valid while the key still maps to the same claims object;
  * the pinned reference guarantees the pointer cannot have been reused for a different object */
-static int oidc_util_appinfo_cache_valid(void *value, void *ctx) {
+static int oidc_util_appinfo_cache_valid(void *value, const void *ctx) {
 	return ((const oidc_appinfo_cache_entry_t *)value)->claims == (const oidc_json_t *)ctx;
 }
 
@@ -359,7 +359,7 @@ static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const o
 static apr_byte_t oidc_util_appinfo_cache_apply(request_rec *r, const oidc_json_t *j_attrs, const char *key,
 						oidc_appinfo_pass_in_t pass_in) {
 	struct oidc_util_appinfo_cache_use_ctx ctx = {.r = r, .pass_in = pass_in};
-	return oidc_cache_local_get_use(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_valid, (void *)j_attrs,
+	return oidc_cache_local_get_use(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_valid, j_attrs,
 					oidc_util_appinfo_cache_use, &ctx);
 }
 

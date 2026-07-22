@@ -266,8 +266,8 @@ static void *test_build(apr_pool_t *pool, const char *key, void *baton) {
 	return e;
 }
 
-static int test_validate(void *value, void *ctx) {
-	return ((test_entry_t *)value)->stamp == *(int *)ctx;
+static int test_validate(void *value, const void *ctx) {
+	return ((test_entry_t *)value)->stamp == *(const int *)ctx;
 }
 
 static void test_use(void *value, void *baton) {

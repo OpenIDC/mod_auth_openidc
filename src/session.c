@@ -76,7 +76,7 @@ static void oidc_session_cache_free(void *value) {
 }
 
 /* freshness: the parsed state is valid while the raw session document is byte-for-byte unchanged */
-static int oidc_session_cache_valid(void *value, void *ctx) {
+static int oidc_session_cache_valid(void *value, const void *ctx) {
 	return _oidc_strcmp(((oidc_session_cache_entry_t *)value)->raw, (const char *)ctx) == 0;
 }
 
@@ -116,8 +116,8 @@ void oidc_session_cache_init(apr_pool_t *pool) {
 /* return a new reference to the cached parsed state when the raw session document is unchanged */
 static oidc_json_t *oidc_session_cache_get(const char *uuid, const char *raw) {
 	oidc_json_t *json = NULL;
-	oidc_cache_local_get_use(_oidc_session_cache, uuid, oidc_session_cache_valid, (void *)raw,
-				 oidc_session_cache_use, &json);
+	oidc_cache_local_get_use(_oidc_session_cache, uuid, oidc_session_cache_valid, raw, oidc_session_cache_use,
+				 &json);
 	return json;
 }
 

@@ -77,7 +77,7 @@ static void oidc_proto_jwks_cache_free(void *value) {
 }
 
 /* freshness: a cached selection result is valid until its refresh-interval expiry */
-static int oidc_proto_jwks_cache_valid(void *value, void *ctx) {
+static int oidc_proto_jwks_cache_valid(void *value, const void *ctx) {
 	return ((const oidc_proto_jwks_cache_entry_t *)value)->expires > apr_time_now();
 }
 
