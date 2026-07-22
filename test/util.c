@@ -44,6 +44,7 @@
 #include "util.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
+#include "handle/handle.h"
 #include "util/util.h"
 #include <openssl/evp.h>
 
@@ -89,7 +90,8 @@ static apr_byte_t oidc_test_key_derive_cached(const char *secret, unsigned char 
 	if ((oidc_test_kdf_cache_n < OIDC_TEST_KDF_CACHE_MAX) &&
 	    (_oidc_strlen(secret) < sizeof(oidc_test_kdf_cache[0].secret))) {
 		_oidc_strcpy(oidc_test_kdf_cache[oidc_test_kdf_cache_n].secret, secret);
-		_oidc_memcpy(oidc_test_kdf_cache[oidc_test_kdf_cache_n].key, out, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
+		_oidc_memcpy(oidc_test_kdf_cache[oidc_test_kdf_cache_n].key, out,
+			     OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
 		oidc_test_kdf_cache_n++;
 	}
 	return TRUE;
@@ -202,6 +204,9 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 		fprintf(stderr, "oidc_util_jwt_post_config failed!\n");
 		exit(-1);
 	}
+
+	/* mirrors oidc_post_config; the pool cleanup resets the cache statics between tests */
+	oidc_authz_pcre_cache_init(request->server->process->pconf);
 
 	return request;
 }

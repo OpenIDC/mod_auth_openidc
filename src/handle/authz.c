@@ -49,6 +49,104 @@
 #include "util/pcre_subst.h"
 #include "util/util.h"
 
+#include <apr_thread_rwlock.h>
+
+/*
+ * process-lifetime cache of compiled Require-claim regular expressions: the patterns come from
+ * config-time constant (or expression-expanded) Require lines, so their number is small and
+ * stable; compiling once per process instead of once per evaluation removes the dominant cost
+ * of every regex authorization match
+ */
+static apr_hash_t *_oidc_authz_pcre_cache = NULL;
+static apr_pool_t *_oidc_authz_pcre_cache_pool = NULL;
+#if APR_HAS_THREADS
+static apr_thread_rwlock_t *_oidc_authz_pcre_cache_rwlock = NULL;
+#endif
+
+/* bounds the cache in case expression-expanded Require lines generate ever-changing patterns */
+#define OIDC_AUTHZ_PCRE_CACHE_MAX_ENTRIES 64
+
+static void oidc_authz_pcre_cache_rdlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_rwlock_rdlock(_oidc_authz_pcre_cache_rwlock);
+#endif
+}
+
+static void oidc_authz_pcre_cache_wrlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_rwlock_wrlock(_oidc_authz_pcre_cache_rwlock);
+#endif
+}
+
+static void oidc_authz_pcre_cache_unlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_rwlock_unlock(_oidc_authz_pcre_cache_rwlock);
+#endif
+}
+
+static apr_status_t oidc_authz_pcre_cache_cleanup(void *data) {
+	apr_hash_index_t *hi = NULL;
+	void *val = NULL;
+	if (_oidc_authz_pcre_cache != NULL) {
+		for (hi = apr_hash_first(NULL, _oidc_authz_pcre_cache); hi; hi = apr_hash_next(hi)) {
+			apr_hash_this(hi, NULL, NULL, &val);
+			oidc_pcre_free((struct oidc_pcre *)val);
+		}
+	}
+	_oidc_authz_pcre_cache = NULL;
+	_oidc_authz_pcre_cache_pool = NULL;
+#if APR_HAS_THREADS
+	_oidc_authz_pcre_cache_rwlock = NULL;
+#endif
+	return APR_SUCCESS;
+}
+
+void oidc_authz_pcre_cache_init(apr_pool_t *pool) {
+	if (_oidc_authz_pcre_cache != NULL)
+		return;
+#if APR_HAS_THREADS
+	if (apr_thread_rwlock_create(&_oidc_authz_pcre_cache_rwlock, pool) != APR_SUCCESS)
+		return;
+#endif
+	_oidc_authz_pcre_cache = apr_hash_make(pool);
+	_oidc_authz_pcre_cache_pool = pool;
+	apr_pool_cleanup_register(pool, NULL, oidc_authz_pcre_cache_cleanup, apr_pool_cleanup_null);
+}
+
+/*
+ * obtain a request-local alias to the cached compiled program for the specified pattern,
+ * compiling and caching it on first use; returns NULL when the cache is not initialized, the
+ * cache is full or the pattern does not compile - the caller then compiles per-request as before
+ */
+static struct oidc_pcre *oidc_authz_pcre_cache_get(request_rec *r, const char *spec) {
+	struct oidc_pcre *cached = NULL;
+	char *s_err = NULL;
+
+	if (_oidc_authz_pcre_cache == NULL)
+		return NULL;
+
+	oidc_authz_pcre_cache_rdlock();
+	cached = apr_hash_get(_oidc_authz_pcre_cache, spec, APR_HASH_KEY_STRING);
+	oidc_authz_pcre_cache_unlock();
+
+	if (cached != NULL)
+		return oidc_pcre_alias(r->pool, cached);
+
+	oidc_authz_pcre_cache_wrlock();
+	/* re-check under the write lock: another thread may have inserted the pattern meanwhile */
+	cached = apr_hash_get(_oidc_authz_pcre_cache, spec, APR_HASH_KEY_STRING);
+	if ((cached == NULL) && (apr_hash_count(_oidc_authz_pcre_cache) < OIDC_AUTHZ_PCRE_CACHE_MAX_ENTRIES)) {
+		/* the cache pool is only ever allocated from under the write lock (pools are not thread-safe) */
+		cached = oidc_pcre_compile(_oidc_authz_pcre_cache_pool, spec, &s_err);
+		if (cached != NULL)
+			apr_hash_set(_oidc_authz_pcre_cache, apr_pstrdup(_oidc_authz_pcre_cache_pool, spec),
+				     APR_HASH_KEY_STRING, cached);
+	}
+	oidc_authz_pcre_cache_unlock();
+
+	return (cached != NULL) ? oidc_pcre_alias(r->pool, cached) : NULL;
+}
+
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, oidc_json_t *val, const char *key) {
 	return (_oidc_strcmp(oidc_json_string_value(val), spec) == 0);
 }
@@ -236,7 +334,9 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, oidc_j
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
 
-	preg = oidc_pcre_compile(r->pool, spec, &s_err);
+	preg = oidc_authz_pcre_cache_get(r, spec);
+	if (preg == NULL)
+		preg = oidc_pcre_compile(r->pool, spec, &s_err);
 	if (preg == NULL) {
 		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec, s_err ? s_err : "<n/a>");
 		return FALSE;

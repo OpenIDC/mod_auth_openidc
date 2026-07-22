@@ -2008,6 +2008,8 @@ START_TEST(test_handle_legacy_authz_worker) {
 	ck_assert_int_eq(_legacy_authz(r, json, "Require claim nested.nestedarray~.b"), AUTHZ_DENIED);
 	ck_assert_int_eq(_legacy_authz(r, json, "Require claim email~...$"), AUTHZ_DENIED);
 	ck_assert_int_eq(_legacy_authz(r, json, "Require claim sub~...$"), AUTHZ_GRANTED);
+	/* repeated evaluation of the same pattern exercises the compiled-pattern cache hit path */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim sub~...$"), AUTHZ_GRANTED);
 
 	/* numeric / null comparisons */
 	ck_assert_int_eq(_legacy_authz(r, json, "Require claim areal:1.1"), AUTHZ_GRANTED);

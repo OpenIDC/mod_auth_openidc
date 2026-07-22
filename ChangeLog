@@ -1,4 +1,8 @@
 07/22/2026
+- perf: cache compiled Require-claim regular expressions for the lifetime of the
+  server process instead of recompiling them on every authorization evaluation;
+  a full "Require claim <name>~<regex>" evaluation measures 43% faster
+  (1374ns -> 782ns)
 - perf: replace the curl-based URL encode/decode in http.c with a plain RFC 3986
   percent-codec, avoiding a throwaway CURL handle init/cleanup plus heap churn
   on every call; measures 10x faster (761ns -> 74ns per encode)

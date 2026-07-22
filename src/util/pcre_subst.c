@@ -57,6 +57,9 @@ struct oidc_pcre {
 	int subStr[OIDC_UTIL_REGEXP_MATCH_SIZE];
 	pcre *preg;
 #endif
+	/* FALSE when the compiled program is borrowed from a shared (cached) oidc_pcre through
+	 * oidc_pcre_alias and must not be freed with this wrapper */
+	int owns_preg;
 };
 
 #ifndef HAVE_LIBPCRE2
@@ -215,7 +218,23 @@ struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char *
 	if (pcre->preg == NULL) {
 		*error_str = apr_psprintf(pool, "pattern [%s] is not a valid regular expression", regexp);
 		pcre = NULL;
+	} else {
+		pcre->owns_preg = 1;
 	}
+	return pcre;
+}
+
+/*
+ * create a per-request wrapper around the (immutable, thread-safe) compiled program of an
+ * existing oidc_pcre so match state stays local while the compiled program is shared/cached
+ */
+struct oidc_pcre *oidc_pcre_alias(apr_pool_t *pool, const struct oidc_pcre *src) {
+	struct oidc_pcre *pcre = NULL;
+	if ((src == NULL) || (src->preg == NULL))
+		return NULL;
+	pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
+	pcre->preg = src->preg;
+	pcre->owns_preg = 0;
 	return pcre;
 }
 
@@ -223,10 +242,11 @@ void oidc_pcre_free(struct oidc_pcre *pcre) {
 #ifdef HAVE_LIBPCRE2
 	if (pcre->match_data)
 		pcre2_match_data_free(pcre->match_data);
-	if (pcre->preg)
+	if ((pcre->preg) && (pcre->owns_preg))
 		pcre2_code_free(pcre->preg);
 #else
-	pcre_free(pcre->preg);
+	if (pcre->owns_preg)
+		pcre_free(pcre->preg);
 #endif
 }
 

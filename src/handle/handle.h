@@ -68,6 +68,7 @@ authz_status oidc_authz_24_checker_claims_expr(request_rec *r, const char *requi
 authz_status oidc_authz_24_checker_claim(request_rec *r, const char *require_args, const void *parsed_require_args);
 authz_status oidc_authz_24_worker(request_rec *r, oidc_json_t *claims, const char *require_args,
 				  const void *parsed_require_args, oidc_authz_match_claim_fn_type match_claim_fn);
+void oidc_authz_pcre_cache_init(apr_pool_t *pool);
 
 // content.c
 int oidc_content_handler(request_rec *r);
