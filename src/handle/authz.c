@@ -85,10 +85,9 @@ static void oidc_authz_pcre_cache_unlock(void) {
 }
 
 static apr_status_t oidc_authz_pcre_cache_cleanup(void *data) {
-	apr_hash_index_t *hi = NULL;
 	void *val = NULL;
 	if (_oidc_authz_pcre_cache != NULL) {
-		for (hi = apr_hash_first(NULL, _oidc_authz_pcre_cache); hi; hi = apr_hash_next(hi)) {
+		for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_authz_pcre_cache); hi; hi = apr_hash_next(hi)) {
 			apr_hash_this(hi, NULL, NULL, &val);
 			oidc_pcre_free((struct oidc_pcre *)val);
 		}
@@ -119,7 +118,7 @@ void oidc_authz_pcre_cache_init(apr_pool_t *pool) {
  * cache is full or the pattern does not compile - the caller then compiles per-request as before
  */
 static struct oidc_pcre *oidc_authz_pcre_cache_get(request_rec *r, const char *spec) {
-	struct oidc_pcre *cached = NULL;
+	const struct oidc_pcre *cached = NULL;
 	char *s_err = NULL;
 
 	if (_oidc_authz_pcre_cache == NULL)

@@ -82,11 +82,10 @@ static void oidc_metadata_provider_cache_unlock(void) {
 /* release all cached documents; must be called with the write lock held (or at pool cleanup);
  * in-flight requests keep their documents alive through their own (atomic) references */
 static void oidc_metadata_provider_cache_clear_unlocked(void) {
-	apr_hash_index_t *hi = NULL;
 	void *val = NULL;
 	if (_oidc_metadata_provider_cache == NULL)
 		return;
-	for (hi = apr_hash_first(NULL, _oidc_metadata_provider_cache); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_metadata_provider_cache); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, NULL, NULL, &val);
 		oidc_json_decref(((oidc_metadata_provider_cache_entry_t *)val)->json);
 	}

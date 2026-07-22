@@ -80,7 +80,8 @@ char *oidc_http_url_encode(const request_rec *r, const char *str) {
 	len = _oidc_strlen(str);
 
 	/* worst case each input byte expands to a 3-byte %XX sequence */
-	p = rv = apr_palloc(r->pool, len * 3 + 1);
+	rv = apr_palloc(r->pool, len * 3 + 1);
+	p = rv;
 	for (size_t i = 0; i < len; i++) {
 		const unsigned char c = (unsigned char)str[i];
 		if (((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || ((c >= '0') && (c <= '9')) ||
@@ -123,7 +124,8 @@ char *oidc_http_url_decode(const request_rec *r, const char *str) {
 
 	len = _oidc_strlen(str);
 
-	p = rv = apr_palloc(r->pool, len + 1);
+	rv = apr_palloc(r->pool, len + 1);
+	p = rv;
 	while (i < len) {
 		const char c = str[i];
 		if (c == '+') {

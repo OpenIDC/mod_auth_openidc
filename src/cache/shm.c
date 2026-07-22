@@ -290,7 +290,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
  * unlink the specified slot from the bucket chain it is on; must be called with the mutex held
  */
 static void oidc_cache_shm_unlink(oidc_cache_shm_header_t *hdr, apr_uint32_t idx) {
-	oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
+	const oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
 	apr_uint32_t *bucket = &oidc_cache_shm_buckets(hdr)[oidc_cache_shm_hash(t->section_key) & (hdr->nbuckets - 1)];
 	apr_uint32_t prev = 0;
 	for (apr_uint32_t i = *bucket; i != 0; i = oidc_cache_shm_slot(hdr, i)->next) {
@@ -321,7 +321,7 @@ static apr_uint32_t oidc_cache_shm_evict(request_rec *r, const oidc_cfg_t *cfg, 
 		/* a Weyl sequence over the slot array approximates uniform random sampling */
 		const apr_uint32_t idx =
 		    (apr_uint32_t)(((apr_uint64_t)start + (apr_uint64_t)i * 2654435761u) % hdr->nslots) + 1;
-		oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
+		const oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
 		if (t->section_key[0] == '\0')
 			continue;
 		if (t->expires <= current_time) {

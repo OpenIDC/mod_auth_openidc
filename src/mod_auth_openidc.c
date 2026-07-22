@@ -1284,8 +1284,8 @@ apr_byte_t oidc_subrequest_recycle_user(request_rec *r) {
  * instead of re-loading and re-parsing the whole session from the cache
  */
 static apr_byte_t oidc_copy_tokens_from_prev_request_state(request_rec *r) {
-	oidc_json_t *id_token = NULL;
-	oidc_json_t *claims = NULL;
+	const oidc_json_t *id_token = NULL;
+	const oidc_json_t *claims = NULL;
 	const char *scope = NULL;
 
 	if (r->prev == NULL)

@@ -89,11 +89,10 @@ static void oidc_util_appinfo_cache_unlock(void) {
 
 /* release all cached entries; must be called with the write lock held (or at pool pre-cleanup) */
 static void oidc_util_appinfo_cache_clear_unlocked(void) {
-	apr_hash_index_t *hi = NULL;
 	void *val = NULL;
 	if (_oidc_appinfo_cache == NULL)
 		return;
-	for (hi = apr_hash_first(NULL, _oidc_appinfo_cache); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_appinfo_cache); hi; hi = apr_hash_next(hi)) {
 		oidc_appinfo_cache_entry_t *entry = NULL;
 		apr_hash_this(hi, NULL, NULL, &val);
 		entry = (oidc_appinfo_cache_entry_t *)val;
@@ -358,7 +357,7 @@ static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const o
  */
 static apr_byte_t oidc_util_appinfo_cache_apply(request_rec *r, const oidc_json_t *j_attrs, const char *key,
 						oidc_appinfo_pass_in_t pass_in) {
-	oidc_appinfo_cache_entry_t *entry = NULL;
+	const oidc_appinfo_cache_entry_t *entry = NULL;
 	apr_byte_t rv = FALSE;
 
 	oidc_util_appinfo_cache_rdlock();

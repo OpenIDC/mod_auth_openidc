@@ -94,11 +94,10 @@ static void oidc_session_cache_unlock(void) {
 /* release all cached entries; must be called with the write lock held (or at pool cleanup);
  * in-flight requests keep their state alive through their own (atomic) references */
 static void oidc_session_cache_clear_unlocked(void) {
-	apr_hash_index_t *hi = NULL;
 	void *val = NULL;
 	if (_oidc_session_cache == NULL)
 		return;
-	for (hi = apr_hash_first(NULL, _oidc_session_cache); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_session_cache); hi; hi = apr_hash_next(hi)) {
 		oidc_session_cache_entry_t *entry = NULL;
 		apr_hash_this(hi, NULL, NULL, &val);
 		entry = (oidc_session_cache_entry_t *)val;

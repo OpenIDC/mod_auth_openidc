@@ -92,11 +92,10 @@ static void oidc_proto_jwks_cache_unlock(void) {
 /* retire all cached entries; must be called with the write lock held (or at pool cleanup);
  * the keys themselves are not released here since in-flight requests may still use them */
 static void oidc_proto_jwks_cache_clear_unlocked(void) {
-	apr_hash_index_t *hi = NULL;
 	void *val = NULL;
 	if (_oidc_proto_jwks_cache == NULL)
 		return;
-	for (hi = apr_hash_first(NULL, _oidc_proto_jwks_cache); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_proto_jwks_cache); hi; hi = apr_hash_next(hi)) {
 		oidc_proto_jwks_cache_entry_t *entry = NULL;
 		apr_hash_this(hi, NULL, NULL, &val);
 		entry = (oidc_proto_jwks_cache_entry_t *)val;
@@ -160,7 +159,7 @@ static apr_byte_t oidc_proto_jwks_cache_get(request_rec *r, const char *sel_key,
 			/* hand out the cache-owned key itself: it is marked shared, so the per-request
 			 * key-list destruction leaves it (and its backend refcount) alone, and this
 			 * read path performs no refcount mutation at all */
-			oidc_jwk_t *jwk = APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
+			const oidc_jwk_t *jwk = APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
 			/* re-key the result the way selection does: kid, x5t or a unique counter */
 			const char *hkey = jwk->kid;
 			if (hkey == NULL)
@@ -177,7 +176,6 @@ static apr_byte_t oidc_proto_jwks_cache_get(request_rec *r, const char *sel_key,
 /* store a non-empty selection result under the specified key, bounded by the refresh interval */
 static void oidc_proto_jwks_cache_set(const char *sel_key, apr_hash_t *result, int refresh_interval) {
 	oidc_proto_jwks_cache_entry_t *entry = NULL;
-	apr_hash_index_t *hi = NULL;
 	void *val = NULL;
 
 	if ((_oidc_proto_jwks_cache == NULL) || (apr_hash_count(result) < 1))
@@ -198,7 +196,7 @@ static void oidc_proto_jwks_cache_set(const char *sel_key, apr_hash_t *result, i
 	entry = apr_palloc(_oidc_proto_jwks_cache_pool, sizeof(oidc_proto_jwks_cache_entry_t));
 	entry->expires = apr_time_now() + apr_time_from_sec(refresh_interval);
 	entry->jwks = apr_array_make(_oidc_proto_jwks_cache_pool, apr_hash_count(result), sizeof(oidc_jwk_t *));
-	for (hi = apr_hash_first(NULL, result); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, result); hi; hi = apr_hash_next(hi)) {
 		oidc_jwk_t *jwk = NULL;
 		apr_hash_this(hi, NULL, NULL, &val);
 		jwk = oidc_jwk_copy(_oidc_proto_jwks_cache_pool, (oidc_jwk_t *)val);
@@ -322,10 +320,11 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 	oidc_json_t *j_jwks = NULL;
 	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);
 	const char *cache_uri = jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
-	const char *sel_key = (cache_uri != NULL) ? apr_psprintf(r->pool, "%s#%s#%s#%d", cache_uri,
-								 jwt->header.kid ? jwt->header.kid : "", x5t ? x5t : "",
-								 oidc_jwt_alg2kty(jwt))
-						  : NULL;
+	const char *s_kid = jwt->header.kid ? jwt->header.kid : "";
+	const char *s_x5t = x5t ? x5t : "";
+	const char *sel_key = (cache_uri != NULL)
+				  ? apr_psprintf(r->pool, "%s#%s#%s#%d", cache_uri, s_kid, s_x5t, oidc_jwt_alg2kty(jwt))
+				  : NULL;
 
 	if (*force_refresh == TRUE) {
 		/* suspected key rollover: all cached selection results may derive from stale JWKs */

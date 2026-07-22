@@ -360,7 +360,7 @@ static oidc_cache_redis_conn_t *oidc_cache_redis_conn_get(request_rec *r, oidc_c
 }
 
 /* establish (and authenticate) a fresh connection into the provided slot */
-static apr_status_t oidc_cache_redis_rctx_connect(request_rec *r, oidc_cache_cfg_redis_t *context,
+static apr_status_t oidc_cache_redis_rctx_connect(request_rec *r, const oidc_cache_cfg_redis_t *context,
 						  redisContext **rctx) {
 
 	apr_status_t rv = APR_EGENERAL;
