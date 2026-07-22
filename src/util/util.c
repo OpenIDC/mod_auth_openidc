@@ -408,7 +408,7 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
 
 char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigned int len) {
 	char *s = "";
-	for (int i = 0; i < len; i++)
+	for (unsigned int i = 0; i < len; i++)
 		s = apr_psprintf(pool, "%s%02x", s, bytes[i]);
 	return s;
 }

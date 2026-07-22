@@ -189,7 +189,7 @@ static apr_byte_t oidc_proto_idtoken_validate_aud_array(request_rec *r, const oi
 		}
 	}
 
-	if (oidc_json_array_size(aud) > arr->nelts) {
+	if (oidc_json_array_size(aud) > (size_t)arr->nelts) {
 		oidc_error(r,
 			   "our configured audience values are all present in the array of values for \"%s\" claim, "
 			   "but there are other unknown/untrusted values included as well",

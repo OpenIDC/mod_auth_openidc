@@ -803,7 +803,7 @@ static void oidc_http_request_setup_proxy(request_rec *r, CURL *curl,
 	if (outgoing_proxy->username_password) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYUSERPWD, outgoing_proxy->username_password);
 	}
-	if (outgoing_proxy->auth_type != OIDC_CONFIG_POS_INT_UNSET) {
+	if (outgoing_proxy->auth_type != (unsigned long)OIDC_CONFIG_POS_INT_UNSET) {
 		OIDC_HTTP_CURL_SETOPT(CURLOPT_PROXYAUTH, outgoing_proxy->auth_type);
 	}
 }

@@ -166,7 +166,7 @@ static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
 
 // clang-format on
 
-#define OIDC_METRICS_BUCKET_NUM sizeof(_oidc_metric_buckets) / sizeof(oidc_metrics_bucket_t)
+#define OIDC_METRICS_BUCKET_NUM ((int)(sizeof(_oidc_metric_buckets) / sizeof(oidc_metrics_bucket_t)))
 
 // NB: matters for Prometheus formatting
 #define OIDC_METRICS_SUM "sum"
@@ -311,7 +311,7 @@ static inline char *_oidc_metrics_storage_get(server_rec *s) {
 static inline void _oidc_metrics_storage_set(server_rec *s, const char *value) {
 	char *p = apr_shm_baseaddr_get(_oidc_metrics_cache);
 	if (value) {
-		int n = (int)_oidc_strlen(value) + 1;
+		apr_size_t n = _oidc_strlen(value) + 1;
 		if (n > _oidc_metrics_shm_size(s))
 			oidc_serror(s,
 				    "json value too large: set or increase system environment variable %s to a value "
@@ -1273,7 +1273,7 @@ static const char *oidc_metrics_prometheus_bucket_label(const char *json_name) {
  */
 static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const char *name) {
 	char *label = apr_psprintf(pool, "%s", name);
-	for (int i = 0; i < _oidc_strlen(label); i++)
+	for (size_t i = 0; i < _oidc_strlen(label); i++)
 		if (apr_isalnum(label[i]) == 0)
 			label[i] = '_';
 	return apr_psprintf(pool, "%s_%s", OIDC_METRICS_PROMETHEUS_PREFIX, label);
@@ -1498,7 +1498,7 @@ const oidc_metrics_content_handler_t _oidc_metrics_handlers[] = {
     {"status", oidc_metrics_handle_status, 0},
 };
 
-#define OIDC_CONTENT_HANDLER_MAX sizeof(_oidc_metrics_handlers) / sizeof(oidc_metrics_content_handler_t)
+#define OIDC_CONTENT_HANDLER_MAX ((int)(sizeof(_oidc_metrics_handlers) / sizeof(oidc_metrics_content_handler_t)))
 
 #define OIDC_METRICS_RESET_PARAM "reset"
 

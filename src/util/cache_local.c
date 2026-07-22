@@ -141,7 +141,9 @@ static void oidc_cache_local_evict_lru_unlocked(oidc_cache_local_t *cache) {
 /* ensure there is room for one more entry; must hold the write lock. Returns FALSE only when the
  * cache is full and configured to stop rather than evict (borrowed values handed out by reference). */
 static apr_byte_t oidc_cache_local_make_room_unlocked(oidc_cache_local_t *cache) {
-	if (apr_hash_count(cache->hash) < cache->max_entries)
+	/* max_entries is clamped to >= 1 at create time, so the cast to the unsigned return type of
+	 * apr_hash_count() is safe */
+	if (apr_hash_count(cache->hash) < (unsigned int)cache->max_entries)
 		return TRUE;
 	if (cache->evict_on_full == 0)
 		return FALSE;

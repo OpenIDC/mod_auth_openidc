@@ -87,7 +87,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *poo
 	(*result)[bytes_read] = '\0';
 
 	/* check that we've got all of it */
-	if (bytes_read != finfo.size) {
+	if ((apr_off_t)bytes_read != finfo.size) {
 		oidc_error(r,
 			   "apr_file_read_full on (%s) returned less bytes (%" APR_SIZE_T_FMT
 			   ") than expected: (%" APR_OFF_T_FMT ")",

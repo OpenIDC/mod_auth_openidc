@@ -189,7 +189,7 @@ static apr_byte_t oidc_proto_request_object_encryption_jwk_by_type(request_rec *
 	}
 
 	/* walk the set of published keys to find the first that has a matching type */
-	for (int i = 0; i < oidc_json_array_size(keys); i++) {
+	for (size_t i = 0; i < oidc_json_array_size(keys); i++) {
 
 		const oidc_json_t *elem = oidc_json_array_get(keys, i);
 

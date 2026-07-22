@@ -406,7 +406,7 @@ apr_byte_t oidc_json_array_has_value(request_rec *r, const oidc_json_t *haystack
 	if ((haystack == NULL) || (!oidc_json_is_array(haystack)))
 		return FALSE;
 
-	int i;
+	size_t i;
 	for (i = 0; i < oidc_json_array_size(haystack); i++) {
 		const oidc_json_t *elem = oidc_json_array_get(haystack, i);
 		if (!oidc_json_is_string(elem)) {

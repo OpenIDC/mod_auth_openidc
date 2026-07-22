@@ -265,7 +265,7 @@ static apr_byte_t oidc_proto_jwks_key_get(request_rec *r, oidc_jwt_t *jwt, const
 		return FALSE;
 	}
 
-	for (int i = 0; i < oidc_json_array_size(keys); i++) {
+	for (size_t i = 0; i < oidc_json_array_size(keys); i++) {
 		if (oidc_proto_jwks_key_apply(r, jwt, oidc_json_array_get(keys, i), x5t, result) == TRUE)
 			break;
 	}

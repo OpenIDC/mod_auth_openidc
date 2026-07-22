@@ -149,7 +149,7 @@ typedef struct oidc_pass_user_info_as_t {
 /* actions to be taken on access token / userinfo refresh error */
 typedef enum { OIDC_ON_ERROR_502 = 0, OIDC_ON_ERROR_LOGOUT = 1, OIDC_ON_ERROR_AUTH = 2 } oidc_on_error_action_t;
 
-#define OIDC_CFG_OPTIONS_SIZE(options) sizeof(options) / sizeof(oidc_cfg_option_t)
+#define OIDC_CFG_OPTIONS_SIZE(options) ((int)(sizeof(options) / sizeof(oidc_cfg_option_t)))
 
 typedef struct oidc_provider_t oidc_provider_t;
 typedef struct oidc_cfg_t oidc_cfg_t;

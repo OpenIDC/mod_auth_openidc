@@ -220,7 +220,7 @@ oidc_jwk_t *oidc_jwk_parse(apr_pool_t *pool, const json_t *json, oidc_jose_error
 	v = json_object_get(json, OIDC_JOSE_JWK_X5C_STR);
 	if (v && json_is_array(v)) {
 		result->x5c = apr_array_make(pool, (int)json_array_size(v), sizeof(const char *));
-		for (int i = 0; i < json_array_size(v); i++) {
+		for (size_t i = 0; i < json_array_size(v); i++) {
 			e = json_array_get(v, i);
 			if (json_is_string(e))
 				APR_ARRAY_PUSH(result->x5c, const char *) = apr_pstrdup(pool, json_string_value(e));
@@ -339,7 +339,7 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_
 		return FALSE;
 	}
 	*jwk_list = apr_array_make(pool, (int)json_array_size(keys), sizeof(const oidc_jwk_t *));
-	for (int i = 0; i < json_array_size(keys); i++) {
+	for (size_t i = 0; i < json_array_size(keys); i++) {
 		const json_t *elem = json_array_get(keys, i);
 		if (elem == NULL)
 			continue;

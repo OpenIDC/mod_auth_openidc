@@ -181,7 +181,7 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 	}
 
 	apr_byte_t found = FALSE;
-	for (int i = 0; i < oidc_json_array_size(json_arr); i++) {
+	for (size_t i = 0; i < oidc_json_array_size(json_arr); i++) {
 		if (oidc_metadata_array_string_apply(pool, oidc_json_array_get(json_arr, i), valid_function, value,
 						     preference, &found))
 			break;
@@ -270,7 +270,7 @@ void oidc_metadata_get_jwks(request_rec *r, const oidc_json_t *json, apr_array_h
 		return;
 	}
 
-	for (int i = 0; i < oidc_json_array_size(keys); i++) {
+	for (size_t i = 0; i < oidc_json_array_size(keys); i++) {
 
 		elem = oidc_json_array_get(keys, i);
 

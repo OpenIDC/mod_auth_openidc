@@ -175,7 +175,7 @@ static apr_byte_t oidc_authz_match_json_array(request_rec *r, const char *spec, 
 		return FALSE;
 
 	// loop over the elements in the array, trying to find a match
-	for (int i = 0; i < oidc_json_array_size(val); i++) {
+	for (size_t i = 0; i < oidc_json_array_size(val); i++) {
 		e = oidc_json_array_get(val, i);
 		if (oidc_authz_match_json_array_elem(r, spec, e, key) == TRUE)
 			return TRUE;
@@ -246,7 +246,7 @@ static apr_byte_t oidc_authz_match_pcre_array(request_rec *r, const char *spec, 
 		return FALSE;
 
 	// loop over the elements in the array, trying to find a match
-	for (int i = 0; i < oidc_json_array_size(val); i++) {
+	for (size_t i = 0; i < oidc_json_array_size(val); i++) {
 		e = oidc_json_array_get(val, i);
 
 		if (oidc_json_typeof(e) == OIDC_JSON_TYPE_STRING) {

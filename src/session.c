@@ -730,7 +730,7 @@ static void oidc_session_filtered_claim_record(request_rec *r, const oidc_cfg_t 
 						   OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT | OIDC_JSON_ENCODE_ANY)
 				: "";
 
-	if (_oidc_strlen(str) > warn_claim_size)
+	if ((int)_oidc_strlen(str) > warn_claim_size)
 		oidc_warn(r,
 			  "(encoded) value size of [%s] claim \"%s\" is larger than %d; consider "
 			  "blacklisting it in OIDCBlackListedClaims "
