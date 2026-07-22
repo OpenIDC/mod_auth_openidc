@@ -442,7 +442,8 @@ char *oidc_http_hdr_normalize_name(const request_rec *r, const char *str) {
 	const char *separators = "()<>@,;:\\\"/[]?={} \t";
 
 	char *ns = apr_pstrdup(r->pool, str);
-	for (size_t i = 0; i < _oidc_strlen(ns); i++) {
+	const size_t len = _oidc_strlen(ns);
+	for (size_t i = 0; i < len; i++) {
 		if (ns[i] < 32 || ns[i] == 127)
 			ns[i] = '-';
 		else if (strchr(separators, ns[i]) != NULL)

@@ -1,4 +1,6 @@
 07/22/2026
+- perf: hoist the string-length evaluation out of the per-character loop in
+  oidc_http_hdr_normalize_name (was re-evaluated every iteration)
 - perf: keep the parsed session state of server-cache sessions in a per-process
   cache keyed by session id and validated against the raw cached session
   document, so the multi-KB JSON parse of the session runs only when the
