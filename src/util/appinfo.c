@@ -42,7 +42,7 @@
 
 #include "util/util.h"
 
-#include <apr_thread_rwlock.h>
+#include "util/cache_local.h"
 
 /*
  * process-lifetime cache of flattened claim name/value pairs, keyed by the identity of the
@@ -51,82 +51,83 @@
  * per-claim name construction, value rendering and encoding runs once instead of per request.
  * Each entry holds its own reference to the claims object, pinning the pointer so the key can
  * never be reused for a different object while the entry lives; requires atomic JSON reference
- * counting (the init function leaves the cache disabled otherwise).
+ * counting (the init function leaves the cache disabled otherwise). Each entry owns a private
+ * subpool so evicted/replaced entries return the memory of their copied pairs.
  */
 typedef struct oidc_appinfo_cache_entry_t {
 	apr_pool_t *pool;
-	char *key;
 	oidc_json_t *claims;
 	apr_table_t *pairs;
 } oidc_appinfo_cache_entry_t;
 
-static apr_hash_t *_oidc_appinfo_cache = NULL;
-static apr_pool_t *_oidc_appinfo_cache_pool = NULL;
-#if APR_HAS_THREADS
-static apr_thread_rwlock_t *_oidc_appinfo_cache_rwlock = NULL;
-#endif
+static oidc_cache_local_t *_oidc_appinfo_cache = NULL;
 
 /* bounds the cache; entries for changed sessions go stale until the reset-on-overflow */
 #define OIDC_APPINFO_CACHE_MAX_ENTRIES 256
 
-static void oidc_util_appinfo_cache_rdlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_rdlock(_oidc_appinfo_cache_rwlock);
-#endif
+/* replays a single flattened pair into the request (defined below; used by the cache use callback) */
+static void oidc_util_appinfo_pair_apply(request_rec *r, const char *s_name, const char *s_value,
+					 oidc_appinfo_pass_in_t pass_in);
+
+/* release an entry: drop the pinning claims reference and return the subpool holding entry+pairs */
+static void oidc_util_appinfo_cache_free(void *value) {
+	oidc_appinfo_cache_entry_t *entry = value;
+	oidc_json_decref(entry->claims);
+	apr_pool_destroy(entry->pool);
 }
 
-static void oidc_util_appinfo_cache_wrlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_wrlock(_oidc_appinfo_cache_rwlock);
-#endif
+/* freshness: the flattened pairs are valid while the key still maps to the same claims object;
+ * the pinned reference guarantees the pointer cannot have been reused for a different object */
+static int oidc_util_appinfo_cache_valid(void *value, void *ctx) {
+	return ((const oidc_appinfo_cache_entry_t *)value)->claims == (const oidc_json_t *)ctx;
 }
 
-static void oidc_util_appinfo_cache_unlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_unlock(_oidc_appinfo_cache_rwlock);
-#endif
+struct oidc_util_appinfo_cache_use_ctx {
+	request_rec *r;
+	oidc_appinfo_pass_in_t pass_in;
+};
+
+/* under the read lock: replay the cached pairs into the request's tables (copying the strings, so
+ * nothing references entry-owned memory once the lock is released) */
+static void oidc_util_appinfo_cache_use(void *value, void *baton) {
+	const oidc_appinfo_cache_entry_t *entry = value;
+	const struct oidc_util_appinfo_cache_use_ctx *ctx = baton;
+	const apr_array_header_t *arr = apr_table_elts(entry->pairs);
+	const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
+	for (int i = 0; i < arr->nelts; i++)
+		oidc_util_appinfo_pair_apply(ctx->r, elts[i].key, elts[i].val, ctx->pass_in);
 }
 
-/* release all cached entries; must be called with the write lock held (or at pool pre-cleanup) */
-static void oidc_util_appinfo_cache_clear_unlocked(void) {
-	void *val = NULL;
-	if (_oidc_appinfo_cache == NULL)
-		return;
-	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_appinfo_cache); hi; hi = apr_hash_next(hi)) {
-		oidc_appinfo_cache_entry_t *entry = NULL;
-		apr_hash_this(hi, NULL, NULL, &val);
-		entry = (oidc_appinfo_cache_entry_t *)val;
-		oidc_json_decref(entry->claims);
-		apr_pool_destroy(entry->pool);
-	}
-	apr_hash_clear(_oidc_appinfo_cache);
-}
+struct oidc_util_appinfo_cache_build_ctx {
+	oidc_json_t *claims;
+	const apr_table_t *pairs;
+};
 
-static apr_status_t oidc_util_appinfo_cache_cleanup(void *data) {
-	oidc_util_appinfo_cache_clear_unlocked();
-	_oidc_appinfo_cache = NULL;
-	_oidc_appinfo_cache_pool = NULL;
-#if APR_HAS_THREADS
-	_oidc_appinfo_cache_rwlock = NULL;
-#endif
-	return APR_SUCCESS;
+/* under the write lock: build an entry in its own subpool, taking a pinning reference on the claims
+ * object and copying the flattened pairs; returns NULL (not cached) when the subpool cannot be made */
+static void *oidc_util_appinfo_cache_build(apr_pool_t *pool, const char *key, void *baton) {
+	const struct oidc_util_appinfo_cache_build_ctx *ctx = baton;
+	apr_pool_t *entry_pool = NULL;
+	oidc_appinfo_cache_entry_t *entry = NULL;
+	const apr_array_header_t *arr = apr_table_elts(ctx->pairs);
+	const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
+	if (apr_pool_create(&entry_pool, pool) != APR_SUCCESS)
+		return NULL;
+	entry = apr_pcalloc(entry_pool, sizeof(oidc_appinfo_cache_entry_t));
+	entry->pool = entry_pool;
+	entry->claims = oidc_json_incref(ctx->claims);
+	entry->pairs = apr_table_make(entry_pool, arr->nelts + 1);
+	for (int i = 0; i < arr->nelts; i++)
+		apr_table_set(entry->pairs, elts[i].key, elts[i].val);
+	return entry;
 }
 
 void oidc_util_appinfo_cache_init(apr_pool_t *pool) {
-	if (_oidc_appinfo_cache != NULL)
-		return;
 	/* pinning/sharing JSON objects across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
-#if APR_HAS_THREADS
-	if (apr_thread_rwlock_create(&_oidc_appinfo_cache_rwlock, pool) != APR_SUCCESS)
-		return;
-#endif
-	_oidc_appinfo_cache = apr_hash_make(pool);
-	_oidc_appinfo_cache_pool = pool;
-	/* must be a PRE-cleanup: it destroys the per-entry subpools itself, which a regular
-	 * cleanup would touch after apr_pool_clear had already destroyed them */
-	apr_pool_pre_cleanup_register(pool, NULL, oidc_util_appinfo_cache_cleanup);
+	oidc_cache_local_create(&_oidc_appinfo_cache, pool, "appinfo", OIDC_APPINFO_CACHE_MAX_ENTRIES, TRUE,
+				oidc_util_appinfo_cache_free);
 }
 
 static const char *oidc_util_appinfo_cache_key(apr_pool_t *pool, const oidc_json_t *j_attrs, const char *claim_prefix,
@@ -357,56 +358,17 @@ static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const o
  */
 static apr_byte_t oidc_util_appinfo_cache_apply(request_rec *r, const oidc_json_t *j_attrs, const char *key,
 						oidc_appinfo_pass_in_t pass_in) {
-	const oidc_appinfo_cache_entry_t *entry = NULL;
-	apr_byte_t rv = FALSE;
-
-	oidc_util_appinfo_cache_rdlock();
-	entry = apr_hash_get(_oidc_appinfo_cache, key, APR_HASH_KEY_STRING);
-	if ((entry != NULL) && (entry->claims == j_attrs)) {
-		/* applying copies the strings into the request's tables, so nothing references
-		 * entry-owned memory after the lock is released */
-		const apr_array_header_t *arr = apr_table_elts(entry->pairs);
-		const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
-		for (int i = 0; i < arr->nelts; i++)
-			oidc_util_appinfo_pair_apply(r, elts[i].key, elts[i].val, pass_in);
-		rv = TRUE;
-	}
-	oidc_util_appinfo_cache_unlock();
-
-	return rv;
+	struct oidc_util_appinfo_cache_use_ctx ctx = {.r = r, .pass_in = pass_in};
+	return oidc_cache_local_get_use(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_valid, (void *)j_attrs,
+					oidc_util_appinfo_cache_use, &ctx);
 }
 
 /*
  * store the flattened pairs for the specified claims object, taking a reference that pins it
  */
 static void oidc_util_appinfo_cache_store(oidc_json_t *j_attrs, const char *key, const apr_table_t *pairs) {
-	oidc_appinfo_cache_entry_t *entry = NULL;
-	apr_pool_t *entry_pool = NULL;
-
-	oidc_util_appinfo_cache_wrlock();
-	if (apr_hash_count(_oidc_appinfo_cache) >= OIDC_APPINFO_CACHE_MAX_ENTRIES)
-		oidc_util_appinfo_cache_clear_unlocked();
-	entry = apr_hash_get(_oidc_appinfo_cache, key, APR_HASH_KEY_STRING);
-	if (entry != NULL) {
-		/* remove the entry this store replaces before destroying the pool holding its key */
-		apr_hash_set(_oidc_appinfo_cache, entry->key, APR_HASH_KEY_STRING, NULL);
-		oidc_json_decref(entry->claims);
-		apr_pool_destroy(entry->pool);
-	}
-	/* pool operations happen under the write lock only (pools/allocators are not thread-safe) */
-	if (apr_pool_create(&entry_pool, _oidc_appinfo_cache_pool) == APR_SUCCESS) {
-		const apr_array_header_t *arr = apr_table_elts(pairs);
-		const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
-		entry = apr_pcalloc(entry_pool, sizeof(oidc_appinfo_cache_entry_t));
-		entry->pool = entry_pool;
-		entry->key = apr_pstrdup(entry_pool, key);
-		entry->claims = oidc_json_incref(j_attrs);
-		entry->pairs = apr_table_make(entry_pool, arr->nelts + 1);
-		for (int i = 0; i < arr->nelts; i++)
-			apr_table_set(entry->pairs, elts[i].key, elts[i].val);
-		apr_hash_set(_oidc_appinfo_cache, entry->key, APR_HASH_KEY_STRING, entry);
-	}
-	oidc_util_appinfo_cache_unlock();
+	struct oidc_util_appinfo_cache_build_ctx ctx = {.claims = j_attrs, .pairs = pairs};
+	oidc_cache_local_set_build(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_build, &ctx);
 }
 
 /*
