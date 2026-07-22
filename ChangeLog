@@ -1,4 +1,10 @@
 07/22/2026
+- perf: cache locally validated JWT access token claims keyed by the token and
+  bounded by its "exp" claim (60s without one), mirroring the existing
+  introspection-result cache, so repeated resource-server requests with the
+  same bearer token skip decryption-key setup and signature re-verification;
+  OIDCOAuthTokenIntrospectionInterval semantics apply: -1 disables the cache
+  and a value > 0 bounds result reuse (e.g. to pick up JWKs key rotation)
 - perf: cache compiled Require-claim regular expressions for the lifetime of the
   server process instead of recompiling them on every authorization evaluation;
   a full "Require claim <name>~<regex>" evaluation measures 43% faster

@@ -593,6 +593,21 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	apr_hash_t *decrypt_keys = NULL;
+	oidc_json_t *cached = NULL;
+
+	/*
+	 * a JWT access token is self-contained: its validation outcome cannot change until it
+	 * expires, so serve the claims of a previously validated instance from the cache and skip
+	 * the per-request decryption-key setup and signature verification; the cache respects
+	 * OIDCOAuthTokenIntrospectionInterval: -1 disables caching and a value > 0 additionally
+	 * bounds how long a validation result may be reused (e.g. to pick up JWKs key rotation)
+	 */
+	oidc_oauth_get_cached_access_token(r, c, access_token, &cached);
+	if (cached != NULL) {
+		*token = cached;
+		*response = oidc_json_encode(r->pool, cached, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
+		return TRUE;
+	}
 
 	if (oidc_cfg_oauth_decrypt_shared_keys_get(c) != NULL) {
 		/* symmetric decryption keys configured with OIDCOAuthDecryptSharedKeys */
@@ -647,6 +662,13 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	}
 
 	oidc_debug(r, "successfully verified JWT access token: %s", jwt->payload.value.str);
+
+	/* cache the validated claims bounded by the token's expiry (60 seconds when no exp claim
+	 * is present) so subsequent requests carrying the same bearer token skip re-verification */
+	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
+	if (oidc_oauth_parse_and_cache_token_expiry(r, c, jwt->payload.value.json, OIDC_CLAIM_EXP, TRUE, FALSE,
+						    &cache_until) == TRUE)
+		oidc_oauth_cache_access_token(r, c, cache_until, access_token, jwt->payload.value.json);
 
 	*token = oidc_json_copy(jwt->payload.value.json);
 	*response = jwt->payload.value.str;

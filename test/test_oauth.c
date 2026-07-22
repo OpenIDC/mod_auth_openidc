@@ -25,6 +25,7 @@
  *
  **************************************************************************/
 
+#include "cache/cache.h"
 #include "cfg/dir.h"
 #include "cfg/oauth.h"
 #include "check_util.h"
@@ -408,6 +409,37 @@ START_TEST(test_oauth_check_userid_jwt_valid_hs256) {
 }
 END_TEST
 
+/* a locally validated JWT access token is cached keyed by the token: the first request
+ * populates the cache and subsequent requests are served from it, skipping re-verification */
+START_TEST(test_oauth_check_userid_jwt_validation_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *s_cache_entry = NULL;
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_hs256(r, secret, 300);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "alice");
+
+	/* the first validation must have populated the access-token cache */
+	oidc_cache_get_access_token(r, access_token, &s_cache_entry);
+	ck_assert_ptr_nonnull(s_cache_entry);
+
+	/* plant a synthetic cache entry for the same token; the next request must then be
+	 * served from the cache (sub=bob) instead of re-verifying the JWT (sub=alice) */
+	apr_time_t now = apr_time_sec(apr_time_now());
+	const char *planted = apr_psprintf(
+	    r->pool, "{\"r\":{\"sub\":\"bob\",\"exp\":%" APR_TIME_T_FMT "},\"t\":%" APR_TIME_T_FMT "}", now + 300, now);
+	oidc_cache_set_access_token(r, access_token, planted, apr_time_now() + apr_time_from_sec(300));
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "bob");
+}
+END_TEST
+
 /* an expired JWT access token must be rejected by the local validation path */
 START_TEST(test_oauth_check_userid_jwt_expired) {
 	request_rec *r = oidc_test_request_get();
@@ -738,6 +770,7 @@ int main(void) {
 	tcase_add_checked_fixture(jwt, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_keys_configured);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_valid_hs256);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_validation_cached);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_expired);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_bad_signature);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_encrypted_decrypt_shared_keys);
