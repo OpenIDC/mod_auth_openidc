@@ -1,4 +1,11 @@
 07/22/2026
+- perf: check Redis connections out per request from a per-process idle pool
+  instead of serializing every worker thread's network round-trip on one
+  shared connection under a mutex; the mutex now only guards the (short) pool
+  push/pop, a connection-level failure tears down only the request's own
+  connection (the retry then reconnects), and setting OIDC_REDIS_MUTEX_GLOBAL
+  restores the legacy single-connection global-lock model; the
+  cluster/sentinel/failover backends keep their existing serialized model
 - perf: extend the parsed-session cache to client-cookie sessions, with the
   cookie value acting as both cache key and validator, so an unchanged session
   cookie skips the per-request JWE decryption, decompression and JSON parse; a
