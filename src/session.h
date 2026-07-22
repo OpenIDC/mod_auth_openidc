@@ -52,7 +52,9 @@ typedef struct {
 	oidc_json_t *state; /* the state for this session, encoded in a JSON object */
 	apr_time_t expiry;  /* if > 0, the time of expiry of this session */
 	char *sid;
-	char *sub; /* secondary "sub"-based logout index, only set when the OP supports back-channel logout */
+	char *sub;	  /* secondary "sub"-based logout index, only set when the OP supports back-channel logout */
+	int state_shared; /* TRUE when state is shared (read-only) with the process-level parsed-session
+			     cache; the session setters then copy-on-write before the first mutation */
 } oidc_session_t;
 
 /* value that indicates to use server-side cache based session tracking */
@@ -60,6 +62,7 @@ typedef struct {
 /* value that indicates to use client cookie based session tracking */
 #define OIDC_SESSION_TYPE_CLIENT_COOKIE 1
 
+void oidc_session_cache_init(apr_pool_t *pool);
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
 typedef enum {
 	OIDC_SESSION_SAVE_UPDATE = 0, /* update an existing session */
