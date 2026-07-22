@@ -479,6 +479,22 @@ static int oidc_cache_redis_env2int(const request_rec *r, const char *env_var_na
 	}
 
 /*
+ * wait before a connect retry; in the serialized (shared-connection) model release the mutex
+ * during the sleep so other threads can proceed (and fail fast) instead of queueing behind this
+ * sleeper, then re-acquire it; in request-scoped mode no mutex is held. Returns FALSE only when
+ * the mutex could not be re-acquired.
+ */
+static apr_byte_t oidc_cache_redis_backoff(request_rec *r, const oidc_cache_cfg_redis_t *context, apr_time_t interval) {
+	oidc_debug(r, "wait before retrying: %" APR_TIME_T_FMT " (msec)", apr_time_as_msec(interval));
+	if (context->request_scoped == FALSE)
+		oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
+	apr_sleep(interval);
+	if (context->request_scoped == FALSE)
+		return oidc_cache_mutex_lock(r->pool, r->server, context->mutex);
+	return TRUE;
+}
+
+/*
  * execute Redis command and deal with return value
  * NB: the caller must hold context->mutex; the retry path temporarily releases it while
  *     sleeping so other threads are not stalled behind this one for the whole interval
@@ -499,19 +515,8 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 		if (context->connect(r, context) != APR_SUCCESS) {
 			OIDC_REDIS_WARN_OR_ERROR(i < retries, r, "Redis connect (attempt=%d/%d to %s:%d) failed", i,
 						 retries, context->host_str, context->port);
-			if (i < retries) {
-				oidc_debug(r, "wait before retrying: %" APR_TIME_T_FMT " (msec)",
-					   apr_time_as_msec(interval));
-				/* in the serialized model, release the mutex while waiting: other threads
-				 * can then proceed (and fail fast themselves) instead of queueing behind
-				 * this sleeper; in request-scoped mode no mutex is held here */
-				if (context->request_scoped == FALSE)
-					oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
-				apr_sleep(interval);
-				if ((context->request_scoped == FALSE) &&
-				    (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE))
-					return NULL;
-			}
+			if ((i < retries) && (oidc_cache_redis_backoff(r, context, interval) == FALSE))
+				return NULL;
 			continue;
 		}
 
