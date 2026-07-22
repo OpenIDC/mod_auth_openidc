@@ -33,11 +33,11 @@
 #include "http.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
+#include "util/cache_local.h"
 #include "util/util.h"
 
 #include <apr_file_io.h>
 #include <apr_strings.h>
-#include <apr_thread_rwlock.h>
 
 /*
  * process-lifetime cache of parsed provider metadata from the metadata directory, keyed by the
@@ -52,114 +52,61 @@ typedef struct oidc_metadata_provider_cache_entry_t {
 	oidc_json_t *json;
 } oidc_metadata_provider_cache_entry_t;
 
-static apr_hash_t *_oidc_metadata_provider_cache = NULL;
-static apr_pool_t *_oidc_metadata_provider_cache_pool = NULL;
-#if APR_HAS_THREADS
-static apr_thread_rwlock_t *_oidc_metadata_provider_cache_rwlock = NULL;
-#endif
+static oidc_cache_local_t *_oidc_metadata_provider_cache = NULL;
 
 /* bounds the cache with many (multi-tenant) providers; on overflow it is simply reset */
 #define OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES 64
 
-static void oidc_metadata_provider_cache_rdlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_rdlock(_oidc_metadata_provider_cache_rwlock);
-#endif
+static void oidc_metadata_provider_cache_free(void *value) {
+	oidc_json_decref(((oidc_metadata_provider_cache_entry_t *)value)->json);
 }
 
-static void oidc_metadata_provider_cache_wrlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_wrlock(_oidc_metadata_provider_cache_rwlock);
-#endif
+/* freshness: the cached document is valid while the file's mtime and size are unchanged */
+static int oidc_metadata_provider_cache_valid(void *value, void *ctx) {
+	const oidc_metadata_provider_cache_entry_t *entry = value;
+	const apr_finfo_t *fi = ctx;
+	return (entry->mtime == fi->mtime) && (entry->size == fi->size);
 }
 
-static void oidc_metadata_provider_cache_unlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_unlock(_oidc_metadata_provider_cache_rwlock);
-#endif
+/* under the read lock: hand out a new (atomic) reference to the cached document */
+static void oidc_metadata_provider_cache_use(void *value, void *baton) {
+	oidc_metadata_provider_cache_entry_t *entry = value;
+	*(oidc_json_t **)baton = oidc_json_incref(entry->json);
 }
 
-/* release all cached documents; must be called with the write lock held (or at pool cleanup);
- * in-flight requests keep their documents alive through their own (atomic) references */
-static void oidc_metadata_provider_cache_clear_unlocked(void) {
-	void *val = NULL;
-	if (_oidc_metadata_provider_cache == NULL)
-		return;
-	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_metadata_provider_cache); hi; hi = apr_hash_next(hi)) {
-		apr_hash_this(hi, NULL, NULL, &val);
-		oidc_json_decref(((oidc_metadata_provider_cache_entry_t *)val)->json);
-	}
-	apr_hash_clear(_oidc_metadata_provider_cache);
-}
+struct oidc_metadata_provider_cache_build_ctx {
+	const apr_finfo_t *fi;
+	oidc_json_t *json;
+};
 
-static apr_status_t oidc_metadata_provider_cache_cleanup(void *data) {
-	oidc_metadata_provider_cache_clear_unlocked();
-	_oidc_metadata_provider_cache = NULL;
-	_oidc_metadata_provider_cache_pool = NULL;
-#if APR_HAS_THREADS
-	_oidc_metadata_provider_cache_rwlock = NULL;
-#endif
-	return APR_SUCCESS;
+/* under the write lock: build an entry stamped with the file's mtime+size referencing the document */
+static void *oidc_metadata_provider_cache_build(apr_pool_t *pool, const char *key, void *baton) {
+	const struct oidc_metadata_provider_cache_build_ctx *ctx = baton;
+	oidc_metadata_provider_cache_entry_t *entry = apr_palloc(pool, sizeof(oidc_metadata_provider_cache_entry_t));
+	entry->mtime = ctx->fi->mtime;
+	entry->size = ctx->fi->size;
+	entry->json = oidc_json_incref(ctx->json);
+	return entry;
 }
 
 void oidc_metadata_provider_cache_init(apr_pool_t *pool) {
-	if (_oidc_metadata_provider_cache != NULL)
-		return;
 	/* sharing parsed JSON across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
-#if APR_HAS_THREADS
-	if (apr_thread_rwlock_create(&_oidc_metadata_provider_cache_rwlock, pool) != APR_SUCCESS)
-		return;
-#endif
-	_oidc_metadata_provider_cache = apr_hash_make(pool);
-	_oidc_metadata_provider_cache_pool = pool;
-	apr_pool_cleanup_register(pool, NULL, oidc_metadata_provider_cache_cleanup, apr_pool_cleanup_null);
+	oidc_cache_local_create(&_oidc_metadata_provider_cache, pool, "metadata-provider",
+				OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES, TRUE, oidc_metadata_provider_cache_free);
 }
 
 /* return a new reference to the cached parsed document when the file is unchanged */
 static apr_byte_t oidc_metadata_provider_cache_get(const char *path, const apr_finfo_t *fi, oidc_json_t **json) {
-	oidc_metadata_provider_cache_entry_t *entry = NULL;
-	apr_byte_t rv = FALSE;
-
-	if (_oidc_metadata_provider_cache == NULL)
-		return FALSE;
-
-	oidc_metadata_provider_cache_rdlock();
-	entry = apr_hash_get(_oidc_metadata_provider_cache, path, APR_HASH_KEY_STRING);
-	if ((entry != NULL) && (entry->mtime == fi->mtime) && (entry->size == fi->size)) {
-		*json = oidc_json_incref(entry->json);
-		rv = TRUE;
-	}
-	oidc_metadata_provider_cache_unlock();
-
-	return rv;
+	return oidc_cache_local_get_use(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_valid,
+					(void *)fi, oidc_metadata_provider_cache_use, json);
 }
 
 /* store a new reference to the parsed document keyed by path, stamped with the file's mtime+size */
 static void oidc_metadata_provider_cache_set(const char *path, const apr_finfo_t *fi, oidc_json_t *json) {
-	oidc_metadata_provider_cache_entry_t *entry = NULL;
-
-	if (_oidc_metadata_provider_cache == NULL)
-		return;
-
-	oidc_metadata_provider_cache_wrlock();
-	if (apr_hash_count(_oidc_metadata_provider_cache) >= OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES)
-		oidc_metadata_provider_cache_clear_unlocked();
-	entry = apr_hash_get(_oidc_metadata_provider_cache, path, APR_HASH_KEY_STRING);
-	if (entry != NULL) {
-		/* release the document this store replaces; in-flight holders keep theirs alive */
-		oidc_json_decref(entry->json);
-	} else {
-		/* the cache pool is only ever allocated from under the write lock */
-		entry = apr_palloc(_oidc_metadata_provider_cache_pool, sizeof(oidc_metadata_provider_cache_entry_t));
-		apr_hash_set(_oidc_metadata_provider_cache, apr_pstrdup(_oidc_metadata_provider_cache_pool, path),
-			     APR_HASH_KEY_STRING, entry);
-	}
-	entry->mtime = fi->mtime;
-	entry->size = fi->size;
-	entry->json = oidc_json_incref(json);
-	oidc_metadata_provider_cache_unlock();
+	struct oidc_metadata_provider_cache_build_ctx ctx = {.fi = fi, .json = json};
+	oidc_cache_local_set_build(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_build, &ctx);
 }
 
 /*
