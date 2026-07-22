@@ -162,8 +162,9 @@ static apr_byte_t oidc_proto_jwks_cache_get(request_rec *r, const char *sel_key,
 			 * read path performs no refcount mutation at all */
 			oidc_jwk_t *jwk = APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
 			/* re-key the result the way selection does: kid, x5t or a unique counter */
-			const char *hkey =
-			    jwk->kid ? jwk->kid : (x5t ? x5t : apr_psprintf(r->pool, "%d", apr_hash_count(result)));
+			const char *hkey = jwk->kid;
+			if (hkey == NULL)
+				hkey = (x5t != NULL) ? x5t : apr_psprintf(r->pool, "%d", apr_hash_count(result));
 			apr_hash_set(result, hkey, APR_HASH_KEY_STRING, jwk);
 		}
 		rv = TRUE;
