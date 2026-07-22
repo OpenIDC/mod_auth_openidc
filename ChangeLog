@@ -1,4 +1,8 @@
 07/22/2026
+- perf: restore the parsed id_token/userinfo/scope request state from the
+  previous request on internal redirects (ErrorDocument, mod_rewrite) instead
+  of re-loading and re-parsing the whole session from the cache; the session
+  reload remains as a fallback when the previous request carries no state
 - perf: cache parsed JWKs selection results per process keyed by
   (jwks-uri, kid, x5t, kty) so repeated JWT validations against the same
   signing key skip the per-validation JSON decode of the JWKs document and

@@ -1274,13 +1274,49 @@ apr_byte_t oidc_subrequest_recycle_user(request_rec *r) {
 	return TRUE;
 }
 
+/*
+ * on an internal redirect the new (main) request starts with an empty request-state hash while
+ * the previous request's state is still alive: restore the already-parsed token state from there
+ * instead of re-loading and re-parsing the whole session from the cache
+ */
+static apr_byte_t oidc_copy_tokens_from_prev_request_state(request_rec *r) {
+	oidc_json_t *id_token = NULL;
+	oidc_json_t *claims = NULL;
+	const char *scope = NULL;
+
+	if (r->prev == NULL)
+		return FALSE;
+
+	id_token = oidc_request_state_json_get(r->prev, OIDC_REQUEST_STATE_KEY_IDTOKEN);
+	if (id_token == NULL)
+		return FALSE;
+
+	/* the (shallow) copies take their own JSON references, so the restored state stays valid
+	 * independent of the previous request's cleanup order */
+	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
+
+	claims = oidc_request_state_json_get(r->prev, OIDC_REQUEST_STATE_KEY_CLAIMS);
+	if (claims != NULL)
+		oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, claims);
+
+	scope = oidc_request_state_get(r->prev, OIDC_REQUEST_STATE_KEY_SCOPE);
+	if (scope != NULL)
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SCOPE, apr_pstrdup(r->pool, scope));
+
+	oidc_debug(r, "restored the token request state from the previous request on this internal redirect");
+
+	return TRUE;
+}
+
 static apr_byte_t oidc_check_userid_openidc_subreq(request_rec *r) {
 	/* this is a sub-request and we may have a session (headers will have been scrubbed and set already) */
 	if (oidc_subrequest_recycle_user(r) == FALSE)
 		return FALSE;
 
-	/* apparently request state can get lost in sub-requests, so see if id_token/claims need to be restored */
-	if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN) == NULL) {
+	/* apparently request state can get lost in sub-requests, so see if id_token/claims need to be restored,
+	 * preferably from the previous request's parsed state, falling back to a full session load */
+	if ((oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN) == NULL) &&
+	    (oidc_copy_tokens_from_prev_request_state(r) == FALSE)) {
 		oidc_session_t *session = NULL;
 		oidc_session_load(r, &session);
 		oidc_copy_tokens_to_request_state(r, session);

@@ -2825,6 +2825,46 @@ START_TEST(test_handle_check_user_id_subrequest_recycles_user) {
 }
 END_TEST
 
+/* an internally-redirected request restores the parsed token state from the previous
+ * request's still-alive state instead of re-loading and re-parsing the session */
+START_TEST(test_handle_check_user_id_internal_redirect_restores_state) {
+	request_rec *r = oidc_test_request_get();
+
+	/* seed the "previous" request's state with parsed token state */
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, "{\"sub\":\"alice\",\"iss\":\"https://idp.example.com\"}", &j),
+			 TRUE);
+	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, j);
+	oidc_json_decref(j);
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SCOPE, "openid email");
+	r->user = apr_pstrdup(r->pool, "alice");
+
+	/* the internally-redirected request has its own pool - and thus starts with an empty
+	 * request-state hash - and carries no session cookie to fall back to */
+	request_rec redir = *r;
+	redir.main = NULL;
+	redir.prev = r;
+	redir.user = NULL;
+	apr_pool_create(&redir.pool, r->pool);
+	redir.headers_in = apr_table_copy(redir.pool, r->headers_in);
+	apr_table_unset(redir.headers_in, "Cookie");
+
+	ck_assert_int_eq(oidc_check_user_id(&redir), OK);
+	ck_assert_ptr_nonnull(redir.user);
+	ck_assert_str_eq(redir.user, "alice");
+
+	/* the id_token claims and the scope must have been restored from the previous request */
+	oidc_json_t *restored = oidc_request_state_json_get(&redir, OIDC_REQUEST_STATE_KEY_IDTOKEN);
+	ck_assert_ptr_nonnull(restored);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(restored, "sub")), "alice");
+	const char *scope = oidc_request_state_get(&redir, OIDC_REQUEST_STATE_KEY_SCOPE);
+	ck_assert_ptr_nonnull(scope);
+	ck_assert_str_eq(scope, "openid email");
+
+	apr_pool_destroy(redir.pool);
+}
+END_TEST
+
 START_TEST(test_handle_check_user_id_unauthenticated_redirects_to_op) {
 	request_rec *r = oidc_test_request_get();
 
@@ -4738,6 +4778,7 @@ int main(void) {
 	TCase *checkuid = tcase_create("check_user_id");
 	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(checkuid, test_handle_check_user_id_subrequest_recycles_user);
+	tcase_add_test(checkuid, test_handle_check_user_id_internal_redirect_restores_state);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_redirects_to_op);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_not_auth_capable);
 	tcase_add_test(checkuid, test_handle_check_user_id_existing_session);
