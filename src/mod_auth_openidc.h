@@ -62,6 +62,7 @@
 #define OIDC_REQUEST_STATE_KEY_SCOPE "sc"
 #define OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE "p"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
+#define OIDC_REQUEST_STATE_KEY_AUTHZ_CLAIMS "z"
 #define OIDC_REQUEST_STATE_TRACE_ID "t"
 
 /* parameter name of the original method in the discovery response */
@@ -147,6 +148,7 @@ void oidc_request_state_set(request_rec *r, const char *key, const char *value);
 const char *oidc_request_state_get(request_rec *r, const char *key);
 oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key);
 void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value);
+void oidc_request_state_json_set_new(request_rec *r, const char *key, oidc_json_t *value);
 
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);

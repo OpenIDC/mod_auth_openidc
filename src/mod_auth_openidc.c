@@ -408,22 +408,32 @@ static apr_status_t oidc_request_state_json_cleanup(void *json) {
 }
 
 /*
+ * set a name/json object pair in the mod_auth_openidc-specific request context, taking over
+ * ownership of (i.e. "stealing", jansson-style "_new" semantics) the provided reference
+ * (used for passing state between various Apache request processing stages and hook callbacks)
+ */
+void oidc_request_state_json_set_new(request_rec *r, const char *key, oidc_json_t *value) {
+
+	/* get a handle to the global state, which is a hash table */
+	apr_hash_t *state = oidc_request_state(r);
+
+	/* register a cleanup for the json object on the pool of the (main) request that owns the
+	 * state hash: a subrequest pool would be destroyed while the state may still be in use */
+	request_rec *main_r = (r->main != NULL) ? r->main : r;
+	apr_pool_cleanup_register(main_r->pool, value, oidc_request_state_json_cleanup, apr_pool_cleanup_null);
+
+	/* put the name/value pair in that hash table */
+	apr_hash_set(state, key, APR_HASH_KEY_STRING, value);
+}
+
+/*
  * set a name/json object pair in the mod_auth_openidc-specific request context
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
 void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value) {
 
-	/* get a handle to the global state, which is a hash table */
-	apr_hash_t *state = oidc_request_state(r);
-
 	/* make a copy of the json object because the session object in the caller will be cleared */
-	const oidc_json_t *json = oidc_json_copy(value);
-
-	/* register a cleanup for the json object */
-	apr_pool_cleanup_register(r->pool, json, oidc_request_state_json_cleanup, apr_pool_cleanup_null);
-
-	/* put the name/value pair in that hash table */
-	apr_hash_set(state, key, APR_HASH_KEY_STRING, json);
+	oidc_request_state_json_set_new(r, key, oidc_json_copy(value));
 }
 
 /*

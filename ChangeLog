@@ -1,4 +1,11 @@
 07/22/2026
+- perf: build the merged authorization claim set (scope + userinfo + id_token
+  claims) once per request and keep it in the request state instead of
+  re-merging and discarding it for every evaluated Require line; introduces
+  oidc_request_state_json_set_new (ownership-transferring) and registers
+  request-state JSON cleanups on the main request's pool so a subrequest can
+  no longer tear down state the main request still uses; a Require-claim
+  evaluation measures 48% faster (782ns -> 403ns)
 - perf: cache locally validated JWT access token claims keyed by the token and
   bounded by its "exp" claim (60s without one), mirroring the existing
   introspection-result cache, so repeated resource-server requests with the

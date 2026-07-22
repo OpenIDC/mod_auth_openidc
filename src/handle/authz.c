@@ -692,15 +692,17 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 			return AUTHZ_GRANTED;
 	}
 
-	/* get the set of claims from the request state (they've been set in the authentication part earlier */
-	oidc_json_t *claims = oidc_authz_merge_claims(r);
+	/* get the merged set of claims (as set in the authentication part earlier) from the request
+	 * state; it is identical for every Require line evaluated in this request, so it is built
+	 * only once and kept in the request state, which owns the reference and cleans it up */
+	oidc_json_t *claims = oidc_request_state_json_get(r, OIDC_REQUEST_STATE_KEY_AUTHZ_CLAIMS);
+	if (claims == NULL) {
+		claims = oidc_authz_merge_claims(r);
+		oidc_request_state_json_set_new(r, OIDC_REQUEST_STATE_KEY_AUTHZ_CLAIMS, claims);
+	}
 
 	/* dispatch to the >=2.4 specific authz routine */
 	authz_status rc = oidc_authz_24_worker(r, claims, require_args, parsed_require_args, match_claim_fn);
-
-	/* cleanup */
-	if (claims)
-		oidc_json_decref(claims);
 
 	if ((rc == AUTHZ_DENIED) && ap_auth_type(r))
 		rc = oidc_authz_24_unauthorized_user(r);
