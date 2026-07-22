@@ -1,3 +1,8 @@
+07/22/2026
+- perf: replace the curl-based URL encode/decode in http.c with a plain RFC 3986
+  percent-codec, avoiding a throwaway CURL handle init/cleanup plus heap churn
+  on every call; measures 10x faster (761ns -> 74ns per encode)
+
 07/21/2026
 - proto/token: fix a NULL-pointer dereference (Apache worker crash) when the
   token endpoint returns a "use_dpop_nonce" error while DPoP is disabled

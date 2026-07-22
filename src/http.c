@@ -60,87 +60,89 @@
 #include "util/util.h"
 
 /*
- * URL-encode a string
+ * URL-encode a string: percent-encode every byte outside of the RFC 3986 unreserved set,
+ * matching curl_easy_escape which was used here before (but required a throwaway CURL handle
+ * per call since handles must not be shared between threads)
  */
 char *oidc_http_url_encode(const request_rec *r, const char *str) {
-	/*
-	 * cuRL does not allow us to share the same handle in multiple threads
-	 * see: https://curl.se/libcurl/c/threadsafe.html
-	 * so we can not not use a global variable here and optimize performance
-	 */
-	char *rv = "";
-	char *result = NULL;
-	CURL *curl = NULL;
+	static const char hex[] = "0123456789ABCDEF";
+	char *rv = NULL;
+	char *p = NULL;
+	size_t len = 0;
 
 	if (str == NULL)
-		goto end;
+		return "";
 
-	curl = curl_easy_init();
-	if (curl == NULL) {
-		oidc_error(r, "curl_easy_init() error");
-		goto end;
+	len = _oidc_strlen(str);
+
+	/* worst case each input byte expands to a 3-byte %XX sequence */
+	p = rv = apr_palloc(r->pool, len * 3 + 1);
+	for (size_t i = 0; i < len; i++) {
+		const unsigned char c = (unsigned char)str[i];
+		if (((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || ((c >= '0') && (c <= '9')) ||
+		    (c == '-') || (c == '.') || (c == '_') || (c == '~')) {
+			*p++ = (char)c;
+		} else {
+			*p++ = '%';
+			*p++ = hex[c >> 4];
+			*p++ = hex[c & 0x0f];
+		}
 	}
-
-	result = curl_easy_escape(curl, str, 0);
-	if (result == NULL) {
-		oidc_error(r, "curl_easy_escape() error");
-		goto end;
-	}
-
-	rv = apr_pstrdup(r->pool, result);
-
-end:
-
-	if (result)
-		curl_free(result);
-	if (curl)
-		curl_easy_cleanup(curl);
+	*p = '\0';
 
 	return rv;
 }
 
+static int oidc_http_url_decode_hex_digit(const char c) {
+	if ((c >= '0') && (c <= '9'))
+		return c - '0';
+	if ((c >= 'A') && (c <= 'F'))
+		return c - 'A' + 10;
+	if ((c >= 'a') && (c <= 'f'))
+		return c - 'a' + 10;
+	return -1;
+}
+
 /*
- * URL-decode a string
+ * URL-decode a string: form-decode "+" to space and percent-decode %XX sequences, copying
+ * malformed/truncated %-sequences through literally, matching the curl_easy_unescape based
+ * implementation that was used here before
  */
 char *oidc_http_url_decode(const request_rec *r, const char *str) {
-	char *rv = "";
-	char *result = NULL;
-	CURL *curl = NULL;
-	int counter = 0;
-	char *replaced = NULL;
+	char *rv = NULL;
+	char *p = NULL;
+	size_t i = 0;
+	size_t len = 0;
 
 	if (str == NULL)
-		goto end;
+		return "";
 
-	curl = curl_easy_init();
-	if (curl == NULL) {
-		oidc_error(r, "curl_easy_init() error");
-		goto end;
-	}
+	len = _oidc_strlen(str);
 
-	replaced = apr_pstrdup(r->pool, str);
-	while (replaced[counter] != '\0') {
-		if (replaced[counter] == '+') {
-			replaced[counter] = ' ';
+	p = rv = apr_palloc(r->pool, len + 1);
+	while (i < len) {
+		const char c = str[i];
+		if (c == '+') {
+			*p++ = ' ';
+			i++;
+		} else if (c == '%') {
+			/* str[i + 1] is within bounds (at worst the NUL terminator); str[i + 2] is only
+			 * read when str[i + 1] is a hex digit and thus not the terminator */
+			const int hi = oidc_http_url_decode_hex_digit(str[i + 1]);
+			const int lo = (hi >= 0) ? oidc_http_url_decode_hex_digit(str[i + 2]) : -1;
+			if (lo >= 0) {
+				*p++ = (char)((hi << 4) | lo);
+				i += 3;
+			} else {
+				*p++ = c;
+				i++;
+			}
+		} else {
+			*p++ = c;
+			i++;
 		}
-		counter++;
 	}
-
-	result = curl_easy_unescape(curl, replaced, 0, 0);
-
-	if (result == NULL) {
-		oidc_error(r, "curl_easy_unescape() error");
-		goto end;
-	}
-
-	rv = apr_pstrdup(r->pool, result);
-
-end:
-
-	if (result)
-		curl_free(result);
-	if (curl)
-		curl_easy_cleanup(curl);
+	*p = '\0';
 
 	return rv;
 }

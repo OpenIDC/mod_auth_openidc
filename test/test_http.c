@@ -119,6 +119,24 @@ START_TEST(test_url_encode_decode) {
 	char *dec = oidc_http_url_decode(r, enc);
 	ck_assert_ptr_nonnull(dec);
 	ck_assert_msg(_oidc_strcmp(dec, in) == 0, "decoded value matches original");
+
+	// the exact escaping expected of the RFC 3986 unreserved set, matching curl_easy_escape
+	ck_assert_str_eq(oidc_http_url_encode(r, "a b+c%/&=~"), "a%20b%2Bc%25%2F%26%3D~");
+	ck_assert_str_eq(oidc_http_url_encode(r, "AZaz09-._~"), "AZaz09-._~");
+	// multi-byte UTF-8 input is encoded byte-wise
+	ck_assert_str_eq(oidc_http_url_encode(r, "caf\xc3\xa9"), "caf%C3%A9");
+	ck_assert_str_eq(oidc_http_url_encode(r, ""), "");
+	ck_assert_str_eq(oidc_http_url_encode(r, NULL), "");
+
+	// form-decoding: "+" means space, %XX is case-insensitive
+	ck_assert_str_eq(oidc_http_url_decode(r, "a+b%2B%2bc"), "a b++c");
+	ck_assert_str_eq(oidc_http_url_decode(r, "caf%C3%A9"), "caf\xc3\xa9");
+	// malformed and truncated %-sequences are copied through literally
+	ck_assert_str_eq(oidc_http_url_decode(r, "100%"), "100%");
+	ck_assert_str_eq(oidc_http_url_decode(r, "%zz%1"), "%zz%1");
+	ck_assert_str_eq(oidc_http_url_decode(r, "%%20"), "% ");
+	ck_assert_str_eq(oidc_http_url_decode(r, ""), "");
+	ck_assert_str_eq(oidc_http_url_decode(r, NULL), "");
 }
 END_TEST
 
