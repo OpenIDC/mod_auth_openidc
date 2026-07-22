@@ -86,13 +86,14 @@
   serialize; writers are unaffected (they write a temp file and atomically
   rename it) and the expiry cleaner's exclusive lock still excludes readers;
   tolerate a concurrent reader having already removed an expired entry
-- perf: build the merged authorization claim set (scope + userinfo + id_token
-  claims) once per request and keep it in the request state instead of
-  re-merging and discarding it for every evaluated Require line; introduces
-  oidc_request_state_json_set_new (ownership-transferring) and registers
-  request-state JSON cleanups on the main request's pool so a subrequest can
-  no longer tear down state the main request still uses; a Require-claim
-  evaluation measures 48% faster (782ns -> 403ns)
+- fix: authorization regression (some "Require claim" checks that should grant
+  wrongly denied with 401) from memoizing the merged authorization claim set in
+  the request state across a request; Apache evaluates the authorization
+  provider in phases/subrequests where the underlying claim state differs, so
+  the cached merge could go stale - build it fresh for each evaluation again
+- perf: register request-state JSON cleanups on the main request's pool so a
+  subrequest can no longer tear down state the main request still uses;
+  introduces oidc_request_state_json_set_new (ownership-transferring)
 - perf: cache locally validated JWT access token claims keyed by the token and
   bounded by its "exp" claim (60s without one), mirroring the existing
   introspection-result cache, so repeated resource-server requests with the

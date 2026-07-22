@@ -62,7 +62,6 @@
 #define OIDC_REQUEST_STATE_KEY_SCOPE "sc"
 #define OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE "p"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
-#define OIDC_REQUEST_STATE_KEY_AUTHZ_CLAIMS "z"
 #define OIDC_REQUEST_STATE_TRACE_ID "t"
 
 /* parameter name of the original method in the discovery response */
