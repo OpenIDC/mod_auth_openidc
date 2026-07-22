@@ -1,4 +1,13 @@
 07/22/2026
+- perf: index the shm cache with an in-segment hash table (bucket chains plus
+  a free list, 1-based slot indexes) instead of linearly scanning all slots on
+  every get/set while holding the global mutex: operations become O(chain)
+  independent of OIDCCacheShmMax - at just 500 slots a miss measures 87%
+  faster (1136ns -> 149ns) and a set 72% faster (963ns -> 268ns), with the
+  gap growing linearly with the slot count (default 10000) - and the mutex
+  hold time shrinks accordingly for all worker processes; a full cache evicts
+  via bounded random sampling picking the least-recently-used of the sample
+  (the Redis approach) rather than a full LRU scan
 - perf: cache the flattened claim name/value pairs (header-name construction,
   value rendering of object/array claims, base64url/latin1 encoding) keyed by
   the identity of the shared claims object from the parsed-session cache, so

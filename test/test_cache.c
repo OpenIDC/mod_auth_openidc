@@ -253,6 +253,55 @@ START_TEST(test_cache_second_passphrase_retry) {
 }
 END_TEST
 
+/* fill the shm cache beyond its capacity (500 slots in the test fixture) so the sampled-LRU
+ * eviction path runs, then verify recent entries are still served and deletion works */
+START_TEST(test_cache_shm_eviction_and_delete) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	char *value = NULL;
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(3600);
+	const int nslots = oidc_cfg_cache_shm_size_max_get(cfg);
+	int i = 0;
+
+	/* insert more entries than there are slots: every set must succeed through eviction */
+	for (i = 0; i < nslots + 20; i++)
+		ck_assert_int_eq(
+		    oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "evict-%d", i), "v", expiry),
+		    TRUE);
+
+	/* the most recently inserted entry must be present */
+	value = NULL;
+	ck_assert_int_eq(
+	    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "evict-%d", nslots + 19), &value),
+	    TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "v");
+
+	/* overwriting an existing key must not consume a new slot or duplicate the entry */
+	ck_assert_int_eq(
+	    oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "evict-%d", nslots + 19), "v2", expiry),
+	    TRUE);
+	value = NULL;
+	ck_assert_int_eq(
+	    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "evict-%d", nslots + 19), &value),
+	    TRUE);
+	ck_assert_str_eq(value, "v2");
+
+	/* deleting an entry (NULL value) must result in a miss afterwards */
+	ck_assert_int_eq(
+	    oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "evict-%d", nslots + 19), NULL, expiry),
+	    TRUE);
+	value = NULL;
+	ck_assert_int_eq(
+	    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "evict-%d", nslots + 19), &value),
+	    TRUE);
+	ck_assert_ptr_null(value);
+
+	/* deleting a non-existing key is a no-op that must not clear an unrelated entry */
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "evict-does-not-exist", NULL, expiry), TRUE);
+}
+END_TEST
+
 START_TEST(test_cache_shm_get_key_bounds_negative) {
 	request_rec *r = oidc_test_request_get();
 	char *value = NULL;
@@ -1505,6 +1554,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_encrypt_no_secret);
 	tcase_add_test(core, test_cache_status2str_success);
 	tcase_add_test(core, test_cache_second_passphrase_retry);
+	tcase_add_test(core, test_cache_shm_eviction_and_delete);
 	tcase_add_test(core, test_cache_shm_get_key_bounds_negative);
 	tcase_add_test(core, test_cache_secret1_empty_secret2_fallback);
 	tcase_add_test(core, test_cache_backend_true_null_miss);
