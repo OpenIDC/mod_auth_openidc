@@ -44,7 +44,7 @@
 #include "proto/proto.h"
 #include "util/util.h"
 
-#include <apr_thread_rwlock.h>
+#include "util/cache_local.h"
 
 /*
  * process-lifetime cache of JWKs selection results: maps (jwks-uri, kid, x5t, kty) to the list
@@ -59,153 +59,116 @@ typedef struct oidc_proto_jwks_cache_entry_t {
 	apr_array_header_t *jwks;
 } oidc_proto_jwks_cache_entry_t;
 
-static apr_hash_t *_oidc_proto_jwks_cache = NULL;
-static apr_pool_t *_oidc_proto_jwks_cache_pool = NULL;
+static oidc_cache_local_t *_oidc_proto_jwks_cache = NULL;
 /* keys retired by a purge/replace: in-flight requests may still be using them, and the backend
  * refcount is not atomic, so they are only released at pool cleanup (bounded by key rollovers) */
 static apr_array_header_t *_oidc_proto_jwks_cache_retired = NULL;
-#if APR_HAS_THREADS
-static apr_thread_rwlock_t *_oidc_proto_jwks_cache_rwlock = NULL;
-#endif
 
 /* bounds the cache; reached only with many providers/kids, then the cache is simply reset */
 #define OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES 64
 
-static void oidc_proto_jwks_cache_rdlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_rdlock(_oidc_proto_jwks_cache_rwlock);
-#endif
+/* eviction: do not free the keys (in-flight requests plus the non-atomic backend refcount forbid
+ * it) - retire them for release at pool cleanup; the entry itself lives in the cache pool */
+static void oidc_proto_jwks_cache_free(void *value) {
+	oidc_proto_jwks_cache_entry_t *entry = value;
+	for (int i = 0; i < entry->jwks->nelts; i++)
+		APR_ARRAY_PUSH(_oidc_proto_jwks_cache_retired, oidc_jwk_t *) =
+		    APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
 }
 
-static void oidc_proto_jwks_cache_wrlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_wrlock(_oidc_proto_jwks_cache_rwlock);
-#endif
+/* freshness: a cached selection result is valid until its refresh-interval expiry */
+static int oidc_proto_jwks_cache_valid(void *value, void *ctx) {
+	return ((const oidc_proto_jwks_cache_entry_t *)value)->expires > apr_time_now();
 }
 
-static void oidc_proto_jwks_cache_unlock(void) {
-#if APR_HAS_THREADS
-	apr_thread_rwlock_unlock(_oidc_proto_jwks_cache_rwlock);
-#endif
+struct oidc_proto_jwks_cache_use_ctx {
+	request_rec *r;
+	const char *x5t;
+	apr_hash_t *result;
+};
+
+/* under the read lock: hand out the cache-owned (shared, refcount-stable) keys into the result hash,
+ * re-keyed the way selection does - by kid, x5t or a unique counter; the read path performs no
+ * refcount mutation and the per-request key-list destruction leaves the shared keys alone */
+static void oidc_proto_jwks_cache_use(void *value, void *baton) {
+	const oidc_proto_jwks_cache_entry_t *entry = value;
+	const struct oidc_proto_jwks_cache_use_ctx *ctx = baton;
+	for (int i = 0; i < entry->jwks->nelts; i++) {
+		const oidc_jwk_t *jwk = APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
+		const char *hkey = jwk->kid;
+		if (hkey == NULL)
+			hkey = (ctx->x5t != NULL) ? ctx->x5t
+						  : apr_psprintf(ctx->r->pool, "%d", apr_hash_count(ctx->result));
+		apr_hash_set(ctx->result, hkey, APR_HASH_KEY_STRING, jwk);
+	}
 }
 
-/* retire all cached entries; must be called with the write lock held (or at pool cleanup);
- * the keys themselves are not released here since in-flight requests may still use them */
-static void oidc_proto_jwks_cache_clear_unlocked(void) {
+struct oidc_proto_jwks_cache_build_ctx {
+	apr_hash_t *result;
+	int refresh_interval;
+};
+
+/* under the write lock: build an entry holding shared copies of the selected keys (the copy retains
+ * the backend key of the still request-private source and is marked shared so no request context
+ * ever mutates its refcount) stamped with the refresh-interval expiry */
+static void *oidc_proto_jwks_cache_build(apr_pool_t *pool, const char *key, void *baton) {
+	const struct oidc_proto_jwks_cache_build_ctx *ctx = baton;
 	void *val = NULL;
-	if (_oidc_proto_jwks_cache == NULL)
-		return;
-	for (apr_hash_index_t *hi = apr_hash_first(NULL, _oidc_proto_jwks_cache); hi; hi = apr_hash_next(hi)) {
-		oidc_proto_jwks_cache_entry_t *entry = NULL;
+	oidc_proto_jwks_cache_entry_t *entry = apr_palloc(pool, sizeof(oidc_proto_jwks_cache_entry_t));
+	entry->expires = apr_time_now() + apr_time_from_sec(ctx->refresh_interval);
+	entry->jwks = apr_array_make(pool, apr_hash_count(ctx->result), sizeof(oidc_jwk_t *));
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, ctx->result); hi; hi = apr_hash_next(hi)) {
+		oidc_jwk_t *jwk = NULL;
 		apr_hash_this(hi, NULL, NULL, &val);
-		entry = (oidc_proto_jwks_cache_entry_t *)val;
-		for (int i = 0; i < entry->jwks->nelts; i++)
-			APR_ARRAY_PUSH(_oidc_proto_jwks_cache_retired, oidc_jwk_t *) =
-			    APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
+		jwk = oidc_jwk_copy(pool, (oidc_jwk_t *)val);
+		jwk->shared = TRUE;
+		APR_ARRAY_PUSH(entry->jwks, oidc_jwk_t *) = jwk;
 	}
-	apr_hash_clear(_oidc_proto_jwks_cache);
+	return entry;
 }
 
-static apr_status_t oidc_proto_jwks_cache_cleanup(void *data) {
-	oidc_proto_jwks_cache_clear_unlocked();
-	/* now actually release the backend key objects: no request context is running anymore */
-	for (int i = 0; i < _oidc_proto_jwks_cache_retired->nelts; i++) {
-		oidc_jwk_t *jwk = APR_ARRAY_IDX(_oidc_proto_jwks_cache_retired, i, oidc_jwk_t *);
-		jwk->shared = FALSE;
-		oidc_jwk_destroy(jwk);
+/* release the retired backend key objects once no request context is running (at pool cleanup) */
+static apr_status_t oidc_proto_jwks_cache_retired_cleanup(void *data) {
+	if (_oidc_proto_jwks_cache_retired != NULL) {
+		for (int i = 0; i < _oidc_proto_jwks_cache_retired->nelts; i++) {
+			oidc_jwk_t *jwk = APR_ARRAY_IDX(_oidc_proto_jwks_cache_retired, i, oidc_jwk_t *);
+			jwk->shared = FALSE;
+			oidc_jwk_destroy(jwk);
+		}
+		_oidc_proto_jwks_cache_retired = NULL;
 	}
-	_oidc_proto_jwks_cache = NULL;
-	_oidc_proto_jwks_cache_pool = NULL;
-	_oidc_proto_jwks_cache_retired = NULL;
-#if APR_HAS_THREADS
-	_oidc_proto_jwks_cache_rwlock = NULL;
-#endif
 	return APR_SUCCESS;
 }
 
 void oidc_proto_jwks_cache_init(apr_pool_t *pool) {
+	/* also guards the (non-idempotent) retired-list creation below against a repeated init */
 	if (_oidc_proto_jwks_cache != NULL)
 		return;
-#if APR_HAS_THREADS
-	if (apr_thread_rwlock_create(&_oidc_proto_jwks_cache_rwlock, pool) != APR_SUCCESS)
-		return;
-#endif
-	_oidc_proto_jwks_cache = apr_hash_make(pool);
-	_oidc_proto_jwks_cache_pool = pool;
 	_oidc_proto_jwks_cache_retired = apr_array_make(pool, 8, sizeof(oidc_jwk_t *));
-	apr_pool_cleanup_register(pool, NULL, oidc_proto_jwks_cache_cleanup, apr_pool_cleanup_null);
+	/* a regular (post-child) cleanup: it runs after the cache's own PRE-cleanup has retired every
+	 * still-cached key, so by the time it fires the retired list holds them all for release */
+	apr_pool_cleanup_register(pool, NULL, oidc_proto_jwks_cache_retired_cleanup, apr_pool_cleanup_null);
+	oidc_cache_local_create(&_oidc_proto_jwks_cache, pool, "proto-jwks", OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES, TRUE,
+				oidc_proto_jwks_cache_free);
 }
 
 static void oidc_proto_jwks_cache_purge(void) {
-	if (_oidc_proto_jwks_cache == NULL)
-		return;
-	oidc_proto_jwks_cache_wrlock();
-	oidc_proto_jwks_cache_clear_unlocked();
-	oidc_proto_jwks_cache_unlock();
+	oidc_cache_local_clear(_oidc_proto_jwks_cache);
 }
 
 /* copy the cached selection result for the specified key into the result hash */
 static apr_byte_t oidc_proto_jwks_cache_get(request_rec *r, const char *sel_key, const char *x5t, apr_hash_t *result) {
-	oidc_proto_jwks_cache_entry_t *entry = NULL;
-	apr_byte_t rv = FALSE;
-
-	if (_oidc_proto_jwks_cache == NULL)
-		return FALSE;
-
-	oidc_proto_jwks_cache_rdlock();
-	entry = apr_hash_get(_oidc_proto_jwks_cache, sel_key, APR_HASH_KEY_STRING);
-	if ((entry != NULL) && (entry->expires > apr_time_now())) {
-		for (int i = 0; i < entry->jwks->nelts; i++) {
-			/* hand out the cache-owned key itself: it is marked shared, so the per-request
-			 * key-list destruction leaves it (and its backend refcount) alone, and this
-			 * read path performs no refcount mutation at all */
-			const oidc_jwk_t *jwk = APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
-			/* re-key the result the way selection does: kid, x5t or a unique counter */
-			const char *hkey = jwk->kid;
-			if (hkey == NULL)
-				hkey = (x5t != NULL) ? x5t : apr_psprintf(r->pool, "%d", apr_hash_count(result));
-			apr_hash_set(result, hkey, APR_HASH_KEY_STRING, jwk);
-		}
-		rv = TRUE;
-	}
-	oidc_proto_jwks_cache_unlock();
-
-	return rv;
+	struct oidc_proto_jwks_cache_use_ctx ctx = {.r = r, .x5t = x5t, .result = result};
+	return oidc_cache_local_get_use(_oidc_proto_jwks_cache, sel_key, oidc_proto_jwks_cache_valid, NULL,
+					oidc_proto_jwks_cache_use, &ctx);
 }
 
 /* store a non-empty selection result under the specified key, bounded by the refresh interval */
 static void oidc_proto_jwks_cache_set(const char *sel_key, apr_hash_t *result, int refresh_interval) {
-	oidc_proto_jwks_cache_entry_t *entry = NULL;
-	void *val = NULL;
-
-	if ((_oidc_proto_jwks_cache == NULL) || (apr_hash_count(result) < 1))
+	struct oidc_proto_jwks_cache_build_ctx ctx = {.result = result, .refresh_interval = refresh_interval};
+	if (apr_hash_count(result) < 1)
 		return;
-
-	oidc_proto_jwks_cache_wrlock();
-	if (apr_hash_count(_oidc_proto_jwks_cache) >= OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES)
-		oidc_proto_jwks_cache_clear_unlocked();
-	/* retire the keys of an (expired) entry this store replaces: in-flight users may remain */
-	entry = apr_hash_get(_oidc_proto_jwks_cache, sel_key, APR_HASH_KEY_STRING);
-	if (entry != NULL)
-		for (int i = 0; i < entry->jwks->nelts; i++)
-			APR_ARRAY_PUSH(_oidc_proto_jwks_cache_retired, oidc_jwk_t *) =
-			    APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
-	/* the cache pool is only ever allocated from under the write lock (pools are not thread-safe);
-	 * the copy retains the backend key object of the (still request-private) source key, which is
-	 * safe here, and the copy is marked shared so no request context ever mutates its refcount */
-	entry = apr_palloc(_oidc_proto_jwks_cache_pool, sizeof(oidc_proto_jwks_cache_entry_t));
-	entry->expires = apr_time_now() + apr_time_from_sec(refresh_interval);
-	entry->jwks = apr_array_make(_oidc_proto_jwks_cache_pool, apr_hash_count(result), sizeof(oidc_jwk_t *));
-	for (apr_hash_index_t *hi = apr_hash_first(NULL, result); hi; hi = apr_hash_next(hi)) {
-		oidc_jwk_t *jwk = NULL;
-		apr_hash_this(hi, NULL, NULL, &val);
-		jwk = oidc_jwk_copy(_oidc_proto_jwks_cache_pool, (oidc_jwk_t *)val);
-		jwk->shared = TRUE;
-		APR_ARRAY_PUSH(entry->jwks, oidc_jwk_t *) = jwk;
-	}
-	apr_hash_set(_oidc_proto_jwks_cache, apr_pstrdup(_oidc_proto_jwks_cache_pool, sel_key), APR_HASH_KEY_STRING,
-		     entry);
-	oidc_proto_jwks_cache_unlock();
+	oidc_cache_local_set_build(_oidc_proto_jwks_cache, sel_key, oidc_proto_jwks_cache_build, &ctx);
 }
 
 /*
