@@ -1,4 +1,9 @@
 07/22/2026
+- perf: take a shared (instead of exclusive) file lock when reading file-cache
+  entries so concurrent requests reading the same (session) entry no longer
+  serialize; writers are unaffected (they write a temp file and atomically
+  rename it) and the expiry cleaner's exclusive lock still excludes readers;
+  tolerate a concurrent reader having already removed an expired entry
 - perf: build the merged authorization claim set (scope + userinfo + id_token
   claims) once per request and keep it in the request state instead of
   re-merging and discarding it for every evaluated Require line; introduces

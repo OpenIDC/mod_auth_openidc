@@ -171,8 +171,11 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 		return TRUE;
 	}
 
-	/* the file exists, now lock it */
-	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
+	/* the file exists, now lock it: a shared lock suffices for reading - writers never lock
+	 * the target file (they write a temp file and atomically rename it into place) and the
+	 * expiry cleaner's exclusive lock still waits for/excludes shared readers - so concurrent
+	 * requests reading the same (e.g. session) entry no longer serialize on the lock */
+	apr_file_lock(fd, APR_FLOCK_SHARED);
 
 	/* move the read pointer to the very start of the cache file */
 	apr_off_t begin = 0;
@@ -193,8 +196,10 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 		/* log this event */
 		oidc_debug(r, "cache entry \"%s\" expired, removing file \"%s\"", key, path);
 
-		/* and kill it */
-		if ((rc = apr_file_remove(path, r->pool)) != APR_SUCCESS) {
+		/* and kill it; a concurrent reader of the same expired entry may have removed it
+		 * between our unlock and here, so a vanished file is not an error */
+		rc = apr_file_remove(path, r->pool);
+		if ((rc != APR_SUCCESS) && (APR_STATUS_IS_ENOENT(rc) == 0)) {
 			oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
 				   apr_strerror(rc, s_err, sizeof(s_err)));
 		}
