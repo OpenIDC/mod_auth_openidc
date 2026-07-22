@@ -45,6 +45,7 @@
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
 #include "handle/handle.h"
+#include "metadata.h"
 #include "proto/proto.h"
 #include "util/util.h"
 #include <openssl/evp.h>
@@ -209,6 +210,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	/* mirrors oidc_post_config; the pool cleanups reset the cache statics between tests */
 	oidc_authz_pcre_cache_init(request->server->process->pconf);
 	oidc_proto_jwks_cache_init(request->server->process->pconf);
+	oidc_metadata_provider_cache_init(request->server->process->pconf);
 
 	return request;
 }

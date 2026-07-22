@@ -102,6 +102,9 @@ oidc_json_t *oidc_json_boolean(int value);
  * reference counting and copying
  */
 void oidc_json_decref(oidc_json_t *json);
+oidc_json_t *oidc_json_incref(oidc_json_t *json);
+/* whether the backend's reference counting is atomic, i.e. objects may be shared across threads */
+apr_byte_t oidc_json_refcount_threadsafe(void);
 oidc_json_t *oidc_json_copy(const oidc_json_t *json);
 oidc_json_t *oidc_json_deep_copy(const oidc_json_t *json);
 

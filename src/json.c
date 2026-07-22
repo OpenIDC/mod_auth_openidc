@@ -108,6 +108,25 @@ void oidc_json_decref(oidc_json_t *json) {
 	json_decref(json);
 }
 
+oidc_json_t *oidc_json_incref(oidc_json_t *json) {
+	return json_incref(json);
+}
+
+/*
+ * whether the backend's reference counting uses atomic operations so objects may be shared
+ * across threads through incref/decref; jansson uses __atomic or __sync builtins when the
+ * compiler provides them and falls back to a plain (unsafe) increment otherwise (e.g. MSVC)
+ */
+apr_byte_t oidc_json_refcount_threadsafe(void) {
+#if defined(JSON_HAVE_ATOMIC_BUILTINS) && JSON_HAVE_ATOMIC_BUILTINS
+	return TRUE;
+#elif defined(JSON_HAVE_SYNC_BUILTINS) && JSON_HAVE_SYNC_BUILTINS
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
 oidc_json_t *oidc_json_copy(const oidc_json_t *json) {
 	return json_copy((oidc_json_t *)json);
 }

@@ -1,4 +1,10 @@
 07/22/2026
+- perf: keep parsed provider metadata from the metadata directory in a
+  process-level cache validated by the file's mtime+size, so the per-request
+  disk read + JSON parse of the provider .provider file only happens when the
+  file actually changed; requires the JSON library's atomic reference counting
+  (the cache stays disabled otherwise) and multi-process consistency is
+  retained through the shared file's timestamp
 - perf: hand out JWKs-cache keys as shared objects instead of per-request
   refcounted copies: cjose's key refcount is not atomic, so the previous
   copy-with-retain on the (concurrent) cache read path was a data race under
