@@ -1,4 +1,8 @@
 07/22/2026
+- perf: release the Redis serialization mutex while sleeping between
+  connect-retry attempts (default 300ms): other worker threads in the process
+  can then proceed (and fail fast themselves) instead of queueing behind the
+  sleeping thread for the whole interval on a transient Redis outage
 - perf: compress internal encrypted JWTs (state/session cookies, encrypted
   cache values) with deflate level/window/memory parameters sized for their
   small payloads instead of Z_BEST_COMPRESSION with a 32KB window, cutting the

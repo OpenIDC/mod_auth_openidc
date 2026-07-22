@@ -364,6 +364,8 @@ static int oidc_cache_redis_env2int(const request_rec *r, const char *env_var_na
 
 /*
  * execute Redis command and deal with return value
+ * NB: the caller must hold context->mutex; the retry path temporarily releases it while
+ *     sleeping so other threads are not stalled behind this one for the whole interval
  */
 static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t *context, const char *format, ...) {
 
@@ -384,7 +386,12 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 			if (i < retries) {
 				oidc_debug(r, "wait before retrying: %" APR_TIME_T_FMT " (msec)",
 					   apr_time_as_msec(interval));
+				/* release the mutex while waiting: other threads can then proceed (and
+				 * fail fast themselves) instead of queueing behind this sleeper */
+				oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 				apr_sleep(interval);
+				if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
+					return NULL;
 			}
 			continue;
 		}
