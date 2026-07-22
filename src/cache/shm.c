@@ -105,9 +105,25 @@ static oidc_cache_shm_entry_t *oidc_cache_shm_slot(oidc_cache_shm_header_t *hdr,
 	return (oidc_cache_shm_entry_t *)(slots + (apr_size_t)(idx - 1) * hdr->entry_size);
 }
 
+/*
+ * the working base header: the apr_shm segment rounded up to a 64-byte boundary. apr_shm's raw base
+ * address is not guaranteed to be 64-aligned, yet oidc_cache_shm_entry_t is declared aligned(64) -
+ * which entitles the compiler to emit aligned SIMD stores into the slots (a misaligned aligned-move
+ * faults with SIGSEGV) - so the whole header|buckets|slots layout is anchored at a 64-aligned
+ * address here. The segment is over-allocated by 64 bytes (see oidc_cache_shm_segment_size) to
+ * absorb the shift, and, being anonymous and inherited across fork, maps at the same base with the
+ * same alignment in every worker process, so all processes compute identical slot addresses.
+ */
+static oidc_cache_shm_header_t *oidc_cache_shm_base(oidc_cache_cfg_shm_t *context) {
+	return (oidc_cache_shm_header_t *)APR_ALIGN((uintptr_t)apr_shm_baseaddr_get(context->shm), 64);
+}
+
 static apr_size_t oidc_cache_shm_segment_size(int size_max, int entry_size_max, apr_uint32_t nbuckets) {
-	return APR_ALIGN(sizeof(oidc_cache_shm_header_t), 64) +
-	       APR_ALIGN((apr_size_t)nbuckets * sizeof(apr_uint32_t), 64) + (apr_size_t)entry_size_max * size_max;
+	/* + 64 absorbs aligning the working base (oidc_cache_shm_base); the per-slot stride is rounded
+	 * up to the entry's 64-byte alignment so, off the aligned base, every slot is 64-aligned too */
+	return 64 + APR_ALIGN(sizeof(oidc_cache_shm_header_t), 64) +
+	       APR_ALIGN((apr_size_t)nbuckets * sizeof(apr_uint32_t), 64) +
+	       APR_ALIGN((apr_size_t)entry_size_max, 64) * size_max;
 }
 
 /* FNV-1a over the section key; must be identical in every process attached to the segment */
@@ -164,10 +180,11 @@ static int oidc_cache_shm_post_config(apr_pool_t *pool, server_rec *s) {
 	}
 
 	/* initialize the header, the (empty) hash buckets and the free list holding all slots */
-	oidc_cache_shm_header_t *hdr = apr_shm_baseaddr_get(context->shm);
+	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	hdr->nslots = (apr_uint32_t)size_max;
 	hdr->nbuckets = nbuckets;
-	hdr->entry_size = (apr_uint32_t)entry_size_max;
+	/* round the slot stride up to the entry's 64-byte alignment (see oidc_cache_shm_segment_size) */
+	hdr->entry_size = (apr_uint32_t)APR_ALIGN((apr_size_t)entry_size_max, 64);
 	_oidc_memset(oidc_cache_shm_buckets(hdr), 0, (apr_size_t)nbuckets * sizeof(apr_uint32_t));
 	for (apr_uint32_t i = 1; i <= hdr->nslots; i++) {
 		oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, i);
@@ -243,7 +260,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
-	oidc_cache_shm_header_t *hdr = apr_shm_baseaddr_get(context->shm);
+	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	apr_uint32_t *bucket = &oidc_cache_shm_buckets(hdr)[oidc_cache_shm_hash(section_key) & (hdr->nbuckets - 1)];
 
 	/* walk the bucket chain, looking for the key */
@@ -386,7 +403,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 
 	const apr_time_t current_time = apr_time_now();
 
-	oidc_cache_shm_header_t *hdr = apr_shm_baseaddr_get(context->shm);
+	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	apr_uint32_t *bucket = &oidc_cache_shm_buckets(hdr)[oidc_cache_shm_hash(section_key) & (hdr->nbuckets - 1)];
 
 	/* walk the bucket chain looking for an existing entry for this key */

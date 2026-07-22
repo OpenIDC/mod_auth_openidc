@@ -1,4 +1,9 @@
 07/22/2026
+- fix: cache/shm: anchor the shm segment (and round the per-slot stride) to a
+  64-byte boundary so the aligned(64) entry slots really are 64-aligned; without
+  this the compiler's aligned SIMD stores into an under-aligned slot fault
+  (SIGSEGV) on builds that vectorize them (e.g. amazonlinux 2023's
+  -march=x86-64-v2)
 - refactor: consolidate the five per-file process-local derived-object caches
   (compiled authz regexes, parsed provider metadata, parsed session state,
   flattened appinfo claim pairs, selected JWKs) onto a single reusable
