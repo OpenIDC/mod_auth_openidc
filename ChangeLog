@@ -1,4 +1,11 @@
 07/22/2026
+- refactor: consolidate the five per-file process-local derived-object caches
+  (compiled authz regexes, parsed provider metadata, parsed session state,
+  flattened appinfo claim pairs, selected JWKs) onto a single reusable
+  util/cache_local module, so the rwlock, write-lock-only pool allocation,
+  bounding/reset, config-reload owner-reset and pool-cleanup ordering live in
+  one tested place instead of being re-implemented in each cache; behavior is
+  unchanged (same keys, freshness validators and refcount/retire semantics)
 - perf: check Redis connections out per request from a per-process idle pool
   instead of serializing every worker thread's network round-trip on one
   shared connection under a mutex; the mutex now only guards the (short) pool

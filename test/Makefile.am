@@ -63,6 +63,7 @@ LDADD += libtest.la @CHECK_LIBS@
 
 oidc_unit_tests = \
 	test_cfg \
+	test_cache_local \
 	test_util \
 	test_jose \
 	test_http \

@@ -76,6 +76,7 @@ libauth_openidc_la_SOURCES = \
 	proto/userinfo.c \
 	util/appinfo.c \
 	util/base64.c \
+	util/cache_local.c \
 	util/expr.c \
 	util/file.c \
 	util/html.c \
@@ -128,6 +129,7 @@ noinst_HEADERS = \
 	proto/proto.h \
 	cache/cache.h \
 	util/util.h \
+	util/cache_local.h \
 	util/pcre_subst.h \
 	oauth.h \
 	metadata.h \
