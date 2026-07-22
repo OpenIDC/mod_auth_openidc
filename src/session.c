@@ -483,8 +483,27 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oid
 static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, oidc_session_t *z) {
 	const char *cookieValue =
 	    oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r), oidc_cfg_session_cookie_chunk_size_get(c));
-	if ((cookieValue != NULL) && (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE))
+
+	if (cookieValue == NULL)
+		return TRUE;
+
+	/* serve the parsed state from the process-level cache when the cookie is unchanged: the
+	 * cookie value acts as both key and validator, and a hit skips the per-request JWE
+	 * decrypt, decompression and JSON parse of the (multi-KB) session document */
+	z->state = oidc_session_cache_get(cookieValue, cookieValue);
+	if (z->state != NULL) {
+		z->state_shared = TRUE;
+		return TRUE;
+	}
+
+	if (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE)
 		return FALSE;
+
+	if (z->state != NULL) {
+		oidc_session_cache_set(cookieValue, cookieValue, z->state);
+		z->state_shared = TRUE;
+	}
+
 	return TRUE;
 }
 

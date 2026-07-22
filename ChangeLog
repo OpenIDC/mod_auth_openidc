@@ -1,4 +1,9 @@
 07/22/2026
+- perf: extend the parsed-session cache to client-cookie sessions, with the
+  cookie value acting as both cache key and validator, so an unchanged session
+  cookie skips the per-request JWE decryption, decompression and JSON parse; a
+  full authenticated request with client-cookie sessions measures 50% faster
+  (35.8us -> 18.0us), on par with server-cache sessions
 - perf: keep a small pool of reusable libcurl easy handles instead of creating
   and destroying one per outbound call: a reused handle retains its connection
   cache, DNS cache and TLS session cache, so consecutive requests to the same
