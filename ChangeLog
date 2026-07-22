@@ -1,4 +1,10 @@
 07/22/2026
+- perf: hand out JWKs-cache keys as shared objects instead of per-request
+  refcounted copies: cjose's key refcount is not atomic, so the previous
+  copy-with-retain on the (concurrent) cache read path was a data race under
+  threaded MPMs; shared keys are marked so oidc_jwk_destroy leaves the backend
+  object alone, and purged/replaced keys are retired until pool cleanup since
+  in-flight requests may still use them
 - perf: restore the parsed id_token/userinfo/scope request state from the
   previous request on internal redirects (ErrorDocument, mod_rewrite) instead
   of re-loading and re-parsing the whole session from the cache; the session

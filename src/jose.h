@@ -201,6 +201,10 @@ typedef struct oidc_jwk_t {
 	 * void* so this public header needs no backend types: only jose.c and the jose/ subdirectory,
 	 * which include the real backend header, may dereference or operate on it */
 	void *cjose_jwk;
+	/* TRUE for a process-lifetime shared (cached) key: oidc_jwk_destroy then leaves the backend
+	 * key object alone, so per-request consumers never mutate the (non-atomic) backend refcount
+	 * of an object other threads use concurrently; owned exclusively by the cache in proto/jwks.c */
+	int shared;
 } oidc_jwk_t;
 
 /* decrypt a JWT */
