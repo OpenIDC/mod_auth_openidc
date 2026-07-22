@@ -1838,6 +1838,7 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 
 	oidc_http_init();
 	oidc_authz_pcre_cache_init(pool);
+	oidc_proto_jwks_cache_init(pool);
 
 #if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();

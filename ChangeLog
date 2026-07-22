@@ -1,4 +1,11 @@
 07/22/2026
+- perf: cache parsed JWKs selection results per process keyed by
+  (jwks-uri, kid, x5t, kty) so repeated JWT validations against the same
+  signing key skip the per-validation JSON decode of the JWKs document and
+  the bignum-parsing cjose key imports (~4us per RSA key import); entries
+  expire in lockstep with the JWKs refresh interval, a forced refresh
+  (suspected key rollover) purges the cache, and the refcounted cjose keys
+  keep request-held copies safe across a purge
 - perf: take a shared (instead of exclusive) file lock when reading file-cache
   entries so concurrent requests reading the same (session) entry no longer
   serialize; writers are unaffected (they write a temp file and atomically

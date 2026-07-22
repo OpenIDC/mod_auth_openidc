@@ -44,6 +44,150 @@
 #include "proto/proto.h"
 #include "util/util.h"
 
+#include <apr_thread_rwlock.h>
+
+/*
+ * process-lifetime cache of JWKs selection results: maps (jwks-uri, kid, x5t, kty) to the list
+ * of parsed keys that selection produced, so repeated validations against the same signing key
+ * skip the per-request JSON decode of the JWKs document and the (expensive, bignum-parsing)
+ * cjose key imports; entries expire in lockstep with the JWKs refresh interval and the whole
+ * cache is purged on a forced refresh (suspected key rollover), preserving today's rotation
+ * behavior; the cached cjose keys are refcounted so request-held copies survive a purge
+ */
+typedef struct oidc_proto_jwks_cache_entry_t {
+	apr_time_t expires;
+	apr_array_header_t *jwks;
+} oidc_proto_jwks_cache_entry_t;
+
+static apr_hash_t *_oidc_proto_jwks_cache = NULL;
+static apr_pool_t *_oidc_proto_jwks_cache_pool = NULL;
+#if APR_HAS_THREADS
+static apr_thread_rwlock_t *_oidc_proto_jwks_cache_rwlock = NULL;
+#endif
+
+/* bounds the cache; reached only with many providers/kids, then the cache is simply reset */
+#define OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES 64
+
+static void oidc_proto_jwks_cache_rdlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_rwlock_rdlock(_oidc_proto_jwks_cache_rwlock);
+#endif
+}
+
+static void oidc_proto_jwks_cache_wrlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_rwlock_wrlock(_oidc_proto_jwks_cache_rwlock);
+#endif
+}
+
+static void oidc_proto_jwks_cache_unlock(void) {
+#if APR_HAS_THREADS
+	apr_thread_rwlock_unlock(_oidc_proto_jwks_cache_rwlock);
+#endif
+}
+
+/* release all cached entries; must be called with the write lock held (or at pool cleanup) */
+static void oidc_proto_jwks_cache_clear_unlocked(void) {
+	apr_hash_index_t *hi = NULL;
+	void *val = NULL;
+	if (_oidc_proto_jwks_cache == NULL)
+		return;
+	for (hi = apr_hash_first(NULL, _oidc_proto_jwks_cache); hi; hi = apr_hash_next(hi)) {
+		oidc_proto_jwks_cache_entry_t *entry = NULL;
+		apr_hash_this(hi, NULL, NULL, &val);
+		entry = (oidc_proto_jwks_cache_entry_t *)val;
+		for (int i = 0; i < entry->jwks->nelts; i++)
+			oidc_jwk_destroy(APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *));
+	}
+	apr_hash_clear(_oidc_proto_jwks_cache);
+}
+
+static apr_status_t oidc_proto_jwks_cache_cleanup(void *data) {
+	oidc_proto_jwks_cache_clear_unlocked();
+	_oidc_proto_jwks_cache = NULL;
+	_oidc_proto_jwks_cache_pool = NULL;
+#if APR_HAS_THREADS
+	_oidc_proto_jwks_cache_rwlock = NULL;
+#endif
+	return APR_SUCCESS;
+}
+
+void oidc_proto_jwks_cache_init(apr_pool_t *pool) {
+	if (_oidc_proto_jwks_cache != NULL)
+		return;
+#if APR_HAS_THREADS
+	if (apr_thread_rwlock_create(&_oidc_proto_jwks_cache_rwlock, pool) != APR_SUCCESS)
+		return;
+#endif
+	_oidc_proto_jwks_cache = apr_hash_make(pool);
+	_oidc_proto_jwks_cache_pool = pool;
+	apr_pool_cleanup_register(pool, NULL, oidc_proto_jwks_cache_cleanup, apr_pool_cleanup_null);
+}
+
+static void oidc_proto_jwks_cache_purge(void) {
+	if (_oidc_proto_jwks_cache == NULL)
+		return;
+	oidc_proto_jwks_cache_wrlock();
+	oidc_proto_jwks_cache_clear_unlocked();
+	oidc_proto_jwks_cache_unlock();
+}
+
+/* copy the cached selection result for the specified key into the result hash */
+static apr_byte_t oidc_proto_jwks_cache_get(request_rec *r, const char *sel_key, const char *x5t, apr_hash_t *result) {
+	oidc_proto_jwks_cache_entry_t *entry = NULL;
+	apr_byte_t rv = FALSE;
+
+	if (_oidc_proto_jwks_cache == NULL)
+		return FALSE;
+
+	oidc_proto_jwks_cache_rdlock();
+	entry = apr_hash_get(_oidc_proto_jwks_cache, sel_key, APR_HASH_KEY_STRING);
+	if ((entry != NULL) && (entry->expires > apr_time_now())) {
+		for (int i = 0; i < entry->jwks->nelts; i++) {
+			/* re-key the result the way selection does: kid, x5t or a unique counter */
+			oidc_jwk_t *jwk = oidc_jwk_copy(r->pool, APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *));
+			const char *hkey =
+			    jwk->kid ? jwk->kid : (x5t ? x5t : apr_psprintf(r->pool, "%d", apr_hash_count(result)));
+			apr_hash_set(result, hkey, APR_HASH_KEY_STRING, jwk);
+		}
+		rv = TRUE;
+	}
+	oidc_proto_jwks_cache_unlock();
+
+	return rv;
+}
+
+/* store a non-empty selection result under the specified key, bounded by the refresh interval */
+static void oidc_proto_jwks_cache_set(const char *sel_key, apr_hash_t *result, int refresh_interval) {
+	oidc_proto_jwks_cache_entry_t *entry = NULL;
+	apr_hash_index_t *hi = NULL;
+	void *val = NULL;
+
+	if ((_oidc_proto_jwks_cache == NULL) || (apr_hash_count(result) < 1))
+		return;
+
+	oidc_proto_jwks_cache_wrlock();
+	if (apr_hash_count(_oidc_proto_jwks_cache) >= OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES)
+		oidc_proto_jwks_cache_clear_unlocked();
+	/* release the keys of an (expired) entry this store replaces */
+	entry = apr_hash_get(_oidc_proto_jwks_cache, sel_key, APR_HASH_KEY_STRING);
+	if (entry != NULL)
+		for (int i = 0; i < entry->jwks->nelts; i++)
+			oidc_jwk_destroy(APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *));
+	/* the cache pool is only ever allocated from under the write lock (pools are not thread-safe) */
+	entry = apr_palloc(_oidc_proto_jwks_cache_pool, sizeof(oidc_proto_jwks_cache_entry_t));
+	entry->expires = apr_time_now() + apr_time_from_sec(refresh_interval);
+	entry->jwks = apr_array_make(_oidc_proto_jwks_cache_pool, apr_hash_count(result), sizeof(oidc_jwk_t *));
+	for (hi = apr_hash_first(NULL, result); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, NULL, NULL, &val);
+		APR_ARRAY_PUSH(entry->jwks, oidc_jwk_t *) =
+		    oidc_jwk_copy(_oidc_proto_jwks_cache_pool, (oidc_jwk_t *)val);
+	}
+	apr_hash_set(_oidc_proto_jwks_cache, apr_pstrdup(_oidc_proto_jwks_cache_pool, sel_key), APR_HASH_KEY_STRING,
+		     entry);
+	oidc_proto_jwks_cache_unlock();
+}
+
 /*
  * when no kid/x5t was specified, include the JWK in the result if it is usable for signing;
  * takes ownership of jwk (either inserts it into result or destroys it)
@@ -154,6 +298,20 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 				    int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh) {
 
 	oidc_json_t *j_jwks = NULL;
+	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);
+	const char *cache_uri = jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
+	const char *sel_key = (cache_uri != NULL) ? apr_psprintf(r->pool, "%s#%s#%s#%d", cache_uri,
+								 jwt->header.kid ? jwt->header.kid : "", x5t ? x5t : "",
+								 oidc_jwt_alg2kty(jwt))
+						  : NULL;
+
+	if (*force_refresh == TRUE) {
+		/* suspected key rollover: all cached selection results may derive from stale JWKs */
+		oidc_proto_jwks_cache_purge();
+	} else if ((sel_key != NULL) && (oidc_proto_jwks_cache_get(r, sel_key, x5t, keys) == TRUE)) {
+		oidc_debug(r, "returning %d cached parsed key(s) for %s", apr_hash_count(keys), sel_key);
+		return TRUE;
+	}
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified
 	 * provider->jwk_uri) */
@@ -186,6 +344,10 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 		*force_refresh = TRUE;
 		return oidc_proto_jwks_uri_keys(r, cfg, jwt, jwks_uri, ssl_validate_server, keys, force_refresh);
 	}
+
+	/* keep the parsed selection result for subsequent validations against the same signing key */
+	if (sel_key != NULL)
+		oidc_proto_jwks_cache_set(sel_key, keys, oidc_cfg_jwks_uri_refresh_interval_get(jwks_uri));
 
 	oidc_debug(r, "returning %d key(s) obtained from the (possibly cached) JWKs URI", apr_hash_count(keys));
 
