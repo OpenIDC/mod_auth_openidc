@@ -20,6 +20,7 @@
 /test_cfg
 /test_http
 /test_cache
+/test_cache_local
 /test_proto
 /test_handle
 /test_state
