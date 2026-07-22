@@ -62,8 +62,8 @@ typedef struct oidc_appinfo_cache_entry_t {
 
 static oidc_cache_local_t *_oidc_appinfo_cache = NULL;
 
-/* bounds the cache; entries for changed sessions go stale until the reset-on-overflow */
-#define OIDC_APPINFO_CACHE_MAX_ENTRIES 256
+/* bounds the cache; on overflow the least-recently-used entry is evicted, retaining the hot set */
+#define OIDC_APPINFO_CACHE_MAX_ENTRIES 1000
 
 /* replays a single flattened pair into the request (defined below; used by the cache use callback) */
 static void oidc_util_appinfo_pair_apply(request_rec *r, const char *s_name, const char *s_value,
@@ -122,12 +122,12 @@ static void *oidc_util_appinfo_cache_build(apr_pool_t *pool, const char *key, vo
 	return entry;
 }
 
-void oidc_util_appinfo_cache_init(apr_pool_t *pool) {
+void oidc_util_appinfo_cache_init(apr_pool_t *pool, server_rec *s) {
 	/* pinning/sharing JSON objects across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
 	oidc_cache_local_create(&_oidc_appinfo_cache, pool, "appinfo", OIDC_APPINFO_CACHE_MAX_ENTRIES, TRUE,
-				oidc_util_appinfo_cache_free);
+				oidc_util_appinfo_cache_free, oidc_util_cache_local_warn, s);
 }
 
 static const char *oidc_util_appinfo_cache_key(apr_pool_t *pool, const oidc_json_t *j_attrs, const char *claim_prefix,

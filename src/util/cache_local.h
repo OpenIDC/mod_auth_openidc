@@ -63,11 +63,21 @@ typedef int (*oidc_cache_local_validate_fn)(void *value, const void *ctx);
  * it out into `baton` - so it cannot be evicted/freed between the lookup and the caller using it */
 typedef void (*oidc_cache_local_use_fn)(void *value, void *baton);
 
+/* called (rate-limited) when a full cache evicts a still-recently-used entry, i.e. it is too small
+ * for the load; `log_ctx` is the opaque context passed to create. Kept as a callback so this module
+ * stays free of any server/logging dependency (and its unit test needs no Apache stubs). */
+typedef void (*oidc_cache_local_log_fn)(void *log_ctx, const char *name, int max_entries);
+
 /*
  * create a cache in `pool` (process/worker lifetime). `max_entries` bounds it; on overflow either
- * the whole cache is reset (`reset_on_full` != 0 — safe only when values are refcounted/copied so
- * in-flight holders are unaffected) or new keys are simply not cached (`reset_on_full` == 0 — use
- * this when consumers borrow the stored value, e.g. compiled programs handed out by reference).
+ * the least-recently-used entry is evicted (`evict_on_full` != 0 — safe only when values are
+ * refcounted/copied so in-flight holders are unaffected) or new keys are simply not cached
+ * (`evict_on_full` == 0 — use this when consumers borrow the stored value, e.g. compiled programs
+ * handed out by reference).
+ *
+ * `log_full`, when non-NULL, is invoked (rate-limited) with `log_ctx` whenever an eviction discards
+ * an entry that was accessed recently, so an operator can be warned the cache is undersized for the
+ * concurrency; pass NULL to stay silent.
  *
  * `owner`, when non-NULL, is the address of the caller's cache pointer: `*owner` is set to the new
  * cache and reset to NULL at pool cleanup, so a config reload (new pool) re-creates the cache
@@ -78,7 +88,8 @@ typedef void (*oidc_cache_local_use_fn)(void *value, void *baton);
  * functions below tolerate a NULL cache).
  */
 oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool_t *pool, const char *name,
-					    int max_entries, int reset_on_full, oidc_cache_local_free_fn free_value);
+					    int max_entries, int evict_on_full, oidc_cache_local_free_fn free_value,
+					    oidc_cache_local_log_fn log_full, void *log_ctx);
 
 /* evict every entry (calling `free_value` for each) without tearing the cache down, e.g. to force a
  * full refresh; safe to call concurrently with lookups/stores (takes the write lock) */

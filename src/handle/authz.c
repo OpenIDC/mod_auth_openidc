@@ -73,8 +73,9 @@ static void *oidc_authz_pcre_compile(apr_pool_t *pool, const char *key, void *ba
 }
 
 void oidc_authz_pcre_cache_init(apr_pool_t *pool) {
+	/* FALSE = stop-on-full (compiled programs are borrowed by reference, never evicted); no warn hook */
 	oidc_cache_local_create(&_oidc_authz_pcre_cache, pool, "authz-pcre", OIDC_AUTHZ_PCRE_CACHE_MAX_ENTRIES, FALSE,
-				oidc_authz_pcre_free_value);
+				oidc_authz_pcre_free_value, NULL, NULL);
 }
 
 /*

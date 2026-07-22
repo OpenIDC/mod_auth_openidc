@@ -1,4 +1,11 @@
 07/22/2026
+- perf: give the process-local derived-object caches a proper LRU eviction and
+  an overflow warning: on a full cache the least-recently-used entry is evicted
+  (retaining the hot working set) instead of clearing the whole cache, and a
+  rate-limited warning is logged when a still-recently-used entry has to be
+  evicted so an operator can tell the cache is undersized for the concurrency;
+  the session and appinfo cache defaults are raised (500->2000, 256->1000) for
+  high-concurrency deployments (e.g. OIDCCacheShmMax-sized session stores)
 - fix: cache/shm: anchor the shm segment (and round the per-slot stride) to a
   64-byte boundary so the aligned(64) entry slots really are 64-aligned; without
   this the compiler's aligned SIMD stores into an under-aligned slot fault

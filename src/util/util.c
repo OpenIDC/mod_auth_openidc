@@ -593,6 +593,20 @@ void oidc_util_apr_hash_clear(apr_hash_t *ht) {
 /*
  * return the OpenSSL version we compiled against
  */
+/*
+ * an oidc_cache_local_log_fn adapter: warn (server-level) that a process-local cache is undersized
+ * for the load. Lives here (not in util/cache_local.c) so that module stays free of any Apache
+ * logging dependency; the caches pass this together with their server_rec as the log context.
+ */
+void oidc_util_cache_local_warn(void *log_ctx, const char *name, int max_entries) {
+	server_rec *s = (server_rec *)log_ctx;
+	oidc_swarn(s,
+		   "the process-local \"%s\" cache is full (max %d entries) and is now evicting "
+		   "recently-used entries; under very high concurrency this lowers its per-process "
+		   "memoization hit rate (it sits on top of the shared cache and does not affect correctness)",
+		   name, max_entries);
+}
+
 char *oidc_util_openssl_version(apr_pool_t *pool) {
 	char *s_version = NULL;
 #ifdef OPENSSL_VERSION_STR

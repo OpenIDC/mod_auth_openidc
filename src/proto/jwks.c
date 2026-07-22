@@ -140,7 +140,7 @@ static apr_status_t oidc_proto_jwks_cache_retired_cleanup(void *data) {
 	return APR_SUCCESS;
 }
 
-void oidc_proto_jwks_cache_init(apr_pool_t *pool) {
+void oidc_proto_jwks_cache_init(apr_pool_t *pool, server_rec *s) {
 	/* also guards the (non-idempotent) retired-list creation below against a repeated init */
 	if (_oidc_proto_jwks_cache != NULL)
 		return;
@@ -149,7 +149,7 @@ void oidc_proto_jwks_cache_init(apr_pool_t *pool) {
 	 * still-cached key, so by the time it fires the retired list holds them all for release */
 	apr_pool_cleanup_register(pool, NULL, oidc_proto_jwks_cache_retired_cleanup, apr_pool_cleanup_null);
 	oidc_cache_local_create(&_oidc_proto_jwks_cache, pool, "proto-jwks", OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES, TRUE,
-				oidc_proto_jwks_cache_free);
+				oidc_proto_jwks_cache_free, oidc_util_cache_local_warn, s);
 }
 
 static void oidc_proto_jwks_cache_purge(void) {

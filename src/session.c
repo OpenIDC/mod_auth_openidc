@@ -65,8 +65,9 @@ typedef struct oidc_session_cache_entry_t {
 
 static oidc_cache_local_t *_oidc_session_cache = NULL;
 
-/* bounds the per-process cache; on overflow it is reset and repopulates with the hot sessions */
-#define OIDC_SESSION_CACHE_MAX_ENTRIES 500
+/* bounds the per-process cache; on overflow the least-recently-used session is evicted, so the hot
+ * working set is retained (sized generously for high-concurrency deployments) */
+#define OIDC_SESSION_CACHE_MAX_ENTRIES 2000
 
 /* release an entry: drop the (atomic) state reference and return the subpool holding raw+entry */
 static void oidc_session_cache_free(void *value) {
@@ -105,12 +106,12 @@ static void *oidc_session_cache_build(apr_pool_t *pool, const char *key, void *b
 	return entry;
 }
 
-void oidc_session_cache_init(apr_pool_t *pool) {
+void oidc_session_cache_init(apr_pool_t *pool, server_rec *s) {
 	/* sharing parsed JSON across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
 	oidc_cache_local_create(&_oidc_session_cache, pool, "session", OIDC_SESSION_CACHE_MAX_ENTRIES, TRUE,
-				oidc_session_cache_free);
+				oidc_session_cache_free, oidc_util_cache_local_warn, s);
 }
 
 /* return a new reference to the cached parsed state when the raw session document is unchanged */

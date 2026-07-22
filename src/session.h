@@ -62,7 +62,7 @@ typedef struct {
 /* value that indicates to use client cookie based session tracking */
 #define OIDC_SESSION_TYPE_CLIENT_COOKIE 1
 
-void oidc_session_cache_init(apr_pool_t *pool);
+void oidc_session_cache_init(apr_pool_t *pool, server_rec *s);
 apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **z);
 typedef enum {
 	OIDC_SESSION_SAVE_UPDATE = 0, /* update an existing session */

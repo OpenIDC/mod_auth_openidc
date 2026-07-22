@@ -49,7 +49,7 @@
 #include "json.h"
 
 // appinfo.c
-void oidc_util_appinfo_cache_init(apr_pool_t *pool);
+void oidc_util_appinfo_cache_init(apr_pool_t *pool, server_rec *s);
 void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
 			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
 void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char *claim_prefix,
@@ -147,6 +147,8 @@ apr_byte_t oidc_util_hash_string_and_base64url_encode(request_rec *r, const char
 						      char **output);
 int oidc_util_strnenvcmp(const char *a, const char *b, int len);
 char *oidc_util_openssl_version(apr_pool_t *pool);
+/* oidc_cache_local_log_fn adapter warning that a process-local cache is undersized (log_ctx = server_rec *) */
+void oidc_util_cache_local_warn(void *log_ctx, const char *name, int max_entries);
 apr_byte_t oidc_util_issuer_match(const char *a, const char *b);
 apr_hash_t *oidc_util_spaced_string_to_hashtable(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_util_spaced_string_equals(apr_pool_t *pool, const char *a, const char *b);

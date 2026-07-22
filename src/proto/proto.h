@@ -180,7 +180,7 @@ apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, co
 // jwks.c
 apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
 				    int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh);
-void oidc_proto_jwks_cache_init(apr_pool_t *pool);
+void oidc_proto_jwks_cache_init(apr_pool_t *pool, server_rec *s);
 
 // jwt.c
 apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt, const oidc_jwks_uri_t *jwks_uri,
