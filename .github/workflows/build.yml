@@ -338,6 +338,13 @@ jobs:
     # was before -Werror: an unknown -Werror=<name> is likewise only a warning).
     # Pin a newer clang here if it needs to be enforced rather than merely
     # available to local runs.
+    #
+    # -Wno-null-pointer-subtraction likewise: APR's ring macros (APR_RING_*, via
+    # APR_BRIGADE_INSERT_TAIL) do offsetof-style arithmetic on a null pointer.
+    # clang blames the file the macro expands in, so it surfaces as errors in
+    # our sources even though the construct is entirely APR's. Only the older
+    # apr_ring.h on the runner (APR 1.7.2) trips it; APR 1.7.6 does not, which
+    # is why a local clang build stays clean.
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
@@ -352,7 +359,7 @@ jobs:
         ./autogen.sh
         ./configure --with-jq CC=clang \
           CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
-                  -Wno-unknown-warning-option \
+                  -Wno-unknown-warning-option -Wno-null-pointer-subtraction \
                   -Wimplicit-int-conversion -Wcast-function-type-mismatch -Werror"
         # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
         # -ffat-lto-objects); strip them on the clang leg so an older runner
