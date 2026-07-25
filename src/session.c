@@ -56,12 +56,24 @@
  * init function leaves the cache disabled otherwise) and the session setters copy-on-write, so
  * the rare mutating request works on a private copy. Each entry owns a private subpool so
  * evicted/replaced entries return their (multi-KB raw-string) memory.
+ *
+ * The cache is process-wide but every entry records the server config it was decoded under, and a
+ * lookup only hits when that config matches, which keeps sessions from leaking across virtual
+ * hosts; see oidc_session_cache_valid.
  */
 typedef struct oidc_session_cache_entry_t {
 	apr_pool_t *pool;
 	char *raw;
 	oidc_json_t *state;
+	/* the server config the entry was decoded under; see oidc_session_cache_valid */
+	const oidc_cfg_t *cfg;
 } oidc_session_cache_entry_t;
+
+/* what a lookup is validated against: the raw session document plus the config that produced it */
+typedef struct oidc_session_cache_ctx_t {
+	const char *raw;
+	const oidc_cfg_t *cfg;
+} oidc_session_cache_ctx_t;
 
 static oidc_cache_local_t *_oidc_session_cache = NULL;
 
@@ -76,9 +88,17 @@ static void oidc_session_cache_free(void *value) {
 	apr_pool_destroy(entry->pool);
 }
 
-/* freshness: the parsed state is valid while the raw session document is byte-for-byte unchanged */
+/*
+ * freshness: the parsed state is valid while the raw session document is byte-for-byte unchanged
+ * *and* the entry was produced under the same server config. The config check scopes the cache per
+ * virtual host: in client-cookie mode the raw document is the session cookie itself, so without it
+ * a hit on a cookie minted by another vhost would hand back that vhost's session and skip the
+ * OIDCCryptoPassphrase decrypt that is the only thing authenticating a self-contained cookie.
+ */
 static int oidc_session_cache_valid(void *value, const void *ctx) {
-	return _oidc_strcmp(((oidc_session_cache_entry_t *)value)->raw, (const char *)ctx) == 0;
+	const oidc_session_cache_entry_t *entry = value;
+	const oidc_session_cache_ctx_t *vctx = ctx;
+	return (entry->cfg == vctx->cfg) && (_oidc_strcmp(entry->raw, vctx->raw) == 0);
 }
 
 /* under the read lock: hand out a new (atomic) reference to the cached state */
@@ -89,6 +109,7 @@ static void oidc_session_cache_use(void *value, void *baton) {
 struct oidc_session_cache_build_ctx {
 	const char *raw;
 	oidc_json_t *state;
+	const oidc_cfg_t *cfg;
 };
 
 /* under the write lock: build an entry in its own subpool, copying the raw string and referencing
@@ -103,6 +124,7 @@ static void *oidc_session_cache_build(apr_pool_t *pool, const char *key, void *b
 	entry->pool = entry_pool;
 	entry->raw = apr_pstrdup(entry_pool, ctx->raw);
 	entry->state = oidc_json_incref(ctx->state);
+	entry->cfg = ctx->cfg;
 	return entry;
 }
 
@@ -115,16 +137,17 @@ void oidc_session_cache_init(apr_pool_t *pool, server_rec *s) {
 }
 
 /* return a new reference to the cached parsed state when the raw session document is unchanged */
-static oidc_json_t *oidc_session_cache_get(const char *uuid, const char *raw) {
+static oidc_json_t *oidc_session_cache_get(const oidc_cfg_t *c, const char *uuid, const char *raw) {
+	const oidc_session_cache_ctx_t vctx = {.raw = raw, .cfg = c};
 	oidc_json_t *json = NULL;
-	oidc_cache_local_get_use(_oidc_session_cache, uuid, oidc_session_cache_valid, raw, oidc_session_cache_use,
+	oidc_cache_local_get_use(_oidc_session_cache, uuid, oidc_session_cache_valid, &vctx, oidc_session_cache_use,
 				 &json);
 	return json;
 }
 
 /* store a new reference to the parsed state, keyed by session id and validated by the raw string */
-static void oidc_session_cache_set(const char *uuid, const char *raw, oidc_json_t *state) {
-	struct oidc_session_cache_build_ctx ctx = {.raw = raw, .state = state};
+static void oidc_session_cache_set(const oidc_cfg_t *c, const char *uuid, const char *raw, oidc_json_t *state) {
+	struct oidc_session_cache_build_ctx ctx = {.raw = raw, .state = state, .cfg = c};
 	oidc_cache_local_set_build(_oidc_session_cache, uuid, oidc_session_cache_build, &ctx);
 }
 
@@ -283,13 +306,13 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, const oidc_cfg_t *c, 
 	if ((rc == TRUE) && (s_json != NULL)) {
 		/* serve the parsed state from the process-level cache when the document is unchanged;
 		 * the shared reference is read-only and the setters copy-on-write before mutating */
-		z->state = oidc_session_cache_get(uuid, s_json);
+		z->state = oidc_session_cache_get(c, uuid, s_json);
 		if (z->state != NULL) {
 			z->state_shared = TRUE;
 		} else {
 			rc = oidc_session_decode(r, c, z, s_json, FALSE);
 			if (rc == TRUE) {
-				oidc_session_cache_set(uuid, s_json, z->state);
+				oidc_session_cache_set(c, uuid, s_json, z->state);
 				z->state_shared = TRUE;
 			}
 		}
@@ -433,8 +456,10 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, 
 
 	/* serve the parsed state from the process-level cache when the cookie is unchanged: the
 	 * cookie value acts as both key and validator, and a hit skips the per-request JWE
-	 * decrypt, decompression and JSON parse of the (multi-KB) session document */
-	z->state = oidc_session_cache_get(cookieValue, cookieValue);
+	 * decrypt, decompression and JSON parse of the (multi-KB) session document. The validator
+	 * also pins the entry to this server config, so a cookie minted by another virtual host
+	 * cannot be served from the cache without passing that vhost's decrypt first. */
+	z->state = oidc_session_cache_get(c, cookieValue, cookieValue);
 	if (z->state != NULL) {
 		z->state_shared = TRUE;
 		return TRUE;
@@ -444,7 +469,7 @@ static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, 
 		return FALSE;
 
 	if (z->state != NULL) {
-		oidc_session_cache_set(cookieValue, cookieValue, z->state);
+		oidc_session_cache_set(c, cookieValue, cookieValue, z->state);
 		z->state_shared = TRUE;
 	}
 
