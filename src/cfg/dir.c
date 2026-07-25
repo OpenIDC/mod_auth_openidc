@@ -147,8 +147,6 @@ const char *oidc_cmd_dir_pass_idtoken_as_set(cmd_parms *cmd, void *m, const char
  */
 static const char *oidc_cfg_dir_parse_pass_userinfo_as(apr_pool_t *pool, const char *v,
 						       oidc_pass_user_info_as_t **result) {
-	char *name = NULL;
-	char *value = NULL;
 	const char *rv = NULL;
 	/* only read when the parse below succeeds and has written it; seeded so the optimizer does not
 	 * have to prove that across the call (-Wmaybe-uninitialized) */
@@ -159,14 +157,12 @@ static const char *oidc_cfg_dir_parse_pass_userinfo_as(apr_pool_t *pool, const c
 	    {OIDC_PASS_USERINFO_AS_JWT, OIDC_PASS_USERINFO_AS_JWT_STR},
 	    {OIDC_PASS_USERINFO_AS_SIGNED_JWT, OIDC_PASS_USERINFO_AS_SIGNED_JWT_STR}};
 
-	/* split "<type>:<name>" on a private copy: `v` is a const string that oidc_cfg_dir_post_config
-	 * supplies as a string literal, so truncating it in place would write to read-only memory */
-	value = apr_pstrdup(pool, v);
-	name = _oidc_strstr(value, ":");
-	if (name) {
-		*name = '\0';
-		name++;
-	}
+	/* split "<type>:<name>" without writing into `v`: oidc_cfg_dir_post_config passes the default
+	 * as a string literal, so truncating it in place would write to read-only memory. Copying out
+	 * just the type also avoids duplicating the whole string when there is no separator at all. */
+	const char *sep = _oidc_strstr(v, ":");
+	const char *value = (sep != NULL) ? apr_pstrndup(pool, v, (apr_size_t)(sep - v)) : v;
+	const char *name = (sep != NULL) ? sep + 1 : NULL;
 
 	rv = oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), value, (int *)&type);
 	if (rv != NULL)
