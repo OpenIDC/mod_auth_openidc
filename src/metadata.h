@@ -64,6 +64,8 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg_t *cfg, const char *select
 			     apr_byte_t allow_discovery);
 apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jwks_uri_t *jwks_uri,
 				  int ssl_validate_server, oidc_json_t **j_jwks, apr_byte_t *refresh);
+/* TRUE when a forced refresh of this jwks_uri is currently rate-limited; see metadata/jwks.c */
+apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oidc_jwks_uri_t *jwks_uri);
 apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, const oidc_json_t *j_provider);
 
 #endif /* _MOD_AUTH_OPENIDC_METADATA_H_ */

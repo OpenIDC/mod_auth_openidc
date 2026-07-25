@@ -45,6 +45,45 @@ static const char *oidc_metadata_jwks_cache_key(const oidc_jwks_uri_t *jwks_uri)
 	return jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
 }
 
+/* rate-limit forced (i.e. cache-bypassing) refreshes of a jwks_uri to one per this many seconds */
+#define OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL 60
+
+/* postfix distinguishing the forced-refresh marker from the JWKs document under the same key */
+#define OIDC_METADATA_JWKS_FORCED_REFRESH_POSTFIX "#forced"
+
+/* the shared-cache key recording that a forced refresh of this jwks_uri was recently attempted */
+static const char *oidc_metadata_jwks_forced_refresh_key(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
+	return apr_pstrcat(r->pool, oidc_metadata_jwks_cache_key(jwks_uri), OIDC_METADATA_JWKS_FORCED_REFRESH_POSTFIX,
+			   NULL);
+}
+
+/*
+ * TRUE when a forced refresh of this jwks_uri was already attempted within the rate-limit window.
+ *
+ * A forced refresh bypasses the cached JWKs and fetches the jwks_uri directly. It is triggered by an
+ * unrecognized "kid"/"x5t" or by a signature that does not verify, both of which come straight off an
+ * unauthenticated request when the module runs as a Resource Server. Without a rate limit every such
+ * request turns into a synchronous outbound fetch: an amplification vector against the OP, and a way
+ * to pin a worker thread for up to OIDCHTTPTimeoutLong. The window is short enough that a genuine key
+ * rollover still recovers on the first request that observes it.
+ *
+ * Deliberately free of side effects, so the selection-cache purge in proto/jwks.c can gate on the
+ * same decision; oidc_metadata_jwks_get() records the attempt.
+ */
+apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
+	char *value = NULL;
+	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), &value) == FALSE)
+		return FALSE;
+	return (value != NULL);
+}
+
+/* record a forced-refresh attempt so the next one within the window is rate-limited; stamped before
+ * the fetch rather than after it, so a jwks_uri that is down or slow is not retried per request */
+static void oidc_metadata_jwks_forced_refresh_stamp(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
+	oidc_cache_set_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), "1",
+			    apr_time_now() + apr_time_from_sec(OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL));
+}
+
 /*
  * checks if a parsed JWKs file is a valid one, cq. contains "keys"
  */
@@ -152,10 +191,20 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 
 	/* see if we need to do a forced refresh */
 	if (*refresh == TRUE) {
-		oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"", url);
-		if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, ssl_validate_server, j_jwks) == TRUE)
-			return TRUE;
-		// else: fall back to any cached JWKs
+		if (oidc_metadata_jwks_forced_refresh_throttled(r, jwks_uri) == TRUE) {
+			oidc_debug(r,
+				   "not refreshing the JWKs from URI \"%s\": a forced refresh was already "
+				   "attempted less than %d seconds ago",
+				   url, OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL);
+			// fall back to any cached JWKs
+		} else {
+			oidc_metadata_jwks_forced_refresh_stamp(r, jwks_uri);
+			oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"", url);
+			if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, ssl_validate_server, j_jwks) ==
+			    TRUE)
+				return TRUE;
+			// else: fall back to any cached JWKs
+		}
 	}
 
 	/* see if the JWKs is cached and decodes cleanly (a cached error response is treated as a miss) */

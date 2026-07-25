@@ -290,8 +290,12 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 				  : NULL;
 
 	if (*force_refresh == TRUE) {
-		/* suspected key rollover: all cached selection results may derive from stale JWKs */
-		oidc_proto_jwks_cache_purge();
+		/* suspected key rollover: all cached selection results may derive from stale JWKs.
+		 * Gate this on the same rate limit as the download it accompanies, otherwise a stream of
+		 * requests carrying an unknown "kid" - which needs no authentication to send - keeps the
+		 * selection cache permanently empty even once the fetch itself is throttled. */
+		if (oidc_metadata_jwks_forced_refresh_throttled(r, jwks_uri) == FALSE)
+			oidc_proto_jwks_cache_purge();
 	} else if ((sel_key != NULL) && (oidc_proto_jwks_cache_get(r, sel_key, x5t, keys) == TRUE)) {
 		oidc_debug(r, "returning %d cached parsed key(s) for %s", apr_hash_count(keys), sel_key);
 		return TRUE;
