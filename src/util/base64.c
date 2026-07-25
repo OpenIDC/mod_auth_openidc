@@ -66,14 +66,15 @@ int oidc_util_base64url_encode(request_rec *r, char **dst, const char *src, int 
 		i++;
 	}
 	if (padding == OIDC_BASE64URL_PADDING_STRIP) {
-		/* remove /0 and padding */
-		if (enc_len > 0)
-			enc_len--;
-		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
-			enc_len--;
-		if ((enc_len > 0) && (enc[enc_len - 1] == ','))
-			enc_len--;
-		enc[enc_len] = '\0';
+		/* the loop above already walked to the terminator, so `i` is the encoded length; drop the
+		 * padding from it (base64 emits at most two '=', rewritten to ',' above). Deriving the
+		 * index from the walk rather than from apr_base64_encode_len() also keeps it provably in
+		 * bounds - the length function is opaque to gcc -fanalyzer, which flagged the previous
+		 * enc_len arithmetic as a possible over-read. */
+		while ((i > 0) && (enc[i - 1] == ','))
+			i--;
+		enc[i] = '\0';
+		enc_len = i;
 	}
 	*dst = enc;
 	return enc_len;

@@ -18,9 +18,26 @@
 #
 # misc-const-correctness is not listed: it does not analyze C code; pointer-const
 # hygiene (SonarCloud S5350) remains covered by SonarCloud.
+#
+# clang-analyzer-* is the path-sensitive analyzer (leaks, double frees, use-after-free,
+# null dereferences along a specific execution path) - a different class of finding from
+# the syntactic bugprone-* checks, and complementary to gcc's -fanalyzer in the CI job of
+# the same name. Its core.*/unix.* checks are clean; three groups are excluded:
+# - security.insecureAPI.DeprecatedOrUnsafeBufferHandling: fires on every memcpy/memset and
+#   demands the C11 Annex K _s variants, which glibc does not implement
+# - security.insecureAPI.strcpy: a blanket ban on strcpy; both call sites are bounded by an
+#   explicit length check first (cache/shm.c rejects oversize values before storing,
+#   util/html.c checks the remaining output space per escape)
+# - optin.*: opt-in advice rather than defects, and it reads the deliberate config design as
+#   a bug - the OIDC_CONFIG_POS_INT_UNSET (-1) sentinel and the OR-ed pass_idtoken_as flags
+#   are intentionally values outside their enum's range
 Checks: >
   -*,
   bugprone-*,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -clang-analyzer-security.insecureAPI.strcpy,
+  -clang-analyzer-optin.*,
   -bugprone-easily-swappable-parameters,
   -bugprone-macro-parentheses,
   -bugprone-reserved-identifier,

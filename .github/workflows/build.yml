@@ -351,6 +351,44 @@ jobs:
     - name: Make (clang, type checks promoted to errors)
       run: make
 
+  gcc-analyzer:
+    # gcc's path-sensitive analyzer: leaks, double frees, use-after-free, null
+    # dereferences and out-of-bounds accesses along a specific execution path -
+    # a different class of finding from the warning flags in the build job, and
+    # complementary to clang-analyzer-* in the clang-tidy job (the two disagree
+    # often enough that both are worth running).
+    #
+    # A separate job because -fanalyzer is gcc-only and slows compilation
+    # noticeably. -Werror=analyzer-* promotes only the concrete-defect checks:
+    # -Wanalyzer-too-complex is a budget-exhausted notice about the analysis
+    # itself, not a finding, and would otherwise fail the build on unrelated code
+    # growth. NB: -fanalyzer needs a real compile - it does not run under
+    # -fsyntax-only.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libcjose-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq \
+          CFLAGS="-g -O2 -fanalyzer \
+            -Werror=analyzer-null-dereference -Werror=analyzer-null-argument \
+            -Werror=analyzer-double-free -Werror=analyzer-use-after-free \
+            -Werror=analyzer-malloc-leak -Werror=analyzer-file-leak \
+            -Werror=analyzer-out-of-bounds -Werror=analyzer-write-to-const \
+            -Werror=analyzer-write-to-string-literal \
+            -Werror=analyzer-use-of-uninitialized-value"
+        # -fanalyzer and LTO do not combine; the apxs-derived CFLAGS carry
+        # -flto=auto / -ffat-lto-objects, so strip them for this build
+        sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g' src/Makefile test/Makefile
+    - name: Make (gcc -fanalyzer)
+      run: make
+
   clang-tidy:
     # narrow, warning-free lint baseline: the check set and the
     # conventions-based exclusions live in .clang-tidy, which sets
