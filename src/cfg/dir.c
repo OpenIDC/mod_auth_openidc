@@ -112,7 +112,9 @@ struct oidc_dir_cfg_t {
 const char *oidc_cmd_dir_pass_idtoken_as_set(cmd_parms *cmd, void *m, const char *arg) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
 
-	oidc_pass_idtoken_as_t type;
+	/* only read when the parse below succeeds and has written it; seeded so the optimizer does not
+	 * have to prove that across the call (-Wmaybe-uninitialized) */
+	oidc_pass_idtoken_as_t type = OIDC_PASS_IDTOKEN_AS_CLAIMS;
 	const char *rv = NULL;
 
 	static const oidc_cfg_option_t options[] = {
@@ -147,7 +149,9 @@ static const char *oidc_cfg_dir_parse_pass_userinfo_as(apr_pool_t *pool, const c
 						       oidc_pass_user_info_as_t **result) {
 	char *name = NULL;
 	const char *rv = NULL;
-	oidc_pass_userinfo_enum_t type;
+	/* only read when the parse below succeeds and has written it; seeded so the optimizer does not
+	 * have to prove that across the call (-Wmaybe-uninitialized) */
+	oidc_pass_userinfo_enum_t type = OIDC_PASS_USERINFO_AS_CLAIMS;
 	static const oidc_cfg_option_t options[] = {
 	    {OIDC_PASS_USERINFO_AS_CLAIMS, OIDC_PASS_USERINFO_AS_CLAIMS_STR},
 	    {OIDC_PASS_USERINFO_AS_JSON_OBJECT, OIDC_PASS_USERINFO_AS_JSON_OBJECT_STR},
@@ -354,7 +358,8 @@ static const oidc_cfg_option_t unauth_action_options[] = {{OIDC_UNAUTH_AUTHENTIC
 
 static const char *oidc_cfg_dir_unauth_action2str(oidc_unauth_action_t action) {
 	for (int i = 0; i < OIDC_CFG_OPTIONS_SIZE(unauth_action_options); i++) {
-		if (action == unauth_action_options[i].val)
+		/* oidc_cfg_option_t holds the value as an int; the cast keeps the comparison signed */
+		if ((int)action == unauth_action_options[i].val)
 			return unauth_action_options[i].str;
 	}
 	return NULL;

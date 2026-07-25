@@ -486,13 +486,13 @@ START_TEST(test_jwk_public_key_parse) {
 	char *json = NULL;
 	apr_byte_t isPrivateKey = FALSE;
 
-	const char publicKeyFile[512];
-	const char certificateFile[512];
-	const char ecCertificateFile[512];
+	char publicKeyFile[512];
+	char certificateFile[512];
+	char ecCertificateFile[512];
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)publicKeyFile, 512, "%s/%s", dir, "/public.pem");
-	snprintf((char *)certificateFile, 512, "%s/%s", dir, "/certificate.pem");
-	snprintf((char *)ecCertificateFile, 512, "%s/%s", dir, "/eccert.pem");
+	snprintf(publicKeyFile, 512, "%s/%s", dir, "/public.pem");
+	snprintf(certificateFile, 512, "%s/%s", dir, "/certificate.pem");
+	snprintf(ecCertificateFile, 512, "%s/%s", dir, "/eccert.pem");
 
 	input = BIO_new(BIO_s_file());
 	ck_assert_ptr_nonnull(input);
@@ -574,12 +574,12 @@ START_TEST(test_jwk_private_key_parse) {
 	char *json = NULL;
 	apr_byte_t isPrivateKey = TRUE;
 
-	const char rsaPrivateKeyFile[512];
-	const char ecPrivateKeyFile[512];
+	char rsaPrivateKeyFile[512];
+	char ecPrivateKeyFile[512];
 
 	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
-	snprintf((char *)rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
-	snprintf((char *)ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
+	snprintf(rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
+	snprintf(ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
 
 	input = BIO_new(BIO_s_file());
 	ck_assert_ptr_nonnull(input);

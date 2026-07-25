@@ -155,9 +155,12 @@ struct oidc_provider_t {
                                                                                                                        \
 	OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, const char *, NULL)
 
+/* the cast keeps the sentinel comparison signed: `type` is an enum for several of these members, and
+ * an enum with only non-negative enumerators has an unsigned underlying type, which would make the
+ * bare comparison against the negative OIDC_CONFIG_POS_INT_UNSET a signed/unsigned one */
 #define OIDC_PROVIDER_MEMBER_GET_INT_DEF(member, type, def_val)                                                        \
 	type oidc_cfg_provider_##member##_get(const oidc_provider_t *provider) {                                       \
-		return provider->member != OIDC_CONFIG_POS_INT_UNSET ? provider->member : def_val;                     \
+		return (int)provider->member != OIDC_CONFIG_POS_INT_UNSET ? provider->member : def_val;                \
 	}
 
 // array of strings, int index
@@ -168,7 +171,9 @@ struct oidc_provider_t {
                                                                                                                        \
 	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \
 		const char *rv = NULL;                                                                                 \
-		type v;                                                                                                \
+		/* only read when fparse succeeds and has written it; seeded so the optimizer does not                 \
+		 * have to prove that across the call (-Wmaybe-uninitialized) */                                       \
+		type v = def_val;                                                                                      \
 		rv = fparse(pool, arg, &v);                                                                            \
 		if (rv == NULL)                                                                                        \
 			provider->member = v;                                                                          \
@@ -372,7 +377,9 @@ void oidc_cfg_provider_dpop_mode_int_set(oidc_provider_t *provider, oidc_dpop_mo
 
 const char *oidc_cfg_provider_dpop_mode_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {
 	const char *rv = NULL;
-	oidc_dpop_mode_t v;
+	/* only read when the parse below succeeds and has written it; seeded so the optimizer does not
+	 * have to prove that across the call (-Wmaybe-uninitialized) */
+	oidc_dpop_mode_t v = OIDC_DEFAULT_DPOP_MODE;
 	rv = oidc_cfg_provider_parse_dop_method(pool, arg, &v);
 	if (rv == NULL)
 		provider->dpop_mode = v;
@@ -540,7 +547,7 @@ const char *oidc_cfg_provider_jwks_uri_refresh_interval_set(apr_pool_t *pool, oi
 
 const char *oidc_cmd_provider_jwks_uri_refresh_interval_set(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	int v;
+	int v = 0;
 	const char *rv = oidc_cfg_parse_int(cmd->pool, arg, &v);
 	if (rv == NULL)
 		rv = oidc_cfg_provider_jwks_uri_refresh_interval_set(cmd->pool, cfg->provider, v);
@@ -704,7 +711,7 @@ const char *oidc_cfg_provider_userinfo_refresh_interval_set(apr_pool_t *pool, oi
 const char *oidc_cmd_provider_userinfo_refresh_interval_set(cmd_parms *cmd, void *ptr, const char *arg1,
 							    const char *arg2) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	int v;
+	int v = 0;
 	const char *rv = oidc_cfg_parse_int(cmd->pool, arg1, &v);
 	if (rv == NULL)
 		rv = oidc_cfg_provider_userinfo_refresh_interval_set(cmd->pool, cfg->provider, v);

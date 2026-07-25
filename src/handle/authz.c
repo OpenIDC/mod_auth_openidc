@@ -136,7 +136,7 @@ static apr_byte_t oidc_authz_match_json_null(request_rec *r, const char *spec, o
 typedef apr_byte_t(oidc_match_json_function_t)(request_rec *r, const char *spec, oidc_json_t *val, const char *key);
 
 typedef struct oidc_authz_json_handler_t {
-	int type;
+	oidc_json_type_t type;
 	oidc_match_json_function_t *handler;
 } oidc_authz_json_handler_t;
 
@@ -203,7 +203,7 @@ typedef apr_byte_t(oidc_match_pcre_function_t)(request_rec *r, const char *, con
 					       struct oidc_pcre *);
 
 typedef struct oidc_authz_pcre_handler_t {
-	int type;
+	oidc_json_type_t type;
 	oidc_match_pcre_function_t *handler;
 } oidc_authz_pcre_handler_t;
 
@@ -316,9 +316,14 @@ static apr_byte_t oidc_authz_separator_dot(request_rec *r, const char *spec, oid
 	return FALSE;
 }
 
+/* dispatch on the separator character that introduces the spec, rather than on a JSON type */
+typedef struct oidc_authz_separator_handler_t {
+	char sep;
+	oidc_match_json_function_t *handler;
+} oidc_authz_separator_handler_t;
+
 // clang-format off
-static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
-		// there's some overloading going on here, applying a char as an int index
+static oidc_authz_separator_handler_t _oidc_authz_separator_handlers[] = {
 	{ OIDC_CHAR_COLON, oidc_authz_match_value },
 	{ OIDC_CHAR_TILDE, oidc_authz_match_pcre },
 	{ OIDC_CHAR_DOT, oidc_authz_separator_dot },
@@ -329,11 +334,10 @@ static oidc_authz_json_handler_t _oidc_authz_separator_handlers[] = {
 static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, oidc_json_t *val, const char *spec) {
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
-	for (const oidc_authz_json_handler_t *h = _oidc_authz_separator_handlers; h->handler; h++) {
-		// there's some overloading going on here, applying a char as an int index;
+	for (const oidc_authz_separator_handler_t *h = _oidc_authz_separator_handlers; h->handler; h++) {
 		// NB: spec advances past each matched separator, so after a non-matching handler the
 		// remaining handlers are compared against the following character (preserved behavior)
-		if (h->type != (*spec))
+		if (h->sep != (*spec))
 			continue;
 		// skip the separator
 		spec++;

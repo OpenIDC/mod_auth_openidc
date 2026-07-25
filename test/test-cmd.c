@@ -299,7 +299,7 @@ int enckey(int argc, char **argv, apr_pool_t *pool) {
 	}
 
 	cjose_err cjose_err;
-	int src_len = cjose_jwk_get_keysize(jwk->cjose_jwk, &cjose_err) / 8;
+	int src_len = (int)(cjose_jwk_get_keysize(jwk->cjose_jwk, &cjose_err) / 8);
 	int enc_len = apr_base64_encode_len(src_len);
 	char *b64 = apr_palloc(r->pool, enc_len);
 	apr_base64_encode(b64, (const char *)cjose_jwk_get_keydata(jwk->cjose_jwk, &cjose_err), src_len);
@@ -329,8 +329,8 @@ int hash_base64url(int argc, char **argv, apr_pool_t *pool) {
 			return -1;
 		}
 		oidc_jose_error_t err;
-		if (oidc_jose_hash_and_base64url_encode(r->pool, algo, (const char *)bytes, outlen, &output, &err) ==
-		    FALSE) {
+		if (oidc_jose_hash_and_base64url_encode(r->pool, algo, (const char *)bytes, (int)outlen, &output,
+							&err) == FALSE) {
 			fprintf(stderr, "oidc_jose_hash_and_base64url_encode failed: %s", err.text);
 			return -1;
 		}
@@ -372,7 +372,7 @@ int uuid(int argc, char **argv, apr_pool_t *pool) {
 	oidc_session_t z;
 
 	if (argc > 2) {
-		n = _oidc_str_to_int(argv[2], n);
+		n = (unsigned long)_oidc_str_to_int(argv[2], (int)n);
 		if (n > 25000000 * 10)
 			n = 25000000;
 	}

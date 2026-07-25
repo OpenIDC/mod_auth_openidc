@@ -51,8 +51,11 @@ AP_DECLARE(long) ap_get_client_block(request_rec *r, char *buffer, apr_size_t bu
 	 * from there into the caller's buffer so oidc_util_read can drive the form parser */
 	if (r->args == NULL || r->remaining == 0)
 		return 0;
-	apr_size_t off = strlen(r->args) - r->remaining;
-	apr_size_t n = (bufsiz < r->remaining) ? bufsiz : r->remaining;
+	/* r->remaining is signed (apr_off_t) and is only ever positive here, but compare and
+	 * assign in one type so the narrowing is explicit rather than a signedness surprise */
+	apr_size_t remaining = (apr_size_t)r->remaining;
+	apr_size_t off = strlen(r->args) - remaining;
+	apr_size_t n = (bufsiz < remaining) ? bufsiz : remaining;
 	memcpy(buffer, r->args + off, n);
 	r->remaining -= n;
 	return (long)n;
@@ -67,7 +70,7 @@ AP_DECLARE(char *) ap_getword(apr_pool_t *atrans, const char **line, char stop) 
 		++pos;
 	}
 
-	len = pos - *line;
+	len = (int)(pos - *line);
 	res = apr_pstrmemdup(atrans, *line, len);
 
 	if (stop) {
@@ -122,7 +125,7 @@ AP_DECLARE(char *) ap_getword_conf(apr_pool_t *p, const char **line) {
 				++strend;
 			}
 		}
-		res = substring_conf(p, str + 1, strend - str - 1, quote);
+		res = substring_conf(p, str + 1, (int)(strend - str - 1), quote);
 
 		if (*strend == quote)
 			++strend;
@@ -131,7 +134,7 @@ AP_DECLARE(char *) ap_getword_conf(apr_pool_t *p, const char **line) {
 		while (*strend && !apr_isspace(*strend))
 			++strend;
 
-		res = substring_conf(p, str, strend - str, 0);
+		res = substring_conf(p, str, (int)(strend - str), 0);
 	}
 
 	while (apr_isspace(*strend))
@@ -162,7 +165,7 @@ AP_DECLARE(char *) ap_getword_white(apr_pool_t *atrans, const char **line) {
 		++pos;
 	}
 
-	len = pos - *line;
+	len = (int)(pos - *line);
 	res = apr_pstrmemdup(atrans, *line, len);
 
 	while (apr_isspace(*pos)) {
