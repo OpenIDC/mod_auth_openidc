@@ -37,6 +37,10 @@
 #define OIDC_CACHE_LOCAL_YOUNG_EVICT_SEC 60
 /* rate-limit the "cache full" warning to at most one per this window, to avoid log spam under churn */
 #define OIDC_CACHE_LOCAL_WARN_INTERVAL_SEC 300
+/* compact once this many times `max_entries` entries have been evicted; see oidc_cache_local_compact_unlocked.
+ * The factor trades the (O(max_entries), amortized well under one copy per insert) rebuild against the peak
+ * amount of superseded key/node memory held between two rebuilds */
+#define OIDC_CACHE_LOCAL_COMPACT_FACTOR 4
 
 /* a stored value plus its last-access time; the hash maps interned keys to these nodes so eviction
  * can pick the least-recently-used one instead of clearing the whole cache */
@@ -46,7 +50,11 @@ typedef struct oidc_cache_local_node_t {
 } oidc_cache_local_node_t;
 
 struct oidc_cache_local_t {
+	/* the caller's (process/worker lifetime) pool; values built by the callbacks are allocated here */
 	apr_pool_t *pool;
+	/* private subpool holding only the hash, its interned keys and the nodes, so all of it can be
+	 * reclaimed wholesale by oidc_cache_local_compact_unlocked */
+	apr_pool_t *kpool;
 	apr_hash_t *hash;
 #if APR_HAS_THREADS
 	apr_thread_rwlock_t *rwlock;
@@ -54,6 +62,10 @@ struct oidc_cache_local_t {
 	const char *name;
 	int max_entries;
 	int evict_on_full;
+	/* evictions since the last compaction, and the count at which to compact (derived once at
+	 * create time so the multiplication cannot overflow at runtime) */
+	apr_uint32_t evictions;
+	apr_uint32_t compact_at;
 	oidc_cache_local_free_fn free_value;
 	oidc_cache_local_t **owner;
 	oidc_cache_local_log_fn log_full;
@@ -94,10 +106,51 @@ static void oidc_cache_local_touch(oidc_cache_local_node_t *node) {
 
 /* wrap value in a freshly-stamped node and insert it under a private copy of key; hold the write lock */
 static void oidc_cache_local_insert(oidc_cache_local_t *cache, const char *key, void *value) {
-	oidc_cache_local_node_t *node = apr_palloc(cache->pool, sizeof(oidc_cache_local_node_t));
+	oidc_cache_local_node_t *node = apr_palloc(cache->kpool, sizeof(oidc_cache_local_node_t));
 	node->value = value;
 	node->access = apr_time_now();
-	apr_hash_set(cache->hash, apr_pstrdup(cache->pool, key), APR_HASH_KEY_STRING, node);
+	apr_hash_set(cache->hash, apr_pstrdup(cache->kpool, key), APR_HASH_KEY_STRING, node);
+}
+
+/*
+ * rebuild the hash, its interned keys and its nodes in a fresh subpool and drop the old one; must hold
+ * the write lock.
+ *
+ * APR pools cannot release individual allocations, so the key copy and the node of every entry ever
+ * inserted stay allocated until the pool itself goes away. A *bounded* cache whose key space churns -
+ * session ids, and in client-cookie mode the multi-KB cookie itself - would therefore grow the
+ * process-lifetime pool without bound even though the entry count never moves. Re-interning the live
+ * entries into a new pool and destroying the old one returns everything the evicted entries left behind.
+ *
+ * Only keys and nodes move; values are owned by the caller (and freed through free_value), so they are
+ * carried over by pointer and no consumer of a borrowed value is affected.
+ */
+static void oidc_cache_local_compact_unlocked(oidc_cache_local_t *cache) {
+	apr_pool_t *kpool = NULL;
+	apr_hash_t *hash = NULL;
+	const void *key = NULL;
+	apr_ssize_t klen = 0;
+	void *val = NULL;
+
+	if (apr_pool_create(&kpool, cache->pool) != APR_SUCCESS)
+		/* out of memory: keep the current pool, we just do not reclaim anything this round */
+		return;
+
+	hash = apr_hash_make(kpool);
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, cache->hash); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, &key, &klen, &val);
+		const oidc_cache_local_node_t *old = val;
+		oidc_cache_local_node_t *node = apr_palloc(kpool, sizeof(oidc_cache_local_node_t));
+		node->value = old->value;
+		node->access = old->access;
+		/* klen excludes the terminator that APR_HASH_KEY_STRING interning implies */
+		apr_hash_set(hash, apr_pmemdup(kpool, key, klen + 1), klen, node);
+	}
+
+	apr_pool_destroy(cache->kpool);
+	cache->kpool = kpool;
+	cache->hash = hash;
+	cache->evictions = 0;
 }
 
 /* evict the least-recently-used entry; must hold the write lock. In-flight holders of a refcounted/
@@ -136,6 +189,8 @@ static void oidc_cache_local_evict_lru_unlocked(oidc_cache_local_t *cache) {
 
 	if (cache->free_value != NULL)
 		cache->free_value(victim->value);
+
+	cache->evictions++;
 }
 
 /* ensure there is room for one more entry; must hold the write lock. Returns FALSE only when the
@@ -148,6 +203,9 @@ static apr_byte_t oidc_cache_local_make_room_unlocked(oidc_cache_local_t *cache)
 	if (cache->evict_on_full == 0)
 		return FALSE;
 	oidc_cache_local_evict_lru_unlocked(cache);
+	/* reclaim what the evicted entries left interned once enough of them have accumulated */
+	if (cache->evictions >= cache->compact_at)
+		oidc_cache_local_compact_unlocked(cache);
 	return TRUE;
 }
 
@@ -185,6 +243,7 @@ oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool
 		return *owner;
 
 	oidc_cache_local_t *cache = apr_pcalloc(pool, sizeof(oidc_cache_local_t));
+	apr_uint64_t compact_at = 0;
 	cache->pool = pool;
 	cache->name = apr_pstrdup(pool, (name != NULL) ? name : "cache");
 	cache->max_entries = (max_entries > 0) ? max_entries : 1;
@@ -194,12 +253,19 @@ oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool
 	cache->log_full = log_full;
 	cache->log_ctx = log_ctx;
 
+	compact_at = (apr_uint64_t)cache->max_entries * OIDC_CACHE_LOCAL_COMPACT_FACTOR;
+	cache->compact_at = (compact_at > APR_UINT32_MAX) ? APR_UINT32_MAX : (apr_uint32_t)compact_at;
+
 #if APR_HAS_THREADS
 	if (apr_thread_rwlock_create(&cache->rwlock, pool) != APR_SUCCESS)
 		return NULL;
 #endif
 
-	cache->hash = apr_hash_make(pool);
+	/* the hash, its interned keys and the nodes live in a subpool of their own so compaction can
+	 * return the memory of superseded entries; see oidc_cache_local_compact_unlocked */
+	if (apr_pool_create(&cache->kpool, pool) != APR_SUCCESS)
+		return NULL;
+	cache->hash = apr_hash_make(cache->kpool);
 	/* a PRE-cleanup so free_value runs while the hash - and any per-entry subpools a caller nests
 	 * inside its values (children of this pool) - are still valid; a regular cleanup would run only
 	 * after those child subpools had already been destroyed (children go before regular cleanups) */
@@ -216,6 +282,9 @@ void oidc_cache_local_clear(oidc_cache_local_t *cache) {
 		return;
 	oidc_cache_local_wrlock(cache);
 	oidc_cache_local_clear_unlocked(cache);
+	/* the hash is empty now, so this copies nothing and simply returns everything the cleared
+	 * entries had interned - a purge would otherwise retain it all until process exit */
+	oidc_cache_local_compact_unlocked(cache);
 	oidc_cache_local_unlock(cache);
 }
 

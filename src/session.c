@@ -151,6 +151,24 @@ static void oidc_session_cache_set(const oidc_cfg_t *c, const char *uuid, const 
 	oidc_cache_local_set_build(_oidc_session_cache, uuid, oidc_session_cache_build, &ctx);
 }
 
+/*
+ * the local-cache key for a self-contained client-side cookie.
+ *
+ * The cookie can run to multiple KB and interning it as the hash key would hold that many bytes per
+ * distinct cookie until the next compaction; hash it down to a fixed-size key instead. The full
+ * cookie stays in the entry as the validator, in the per-entry subpool that is reclaimed on
+ * eviction, so a hash collision costs a cache miss and never a wrong session. Returns NULL when the
+ * digest fails, in which case the caller simply does not use the cache.
+ */
+static const char *oidc_session_cache_cookie_key(request_rec *r, const char *cookie) {
+	char *key = NULL;
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, cookie, &key) == FALSE) {
+		oidc_warn(r, "oidc_util_hash_string_and_base64url_encode failed: not caching the parsed session");
+		return NULL;
+	}
+	return key;
+}
+
 /* the name of the remote-user attribute in the session  */
 #define OIDC_SESSION_REMOTE_USER_KEY "r"
 /* the name of the session expiry attribute in the session */
@@ -450,26 +468,30 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oid
 static apr_byte_t oidc_session_load_cookie(request_rec *r, const oidc_cfg_t *c, oidc_session_t *z) {
 	const char *cookieValue =
 	    oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r), oidc_cfg_session_cookie_chunk_size_get(c));
+	const char *cache_key = NULL;
 
 	if (cookieValue == NULL)
 		return TRUE;
 
 	/* serve the parsed state from the process-level cache when the cookie is unchanged: the
-	 * cookie value acts as both key and validator, and a hit skips the per-request JWE
-	 * decrypt, decompression and JSON parse of the (multi-KB) session document. The validator
-	 * also pins the entry to this server config, so a cookie minted by another virtual host
-	 * cannot be served from the cache without passing that vhost's decrypt first. */
-	z->state = oidc_session_cache_get(c, cookieValue, cookieValue);
-	if (z->state != NULL) {
-		z->state_shared = TRUE;
-		return TRUE;
+	 * cookie value acts as the validator (and, hashed down, as the key), and a hit skips the
+	 * per-request JWE decrypt, decompression and JSON parse of the (multi-KB) session document.
+	 * The validator also pins the entry to this server config, so a cookie minted by another
+	 * virtual host cannot be served from the cache without passing that vhost's decrypt first. */
+	cache_key = oidc_session_cache_cookie_key(r, cookieValue);
+	if (cache_key != NULL) {
+		z->state = oidc_session_cache_get(c, cache_key, cookieValue);
+		if (z->state != NULL) {
+			z->state_shared = TRUE;
+			return TRUE;
+		}
 	}
 
 	if (oidc_session_decode(r, c, z, cookieValue, TRUE) == FALSE)
 		return FALSE;
 
-	if (z->state != NULL) {
-		oidc_session_cache_set(c, cookieValue, cookieValue, z->state);
+	if ((z->state != NULL) && (cache_key != NULL)) {
+		oidc_session_cache_set(c, cache_key, cookieValue, z->state);
 		z->state_shared = TRUE;
 	}
 
