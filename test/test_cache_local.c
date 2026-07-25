@@ -37,8 +37,10 @@
 #include "check_util.h"
 
 #include <apr_pools.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static apr_pool_t *pool = NULL;
 
@@ -63,6 +65,23 @@ static int *mkval(int n) {
 	int *p = (int *)malloc(sizeof(int));
 	*p = n;
 	return p;
+}
+
+/*
+ * resident set size of this process, or 0 when it cannot be determined (non-Linux, /proc not
+ * mounted). APR pool allocations are invisible to the C library's own accounting - the allocator
+ * mmaps its blocks - so this is the portable-enough way to observe that a cache is not retaining
+ * memory it should have reclaimed.
+ */
+static apr_size_t oidc_test_resident_bytes(void) {
+	unsigned long size = 0, resident = 0;
+	FILE *f = fopen("/proc/self/statm", "r");
+	if (f == NULL)
+		return 0;
+	if (fscanf(f, "%lu %lu", &size, &resident) != 2)
+		resident = 0;
+	fclose(f);
+	return (apr_size_t)resident * (apr_size_t)getpagesize();
 }
 
 /* a compute callback that counts invocations (via the baton) and returns a cache-pool value */
@@ -388,6 +407,106 @@ START_TEST(test_cache_local_subpool_entries_freed_on_cleanup) {
 }
 END_TEST
 
+/*
+ * churn far more distinct keys through a small, bounded cache than it can hold, so the internal
+ * compaction (which re-interns the surviving keys and nodes into a fresh pool and drops the old one)
+ * runs many times over. Everything the cache promises must survive that: the bound, exact free_value
+ * accounting, and the identity of the entries carried across a rebuild.
+ */
+START_TEST(test_cache_local_survives_compaction) {
+	const int max_entries = 8;
+	/* well past the 4 x max_entries compaction threshold, so it fires repeatedly */
+	const int churn = 400;
+	char key[32];
+
+	_free_count = 0;
+	oidc_cache_local_t *cache =
+	    oidc_cache_local_create(NULL, pool, "compact", max_entries, 1, test_free_value, NULL, NULL);
+	ck_assert_ptr_nonnull(cache);
+
+	for (int i = 0; i < churn; i++) {
+		snprintf(key, sizeof(key), "key-%06d", i);
+		oidc_cache_local_set(cache, key, mkval(i));
+	}
+
+	/* the bound held: everything but the last max_entries values was evicted and freed exactly once */
+	ck_assert_int_eq(_free_count, churn - max_entries);
+
+	/* the most recent max_entries keys are still present, with their own values, after having been
+	 * carried through several compactions */
+	for (int i = churn - max_entries; i < churn; i++) {
+		snprintf(key, sizeof(key), "key-%06d", i);
+		int *v = (int *)oidc_cache_local_get(cache, key);
+		ck_assert_ptr_nonnull(v);
+		ck_assert_int_eq(*v, i);
+	}
+
+	/* and older keys really are gone rather than resurrected by a rebuild */
+	for (int i = 0; i < churn - max_entries; i++) {
+		snprintf(key, sizeof(key), "key-%06d", i);
+		ck_assert_ptr_null(oidc_cache_local_get(cache, key));
+	}
+
+	/* drop the survivors so valgrind sees a clean slate */
+	oidc_cache_local_clear(cache);
+	ck_assert_int_eq(_free_count, churn);
+}
+END_TEST
+
+/*
+ * the regression test for the growth this compaction exists to stop: a bounded cache whose key space
+ * churns used to retain the interned key and node of every entry ever inserted for the life of the
+ * cache pool, because APR pools cannot release individual allocations. With multi-KB keys - which is
+ * what OIDCSessionType client-cookie produced before the session key was hashed - that ran to
+ * hundreds of MB. Retention must now be a high-water mark, not a function of the insert count.
+ */
+START_TEST(test_cache_local_churn_does_not_grow_without_bound) {
+	const int max_entries = 64;
+	const int key_len = 3072;
+	char *key = apr_pcalloc(pool, key_len + 1);
+	apr_size_t before = 0, after = 0;
+
+	memset(key, 'k', key_len);
+
+	oidc_cache_local_t *cache =
+	    oidc_cache_local_create(NULL, pool, "growth", max_entries, 1, test_free_value, NULL, NULL);
+	ck_assert_ptr_nonnull(cache);
+
+	/* fill to capacity first, so the comparison below measures churn rather than the steady state */
+	for (int i = 0; i < max_entries; i++) {
+		snprintf(key, 24, "warm-%018d", i);
+		key[23] = 'k';
+		oidc_cache_local_set(cache, key, mkval(i));
+	}
+
+	before = oidc_test_resident_bytes();
+	if (before == 0)
+		return; /* no way to observe process memory here; nothing to assert */
+
+	/* every insert is a brand-new multi-KB key, i.e. the worst case for key interning */
+	for (int i = 0; i < 20000; i++) {
+		snprintf(key, 24, "sess-%018d", i);
+		key[23] = 'k';
+		oidc_cache_local_set(cache, key, mkval(i));
+	}
+
+	after = oidc_test_resident_bytes();
+
+	/*
+	 * unbounded retention would be ~key_len per insert, i.e. upwards of 60 MB here; the bound is
+	 * roughly the compaction threshold (4 x max_entries) times the key size, well under 1 MB. Assert
+	 * against a threshold an order of magnitude above the bound but an order below linear growth, so
+	 * the test is immune to allocator and page-granularity noise.
+	 */
+	ck_assert_msg(after - before < 8 * 1024 * 1024,
+		      "process memory grew by %lu bytes over 20000 inserts into a cache bounded at %d entries; "
+		      "the interned keys/nodes of evicted entries are not being reclaimed",
+		      (unsigned long)(after - before), max_entries);
+
+	oidc_cache_local_clear(cache);
+}
+END_TEST
+
 int main(void) {
 	int failed = 0;
 
@@ -406,6 +525,8 @@ int main(void) {
 	tcase_add_test(core, test_cache_local_owner_reset_on_pool_cleanup);
 	tcase_add_test(core, test_cache_local_get_use_set_build);
 	tcase_add_test(core, test_cache_local_subpool_entries_freed_on_cleanup);
+	tcase_add_test(core, test_cache_local_survives_compaction);
+	tcase_add_test(core, test_cache_local_churn_does_not_grow_without_bound);
 
 	Suite *s = suite_create("cache_local");
 	suite_add_tcase(s, core);

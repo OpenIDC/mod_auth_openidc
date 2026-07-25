@@ -312,6 +312,82 @@ START_TEST(test_metadata_jwks_get_forced_refresh) {
 }
 END_TEST
 
+/* the "kid" of the first key in a JWKs document, for telling two responses apart */
+static const char *oidc_test_jwks_first_kid(const oidc_json_t *j) {
+	const oidc_json_t *keys = oidc_json_object_get(j, "keys");
+	if ((keys == NULL) || (oidc_json_array_size(keys) < 1))
+		return NULL;
+	return oidc_json_string_value(oidc_json_object_get(oidc_json_array_get(keys, 0), "kid"));
+}
+
+/*
+ * a forced refresh bypasses the cached JWKs and fetches the jwks_uri directly; it is triggered by an
+ * unrecognized "kid" or a failed signature, i.e. straight off an unauthenticated request. It must
+ * therefore be rate-limited per jwks_uri: a second forced refresh inside the window has to be served
+ * from the cache rather than turning into another outbound fetch.
+ */
+START_TEST(test_metadata_jwks_get_forced_refresh_throttled) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* two distinguishable documents, so a second fetch would be visible in the result */
+	oidc_test_http_response_t resp[2] = {
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}"},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k2\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}"}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resp, 2);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *base = oidc_test_http_server_url(srv, r->pool);
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = apr_psprintf(r->pool, "%s/a", base);
+	jwks_uri.refresh_interval = 60;
+
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), FALSE);
+
+	/* first forced refresh: fetches, and records the attempt */
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_test_jwks_first_kid(j), "k1");
+	oidc_json_decref(j);
+
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+
+	/* second forced refresh inside the window: still the cached document, so no fetch happened -
+	 * a fetch would have returned the second (k2) response */
+	j = NULL;
+	refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_test_jwks_first_kid(j), "k1");
+	oidc_json_decref(j);
+
+	/* the rate limit is per jwks_uri: a different one still refreshes. This also consumes the
+	 * second response, letting the server thread finish so the request count can be read. */
+	oidc_jwks_uri_t other = {0};
+	other.uri = apr_psprintf(r->pool, "%s/b", base);
+	other.refresh_interval = 60;
+	j = NULL;
+	refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &other, 0, &j, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_test_jwks_first_kid(j), "k2");
+	oidc_json_decref(j);
+
+	/* exactly one fetch per distinct jwks_uri; the throttled one never hit the network */
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	ck_assert_str_eq(oidc_test_http_server_captured(srv, 0)->path, "/a");
+	ck_assert_str_eq(oidc_test_http_server_captured(srv, 1)->path, "/b");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_metadata_jwks_get_http_failure) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1413,6 +1489,7 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_retrieve_http_failure);
 	tcase_add_test(retrieve, test_metadata_retrieve_invalid_metadata);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh);
+	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh_throttled);
 	tcase_add_test(retrieve, test_metadata_jwks_get_http_failure);
 	tcase_add_test(retrieve, test_metadata_jwks_get_cache_hit);
 	tcase_add_test(retrieve, test_metadata_jwks_get_missing_keys);

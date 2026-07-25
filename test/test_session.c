@@ -134,6 +134,62 @@ START_TEST(test_session_cookie_roundtrip) {
 }
 END_TEST
 
+/*
+ * the process-local parsed-session cache is shared by every virtual host in the process, so it must
+ * not let a session cross between them. In client-cookie mode the cookie is the whole session and
+ * the JWE decrypt under this vhost's OIDCCryptoPassphrase is the only thing authenticating it, so a
+ * cache hit that skipped the decrypt would hand vhost B the session vhost A minted.
+ */
+START_TEST(test_session_cookie_not_shared_across_vhosts) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	c->session_type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
+
+	/* vhost A mints a session and hands out the cookie */
+	oidc_session_t *z = NULL;
+	oidc_session_load(r, &z);
+	z->remote_user = apr_pstrdup(r->pool, "carol@idp.example.com");
+	z->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_access_token(r, z, "AT-vhost-a");
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
+	replay_set_cookies(r);
+
+	/* vhost A reads it back, which is what populates the process-local cache */
+	oidc_session_t *z2 = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z2), TRUE);
+	ck_assert_str_eq(z2->remote_user, "carol@idp.example.com");
+
+	/* a second vhost in the same process, with its own OIDCCryptoPassphrase */
+	oidc_cfg_t *other = oidc_cfg_server_create(r->server->process->pconf, r->server);
+	other->session_type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
+	other->cache.impl = c->cache.impl;
+	other->cache.cfg = c->cache.cfg;
+	other->crypto_passphrase.secret1 = "abcdefghijklmnopqrstuvwxyz012345";
+	oidc_test_crypto_passphrase_rederive(other);
+	ap_set_module_config(r->server->module_config, &auth_openidc_module, other);
+
+	/* replaying vhost A's cookie at vhost B must not resolve to A's session: B cannot decrypt it,
+	 * and the cache must not answer on its behalf */
+	oidc_session_t *z3 = NULL;
+	apr_byte_t rc = oidc_session_load(r, &z3);
+	ck_assert_msg((rc == FALSE) || (z3->remote_user == NULL),
+		      "a session cookie minted by another virtual host was accepted (remote_user=%s)",
+		      (z3 != NULL) && (z3->remote_user != NULL) ? z3->remote_user : "(null)");
+
+	/* and vhost A still resolves its own cookie afterwards */
+	ap_set_module_config(r->server->module_config, &auth_openidc_module, c);
+	oidc_session_t *z4 = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z4), TRUE);
+	ck_assert_str_eq(z4->remote_user, "carol@idp.example.com");
+
+	oidc_session_free(r, z);
+	oidc_session_free(r, z2);
+	oidc_session_free(r, z3);
+	oidc_session_free(r, z4);
+}
+END_TEST
+
 START_TEST(test_session_last_refresh_timestamps) {
 	request_rec *r = oidc_test_request_get();
 
@@ -195,6 +251,7 @@ int main(void) {
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_session_cache_roundtrip);
 	tcase_add_test(c, test_session_cookie_roundtrip);
+	tcase_add_test(c, test_session_cookie_not_shared_across_vhosts);
 	tcase_add_test(c, test_session_last_refresh_timestamps);
 	tcase_add_test(c, test_session_getter_setter_roundtrip);
 	suite_add_tcase(s, c);
