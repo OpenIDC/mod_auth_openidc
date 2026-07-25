@@ -429,23 +429,28 @@ START_TEST(test_cache_local_survives_compaction) {
 		oidc_cache_local_set(cache, key, mkval(i));
 	}
 
-	/* the bound held: everything but the last max_entries values was evicted and freed exactly once */
+	/* the bound held: everything but max_entries values was evicted and freed exactly once */
 	ck_assert_int_eq(_free_count, churn - max_entries);
 
-	/* the most recent max_entries keys are still present, with their own values, after having been
-	 * carried through several compactions */
-	for (int i = churn - max_entries; i < churn; i++) {
+	/*
+	 * exactly max_entries entries survive, and every survivor still maps to its own value - which
+	 * is precisely what a compaction has to preserve when it re-interns keys and nodes into a new
+	 * pool. Deliberately NOT asserting *which* keys survive: eviction picks the oldest access
+	 * stamp, apr_time_now() has microsecond resolution, and inserts that land within the same
+	 * microsecond tie - the victim among tied entries is then hash-order dependent (the same
+	 * reason test_cache_local_bound_evicts_one_when_full only counts survivors).
+	 */
+	int present = 0;
+	for (int i = 0; i < churn; i++) {
 		snprintf(key, sizeof(key), "key-%06d", i);
-		int *v = (int *)oidc_cache_local_get(cache, key);
-		ck_assert_ptr_nonnull(v);
+		const int *v = (const int *)oidc_cache_local_get(cache, key);
+		if (v == NULL)
+			continue;
+		present++;
+		/* a rebuild must never re-pair a key with another entry's value */
 		ck_assert_int_eq(*v, i);
 	}
-
-	/* and older keys really are gone rather than resurrected by a rebuild */
-	for (int i = 0; i < churn - max_entries; i++) {
-		snprintf(key, sizeof(key), "key-%06d", i);
-		ck_assert_ptr_null(oidc_cache_local_get(cache, key));
-	}
+	ck_assert_int_eq(present, max_entries);
 
 	/* drop the survivors so valgrind sees a clean slate */
 	oidc_cache_local_clear(cache);

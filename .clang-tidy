@@ -31,6 +31,13 @@
 # - optin.*: opt-in advice rather than defects, and it reads the deliberate config design as
 #   a bug - the OIDC_CONFIG_POS_INT_UNSET (-1) sentinel and the OR-ed pass_idtoken_as flags
 #   are intentionally values outside their enum's range
+# - valist.Uninitialized: a false positive on _oidc_jose_error_set() (src/jose.c), reported by
+#   clang-tidy 18 (the CI runner) but not by 21. It walks the path where the `fmt` argument is
+#   NULL and concludes the va_list is uninitialized, but va_start() takes the *name* of the
+#   last named parameter - the value passed for it is irrelevant to whether `ap` is initialized
+#
+# NB: the exact clang-analyzer finding set varies by clang version, so a runner upgrade can
+# surface new ones here even with the source unchanged.
 Checks: >
   -*,
   bugprone-*,
@@ -38,6 +45,7 @@ Checks: >
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   -clang-analyzer-security.insecureAPI.strcpy,
   -clang-analyzer-optin.*,
+  -clang-analyzer-valist.Uninitialized,
   -bugprone-easily-swappable-parameters,
   -bugprone-macro-parentheses,
   -bugprone-reserved-identifier,

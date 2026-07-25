@@ -329,6 +329,15 @@ jobs:
     # because the auth_openidc_module struct deliberately leaves the trailing
     # `flags` member implicit - httpd only grew it during 2.4, so spelling it out
     # would break the build on the older httpd in the distro matrix.
+    #
+    # -Wno-unknown-warning-option is load-bearing: -Wcast-function-type-mismatch
+    # only exists from clang 19, and under a blanket -Werror an unrecognized -W
+    # option is itself promoted to an error, which kills ./configure at its
+    # "can the compiler create executables" test rather than at the build. The
+    # runner currently ships clang 18, so that check is inert there (it already
+    # was before -Werror: an unknown -Werror=<name> is likewise only a warning).
+    # Pin a newer clang here if it needs to be enforced rather than merely
+    # available to local runs.
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
@@ -343,6 +352,7 @@ jobs:
         ./autogen.sh
         ./configure --with-jq CC=clang \
           CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
+                  -Wno-unknown-warning-option \
                   -Wimplicit-int-conversion -Wcast-function-type-mismatch -Werror"
         # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
         # -ffat-lto-objects); strip them on the clang leg so an older runner
