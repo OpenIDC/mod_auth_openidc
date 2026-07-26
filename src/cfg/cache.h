@@ -80,6 +80,25 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_smax, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_hmax, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_memcache_ttl, apr_interval_time_t)
 
+/*
+ * the OIDCMemCache* directives, expanded into the module command table by cfg/cmds.c; the list
+ * lives next to the backend's declarations so adding or changing a directive stays here instead
+ * of being interleaved into the shared table
+ */
+// clang-format off
+#define OIDC_CACHE_CMDS_MEMCACHE(CMD)                                                                                  \
+	CMD(AP_INIT_TAKE1, OIDCMemCacheServers, cache_memcache_servers,                                                \
+	    "Memcache servers used for caching (space separated list of <hostname>[:<port>] tuples)"),                   \
+	CMD(AP_INIT_TAKE1, OIDCMemCacheConnectionsMin, cache_memcache_min,                                             \
+	    "Minimum number of connections to each Memcache server per process"),                                       \
+	CMD(AP_INIT_TAKE1, OIDCMemCacheConnectionsSMax, cache_memcache_smax,                                           \
+	    "Soft maximum number of connections to each Memcache server per process"),                                  \
+	CMD(AP_INIT_TAKE1, OIDCMemCacheConnectionsHMax, cache_memcache_hmax,                                           \
+	    "Hard maximum number of connections to each Memcache server per process"),                                  \
+	CMD(AP_INIT_TAKE1, OIDCMemCacheConnectionsTTL, cache_memcache_ttl,                                             \
+	    "Maximum time in seconds a connection to a Memcache server can be idle before being closed"),
+// clang-format on
+
 #endif // USE_MEMCACHE
 
 /*
@@ -95,6 +114,23 @@ OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_database, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_timeout, int)
 OIDC_CFG_MEMBER_FUNCS_DECL(cache_redis_connect_timeout, int, const char *)
 OIDC_CFG_MEMBER_FUNC_GET_DECL(cache_redis_keepalive, int)
+
+/* the OIDCRedisCache* directives; see the memcache list above */
+// clang-format off
+#define OIDC_CACHE_CMDS_REDIS(CMD)                                                                                     \
+	CMD(AP_INIT_TAKE1, OIDCRedisCacheServer, cache_redis_server,                                                   \
+	    "Redis server used for caching (<hostname>[:<port>])"),                                                     \
+	CMD(AP_INIT_TAKE1, OIDCRedisCacheUsername, cache_redis_username,                                               \
+	    "Username for authentication to the Redis server."),                                                        \
+	CMD(AP_INIT_TAKE1, OIDCRedisCachePassword, cache_redis_password,                                               \
+	    "Password for authentication to the Redis server."),                                                        \
+	CMD(AP_INIT_TAKE1, OIDCRedisCacheDatabase, cache_redis_database,                                               \
+	    "Database to select on the Redis server."),                                                                 \
+	CMD(AP_INIT_TAKE12, OIDCRedisCacheConnectTimeout, cache_redis_connect_timeout,                                 \
+	    "Timeout for connecting to the Redis server."),                                                             \
+	CMD(AP_INIT_TAKE1, OIDCRedisCacheTimeout, cache_redis_timeout,                                                 \
+	    "Timeout waiting for a response of the Redis server."),
+// clang-format on
 
 #endif // USE_LIBHIREDIS
 

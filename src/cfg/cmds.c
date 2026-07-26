@@ -303,63 +303,10 @@ const command_rec oidc_cfg_cmds[] = {
 		cache_file_clean_interval,
 		"Cache file clean interval in seconds."),
 #ifdef USE_MEMCACHE
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCMemCacheServers,
-		cache_memcache_servers,
-		"Memcache servers used for caching (space separated list of <hostname>[:<port>] tuples)"),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCMemCacheConnectionsMin,
-		cache_memcache_min,
-		"Minimum number of connections to each Memcache server per process"),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCMemCacheConnectionsSMax,
-		cache_memcache_smax,
-		"Soft maximum number of connections to each Memcache server per process"),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCMemCacheConnectionsHMax,
-		cache_memcache_hmax,
-		"Hard maximum number of connections to each Memcache server per process"),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCMemCacheConnectionsTTL,
-		cache_memcache_ttl,
-		"Maximum time in seconds a connection to a Memcache server can be idle before being closed"),
+	OIDC_CACHE_CMDS_MEMCACHE(OIDC_CFG_CMD)
 #endif
 #ifdef USE_LIBHIREDIS
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCRedisCacheServer,
-		cache_redis_server,
-		"Redis server used for caching (<hostname>[:<port>])"),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCRedisCacheUsername,
-		cache_redis_username,
-		"Username for authentication to the Redis server."),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCRedisCachePassword,
-		cache_redis_password,
-		"Password for authentication to the Redis server."),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCRedisCacheDatabase,
-		cache_redis_database,
-		"Database to select on the Redis server."),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE12,
-		OIDCRedisCacheConnectTimeout,
-		cache_redis_connect_timeout,
-		"Timeout for connecting to the Redis server."),
-	OIDC_CFG_CMD(
-		AP_INIT_TAKE1,
-		OIDCRedisCacheTimeout,
-		cache_redis_timeout,
-		"Timeout waiting for a response of the Redis server."),
+	OIDC_CACHE_CMDS_REDIS(OIDC_CFG_CMD)
 #endif
 
 	// provider
