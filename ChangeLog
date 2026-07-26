@@ -1134,7 +1134,7 @@
 - address warnings from static code analysis tool SonarQube
   - code: use snprintf instead of sprintf
   - code: move _snprintf define to const.h
-- bump to 2.4.16.7dev
+  - bump to 2.4.16.7dev
 
 12/09/2024
 - release 2.4.16.6
