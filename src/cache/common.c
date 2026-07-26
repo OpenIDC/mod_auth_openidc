@@ -467,3 +467,52 @@ end:
 
 	return rc;
 }
+
+/*
+ * the registry of compiled-in cache backends
+ *
+ * this is the single place a backend has to be listed: the directive parser derives both the
+ * set of accepted OIDCCacheType values and the name -> implementation lookup from it, so adding
+ * a backend (in particular on a downstream branch) is one line here plus the extern in cache.h,
+ * rather than an entry in a parallel options[] array and a branch in an if/else chain
+ */
+// clang-format off
+static oidc_cache_t *const oidc_cache_backends[] = {
+	&oidc_cache_shm,
+	&oidc_cache_file,
+#ifdef USE_MEMCACHE
+	&oidc_cache_memcache,
+#endif
+#ifdef USE_LIBHIREDIS
+	&oidc_cache_redis,
+#endif
+	NULL
+};
+// clang-format on
+
+/*
+ * look up a compiled-in cache backend by its OIDCCacheType name; returns NULL when unknown
+ */
+oidc_cache_t *oidc_cache_backend_get(const char *name) {
+	int i = 0;
+	for (i = 0; oidc_cache_backends[i] != NULL; i++)
+		if (_oidc_strcmp(name, oidc_cache_backends[i]->name) == 0)
+			return oidc_cache_backends[i];
+	return NULL;
+}
+
+/*
+ * return the names of the compiled-in cache backends as a NULL-terminated array, in registry
+ * order, for directive validation and the resulting error message
+ */
+const char **oidc_cache_backend_names(apr_pool_t *pool) {
+	int n = 0;
+	const char **names = NULL;
+	for (n = 0; oidc_cache_backends[n] != NULL; n++)
+		;
+	names = apr_pcalloc(pool, sizeof(const char *) * (n + 1));
+	for (n = 0; oidc_cache_backends[n] != NULL; n++)
+		names[n] = oidc_cache_backends[n]->name;
+	names[n] = NULL;
+	return names;
+}

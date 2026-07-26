@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cache/cache.h"
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/parse.h"
@@ -49,42 +50,10 @@
  */
 const char *oidc_cmd_cache_type_set(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	// clang-format off
-	// one entry per line, deliberately: clang-format aligns this initializer to its
-	// widest element, so adding a backend on a downstream branch would otherwise
-	// re-indent every existing line and turn a one-line addition into a merge conflict
-	static const char *options[] = {
-		"shm",
-		"file",
-#ifdef USE_MEMCACHE
-		"memcache",
-#endif
-#ifdef USE_LIBHIREDIS
-		"redis",
-#endif
-		NULL
-	};
-	// clang-format on
-	const char *rv = oidc_cfg_parse_is_valid_option(cmd->pool, arg, options);
-	if (rv == NULL) {
-
-		if (_oidc_strcmp(arg, oidc_cache_shm.name) == 0) {
-			cfg->cache.impl = &oidc_cache_shm;
-		} else if (_oidc_strcmp(arg, oidc_cache_file.name) == 0) {
-			cfg->cache.impl = &oidc_cache_file;
-#ifdef USE_MEMCACHE
-		} else if (_oidc_strcmp(arg, oidc_cache_memcache.name) == 0) {
-			cfg->cache.impl = &oidc_cache_memcache;
-#endif
-#ifdef USE_LIBHIREDIS
-		} else if (_oidc_strcmp(arg, oidc_cache_redis.name) == 0) {
-			cfg->cache.impl = &oidc_cache_redis;
-#endif
-		} else {
-			rv = apr_psprintf(cmd->pool, "unsupported cache type value: %s", arg);
-		}
-	}
-
+	/* both the accepted values and the lookup come from the backend registry in cache/common.c */
+	const char *rv = oidc_cfg_parse_is_valid_option(cmd->pool, arg, oidc_cache_backend_names(cmd->pool));
+	if (rv == NULL)
+		cfg->cache.impl = oidc_cache_backend_get(arg);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 

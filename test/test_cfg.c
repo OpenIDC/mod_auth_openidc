@@ -738,8 +738,24 @@ START_TEST(test_cmd_cache_type) {
 	ck_assert_ptr_null(oidc_cmd_cache_type_set(cmd, NULL, "redis"));
 	ck_assert_ptr_eq(cfg->cache.impl, &oidc_cache_redis);
 #endif
-	/* unknown backend rejected */
-	ck_assert_ptr_nonnull(oidc_cmd_cache_type_set(cmd, NULL, "totally_bogus_cache"));
+	/* unknown backend rejected, and the message enumerates what the registry does offer */
+	const char *err = oidc_cmd_cache_type_set(cmd, NULL, "totally_bogus_cache");
+	ck_assert_ptr_nonnull(err);
+	ck_assert_msg(_oidc_strstr(err, "shm") != NULL, "the error must list the registered backends, got: %s", err);
+
+	/* the registry backing the directive: every advertised name resolves to an implementation
+	 * whose own name matches, so a backend can never be listed without being reachable */
+	const char **names = oidc_cache_backend_names(cmd->pool);
+	ck_assert_ptr_nonnull(names);
+	int n = 0;
+	for (n = 0; names[n] != NULL; n++) {
+		oidc_cache_t *impl = oidc_cache_backend_get(names[n]);
+		ck_assert_msg(impl != NULL, "registry advertises \"%s\" but does not resolve it", names[n]);
+		ck_assert_str_eq(impl->name, names[n]);
+	}
+	/* shm and file are always compiled in, so the registry is never empty */
+	ck_assert_int_ge(n, 2);
+	ck_assert_ptr_null(oidc_cache_backend_get("totally_bogus_cache"));
 
 	/* restore the shm backend the test fixture expects so the subsequent teardown
 	 * (oidc_cfg_process_cleanup -> cache->destroy) operates on a known-good impl */

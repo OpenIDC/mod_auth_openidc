@@ -156,4 +156,11 @@ extern oidc_cache_t oidc_cache_memcache;
 extern oidc_cache_t oidc_cache_redis;
 #endif
 
+/*
+ * backend registry (src/cache/common.c): a compiled-in backend is listed there once and both
+ * the OIDCCacheType lookup and the set of accepted values are derived from it
+ */
+oidc_cache_t *oidc_cache_backend_get(const char *name);
+const char **oidc_cache_backend_names(apr_pool_t *pool);
+
 #endif /* _MOD_AUTH_OPENIDC_CACHE_H_ */
