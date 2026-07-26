@@ -49,14 +49,22 @@
  */
 const char *oidc_cmd_cache_type_set(cmd_parms *cmd, void *ptr, const char *arg) {
 	oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);
-	static const char *options[] = {"shm", "file",
+	// clang-format off
+	// one entry per line, deliberately: clang-format aligns this initializer to its
+	// widest element, so adding a backend on a downstream branch would otherwise
+	// re-indent every existing line and turn a one-line addition into a merge conflict
+	static const char *options[] = {
+		"shm",
+		"file",
 #ifdef USE_MEMCACHE
-					"memcache",
+		"memcache",
 #endif
 #ifdef USE_LIBHIREDIS
-					"redis",
+		"redis",
 #endif
-					NULL};
+		NULL
+	};
+	// clang-format on
 	const char *rv = oidc_cfg_parse_is_valid_option(cmd->pool, arg, options);
 	if (rv == NULL) {
 
