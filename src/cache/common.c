@@ -494,8 +494,7 @@ static oidc_cache_t *const oidc_cache_backends[] = {
  * look up a compiled-in cache backend by its OIDCCacheType name; returns NULL when unknown
  */
 oidc_cache_t *oidc_cache_backend_get(const char *name) {
-	int i = 0;
-	for (i = 0; oidc_cache_backends[i] != NULL; i++)
+	for (int i = 0; oidc_cache_backends[i] != NULL; i++)
 		if (_oidc_strcmp(name, oidc_cache_backends[i]->name) == 0)
 			return oidc_cache_backends[i];
 	return NULL;
