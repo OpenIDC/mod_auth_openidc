@@ -180,6 +180,8 @@
 #define OIDCOAuthVerifySharedKeys "OIDCOAuthVerifySharedKeys"
 #define OIDCOAuthDecryptSharedKeys "OIDCOAuthDecryptSharedKeys"
 #define OIDCOAuthVerifyJwksUri "OIDCOAuthVerifyJwksUri"
+#define OIDCOAuthVerifyAudience "OIDCOAuthVerifyAudience"
+#define OIDCOAuthVerifyIssuer "OIDCOAuthVerifyIssuer"
 
 /*
  * per-directory (see oidc_dir_cfg_t in cfg/dir.c)

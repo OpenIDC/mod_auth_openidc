@@ -57,6 +57,8 @@
 #define OIDC_OAUTH_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                        \
 	PTR(char *, metadata_url)                                                                                      \
 	PTR(char *, verify_jwks_uri)                                                                                   \
+	PTR(apr_array_header_t *, verify_aud_values)                                                                   \
+	PTR(char *, verify_issuer)                                                                                     \
 	PTR(apr_hash_t *, verify_shared_keys)                                                                          \
 	PTR(apr_hash_t *, decrypt_shared_keys)                                                                         \
 	PTR(char *, client_id)                                                                                         \
@@ -144,6 +146,15 @@ struct oidc_oauth_t {
 	}                                                                                                              \
 	OIDC_OAUTH_MEMBER_FUNC_GET(member, const apr_array_header_t *)
 
+#define OIDC_OAUTH_MEMBER_FUNCS_STR_LIST(member)                                                                       \
+	const char *oidc_cmd_oauth_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                        \
+		oidc_cfg_t *cfg =                                                                                      \
+		    (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);              \
+		const char *rv = oidc_cfg_string_list_add(cmd->pool, &cfg->oauth->member, arg);                        \
+		return OIDC_CONFIG_DIR_RV(cmd, rv);                                                                    \
+	}                                                                                                              \
+	OIDC_OAUTH_MEMBER_FUNC_GET(member, const apr_array_header_t *)
+
 #define OIDC_OAUTH_MEMBER_FUNCS_STR(member) OIDC_OAUTH_MEMBER_FUNCS_TYPE(member, const char *, NULL)
 #define OIDC_OAUTH_MEMBER_FUNCS_URL(member)                                                                            \
 	OIDC_OAUTH_MEMBER_FUNCS_TYPE(member, const char *, oidc_cfg_parse_is_valid_http_url(cmd->pool, arg))
@@ -179,6 +190,8 @@ OIDC_OAUTH_MEMBER_FUNCS_FILE(introspection_endpoint_tls_client_cert)
 OIDC_OAUTH_MEMBER_FUNCS_FILE(introspection_endpoint_tls_client_key)
 OIDC_OAUTH_MEMBER_FUNCS_PASSPHRASE(introspection_endpoint_tls_client_key_pwd)
 OIDC_OAUTH_MEMBER_FUNCS_KEYS(verify_public_keys)
+OIDC_OAUTH_MEMBER_FUNCS_STR_LIST(verify_aud_values)
+OIDC_OAUTH_MEMBER_FUNCS_STR(verify_issuer)
 OIDC_OAUTH_MEMBER_FUNC_GET(introspection_client_auth_bearer_token, const char *)
 OIDC_OAUTH_MEMBER_FUNC_GET(introspection_token_expiry_claim_format,
 			   oidc_oauth_introspection_token_expiry_claim_format_t)

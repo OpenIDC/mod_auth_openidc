@@ -1,4 +1,24 @@
-07/22/2026
+07/27/2026
+- security: add OIDCOAuthVerifyAudience and OIDCOAuthVerifyIssuer to bind
+  locally validated JWT access tokens to this resource server. The local
+  (non-introspection) OAuth 2.0 Resource Server path verified only the
+  signature of a JWT access token: neither "aud" nor "iss" was checked, and no
+  directive existed to configure what to check them against, so any token
+  signed by the configured key (set) was accepted - including one that the
+  Authorization Server issued for a completely different resource server, whose
+  claims were then used to set REMOTE_USER (RFC 9068 section 4, CWE-287).
+  OIDCOAuthVerifyAudience takes one or more identifiers of this resource server
+  and accepts a token when its "aud" claim - a string or an array - contains at
+  least one of them; OIDCOAuthVerifyIssuer matches the "iss" claim. Both are
+  also applied to claims served from the validation cache, which is keyed on
+  the token and the crypto passphrase and therefore shared between vhosts that
+  inherit the same OIDCCryptoPassphrase. When neither is configured nothing
+  changes, so existing deployments keep working; a startup warning is logged
+  when JWT access tokens are validated locally without an audience configured.
+  As an alternative (or in addition) the audience can be enforced in the
+  authorization policy with "Require claim aud:<value>". Reported by EQSTLab
+- security: require the "exp" claim in locally validated JWT access tokens: it
+  was optional, so a JWT access token without an expiry was accepted forever
 - perf: give the process-local derived-object caches a proper LRU eviction and
   an overflow warning: on a full cache the least-recently-used entry is evicted
   (retaining the hot working set) instead of clearing the whole cache, and a

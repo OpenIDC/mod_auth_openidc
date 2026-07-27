@@ -649,6 +649,16 @@ const command_rec oidc_cfg_cmds[] = {
 		OIDCOAuthVerifyJwksUri,
 		verify_jwks_uri,
 		"The JWKs URL on which the Authorization publishes the keys used to sign its JWT access tokens."),
+	OIDC_CFG_CMD_OAUTH(
+		AP_INIT_ITERATE,
+		OIDCOAuthVerifyAudience,
+		verify_aud_values,
+		"Accepted \"aud\" claim value(s) in locally validated JWT access tokens; when not set the \"aud\" claim is not verified."),
+	OIDC_CFG_CMD_OAUTH(
+		AP_INIT_TAKE1,
+		OIDCOAuthVerifyIssuer,
+		verify_issuer,
+		"The issuer that locally validated JWT access tokens must have been issued by; when not set the \"iss\" claim is not verified."),
 
 	// dir
 

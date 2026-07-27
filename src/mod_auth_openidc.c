@@ -1651,6 +1651,13 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
+		if (oidc_cfg_oauth_verify_aud_values_get(c) == NULL)
+			oidc_swarn(s,
+				   "JWT access tokens are validated locally but '" OIDCOAuthVerifyAudience
+				   "' is not set, so any token signed by the configured key(s) is accepted, "
+				   "including one issued for a different resource server; set '" OIDCOAuthVerifyAudience
+				   "' to the identifier(s) of this resource server");
+
 	} else if ((oidc_cfg_oauth_verify_jwks_uri_get(c) != NULL) ||
 		   (oidc_cfg_oauth_verify_public_keys_get(c) != NULL) ||
 		   (oidc_cfg_oauth_verify_shared_keys_get(c) != NULL)) {

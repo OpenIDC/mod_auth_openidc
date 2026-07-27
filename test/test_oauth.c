@@ -466,6 +466,205 @@ START_TEST(test_oauth_check_userid_jwt_bad_signature) {
 }
 END_TEST
 
+/* build an HS256-signed JWT access token with an optional "aud" claim (a string or an array,
+ * owned by the caller) and an optional "iss" claim; pass exp_offset_secs == 0 to omit "exp" */
+static char *e2e_sign_jwt_access_token_claims(request_rec *r, const char *secret, int exp_offset_secs, oidc_json_t *aud,
+					      const char *iss) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, FALSE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	if (exp_offset_secs != 0)
+		oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + exp_offset_secs));
+	if (aud != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "aud", aud);
+	if (iss != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string(iss));
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + exp_offset_secs;
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+#define OIDC_TEST_OAUTH_AUD "https://my-api.example.org"
+#define OIDC_TEST_OAUTH_ISS "https://issuer.example.org"
+
+/* a validly signed JWT access token that the AS issued for a *different* resource server must
+ * be rejected once this resource server's audience is configured (RFC 9068 section 4) */
+START_TEST(test_oauth_check_userid_jwt_wrong_audience) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL,
+								OIDC_TEST_OAUTH_AUD));
+	char *access_token =
+	    e2e_sign_jwt_access_token_claims(r, secret, 300, oidc_json_string("https://other-api.example.org"), NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+	ck_assert_ptr_null(r->user);
+}
+END_TEST
+
+/* the same token is accepted when its "aud" claim matches the configured audience */
+START_TEST(test_oauth_check_userid_jwt_matching_audience) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL,
+								OIDC_TEST_OAUTH_AUD));
+	char *access_token =
+	    e2e_sign_jwt_access_token_claims(r, secret, 300, oidc_json_string(OIDC_TEST_OAUTH_AUD), NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/* "aud" may be an array of strings: this resource server must be among its values, and other
+ * audiences may legitimately be present alongside it */
+START_TEST(test_oauth_check_userid_jwt_audience_array) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL,
+								OIDC_TEST_OAUTH_AUD));
+	oidc_json_t *aud = oidc_json_array();
+	oidc_json_array_append_new(aud, oidc_json_string("https://other-api.example.org"));
+	oidc_json_array_append_new(aud, oidc_json_string(OIDC_TEST_OAUTH_AUD));
+	char *access_token = e2e_sign_jwt_access_token_claims(r, secret, 300, aud, NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/* with an audience configured, a token that carries no "aud" claim at all cannot satisfy it */
+START_TEST(test_oauth_check_userid_jwt_no_audience_claim) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL,
+								OIDC_TEST_OAUTH_AUD));
+	char *access_token = e2e_sign_jwt_access_token_claims(r, secret, 300, NULL, NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* the audience is enforced on the cache-hit path as well: the validation cache is keyed on the
+ * token and the crypto passphrase, so vhosts binding to different audiences can share entries */
+START_TEST(test_oauth_check_userid_jwt_audience_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL,
+								OIDC_TEST_OAUTH_AUD));
+	char *access_token =
+	    e2e_sign_jwt_access_token_claims(r, secret, 300, oidc_json_string(OIDC_TEST_OAUTH_AUD), NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	/* plant claims for the same token as another vhost would have cached them: valid, but
+	 * issued for a different resource server */
+	apr_time_t now = apr_time_sec(apr_time_now());
+	const char *planted =
+	    apr_psprintf(r->pool,
+			 "{\"r\":{\"sub\":\"bob\",\"aud\":\"https://other-api.example.org\",\"exp\":%" APR_TIME_T_FMT
+			 "},\"t\":%" APR_TIME_T_FMT "}",
+			 now + 300, now);
+	oidc_cache_set_access_token(r, access_token, planted, apr_time_now() + apr_time_from_sec(300));
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+	ck_assert_ptr_null(r->user);
+}
+END_TEST
+
+/* a JWT access token issued by an issuer other than the configured one must be rejected */
+START_TEST(test_oauth_check_userid_jwt_wrong_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_verify_issuer_set(oidc_test_cmd_get(OIDCOAuthVerifyIssuer), NULL, OIDC_TEST_OAUTH_ISS));
+	char *access_token = e2e_sign_jwt_access_token_claims(r, secret, 300, NULL, "https://evil-issuer.example.org");
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* ... and accepted when the "iss" claim matches */
+START_TEST(test_oauth_check_userid_jwt_matching_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_verify_issuer_set(oidc_test_cmd_get(OIDCOAuthVerifyIssuer), NULL, OIDC_TEST_OAUTH_ISS));
+	char *access_token = e2e_sign_jwt_access_token_claims(r, secret, 300, NULL, OIDC_TEST_OAUTH_ISS);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/* with an issuer configured, a token that carries no "iss" claim cannot satisfy it */
+START_TEST(test_oauth_check_userid_jwt_no_issuer_claim) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_verify_issuer_set(oidc_test_cmd_get(OIDCOAuthVerifyIssuer), NULL, OIDC_TEST_OAUTH_ISS));
+	char *access_token = e2e_sign_jwt_access_token_claims(r, secret, 300, NULL, NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* a JWT access token without an "exp" claim would never expire, so it must be rejected */
+START_TEST(test_oauth_check_userid_jwt_no_exp) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_claims(r, secret, 0, NULL, NULL);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* backwards compatibility: with neither an audience nor an issuer configured, neither claim is
+ * verified and a token issued for another resource server is still accepted - which is exactly
+ * what OIDCOAuthVerifyAudience exists to prevent */
+START_TEST(test_oauth_check_userid_jwt_no_audience_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_claims(
+	    r, secret, 300, oidc_json_string("https://other-api.example.org"), "https://evil-issuer.example.org");
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
 /* an encrypted (JWE) JWT access token is decrypted with the dedicated
  * OIDCOAuthDecryptSharedKeys key - not the client_secret fallback: the JWE key
  * deliberately differs from the client_secret set by e2e_setup_jwt_validation,
@@ -774,6 +973,16 @@ int main(void) {
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_expired);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_bad_signature);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_encrypted_decrypt_shared_keys);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_wrong_audience);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_matching_audience);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_audience_array);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_audience_claim);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_audience_cached);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_wrong_issuer);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_matching_issuer);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_issuer_claim);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_exp);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_audience_configured);
 
 	TCase *metadata = tcase_create("metadata");
 	tcase_add_checked_fixture(metadata, oidc_test_setup, oidc_test_teardown);

@@ -573,6 +573,96 @@ static apr_byte_t oidc_oauth_resolve_access_token(request_rec *r, oidc_cfg_t *c,
 }
 
 /*
+ * validate the "aud" claim of a locally validated JWT access token against the configured
+ * audience value(s): this resource server must be among the intended recipients of the token,
+ * but - unlike an id_token - other audiences may legitimately be present as well
+ */
+static apr_byte_t oidc_oauth_validate_jwt_aud(request_rec *r, const oidc_cfg_t *c, const oidc_json_t *claims) {
+	const apr_array_header_t *arr = oidc_cfg_oauth_verify_aud_values_get(c);
+	const oidc_json_t *aud = NULL;
+
+	/* no audience configured: nothing to match against */
+	if ((arr == NULL) || (arr->nelts == 0))
+		return TRUE;
+
+	aud = oidc_json_object_get(claims, OIDC_CLAIM_AUD);
+	if (aud == NULL) {
+		oidc_error(r,
+			   "JWT access token does not contain an \"%s\" claim, so it cannot be matched against the "
+			   "configured " OIDCOAuthVerifyAudience " value(s)",
+			   OIDC_CLAIM_AUD);
+		return FALSE;
+	}
+
+	if (oidc_json_is_string(aud)) {
+		for (int i = 0; i < arr->nelts; i++)
+			if (_oidc_strcmp(oidc_json_string_value(aud), APR_ARRAY_IDX(arr, i, const char *)) == 0)
+				return TRUE;
+	} else if (oidc_json_is_array(aud)) {
+		/* "aud" may be a single string or an array of strings (RFC 7519 section 4.1.3) */
+		for (int i = 0; i < arr->nelts; i++)
+			if (oidc_json_array_has_value(r, aud, APR_ARRAY_IDX(arr, i, const char *)) == TRUE)
+				return TRUE;
+	} else {
+		oidc_error(r, "\"%s\" claim in the JWT access token is neither a string nor an array", OIDC_CLAIM_AUD);
+		return FALSE;
+	}
+
+	oidc_error(r,
+		   "none of the configured " OIDCOAuthVerifyAudience " values matches the \"%s\" claim in the JWT "
+		   "access token",
+		   OIDC_CLAIM_AUD);
+	return FALSE;
+}
+
+/*
+ * validate the "iss" claim of a locally validated JWT access token against the configured issuer
+ */
+static apr_byte_t oidc_oauth_validate_jwt_iss(request_rec *r, const oidc_cfg_t *c, const oidc_json_t *claims) {
+	const char *iss = oidc_cfg_oauth_verify_issuer_get(c);
+	char *s_iss = NULL;
+
+	/* no issuer configured: nothing to match against */
+	if (iss == NULL)
+		return TRUE;
+
+	if (oidc_json_object_get_string(r->pool, claims, OIDC_CLAIM_ISS, &s_iss, NULL) == FALSE)
+		return FALSE;
+
+	if (s_iss == NULL) {
+		oidc_error(r,
+			   "JWT access token does not contain an \"%s\" claim, so it cannot be matched against the "
+			   "configured " OIDCOAuthVerifyIssuer " value (%s)",
+			   OIDC_CLAIM_ISS, iss);
+		return FALSE;
+	}
+
+	if (oidc_util_issuer_match(iss, s_iss) == FALSE) {
+		oidc_error(r,
+			   "configured " OIDCOAuthVerifyIssuer " (%s) does not match the \"%s\" claim (%s) in the "
+			   "JWT access token",
+			   iss, OIDC_CLAIM_ISS, s_iss);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * validate the claims of a JWT access token that bind it to this resource server (RFC 9068
+ * section 4)
+ *
+ * NB: applied to freshly verified tokens as well as to claims served from the validation cache:
+ *     that cache is keyed on the token and the crypto passphrase, so vhosts that inherit the same
+ *     OIDCCryptoPassphrase share entries even when they bind to a different audience/issuer
+ */
+static apr_byte_t oidc_oauth_validate_jwt_claims(request_rec *r, const oidc_cfg_t *c, const oidc_json_t *claims) {
+	if (oidc_oauth_validate_jwt_iss(r, c, claims) == FALSE)
+		return FALSE;
+	return oidc_oauth_validate_jwt_aud(r, c, claims);
+}
+
+/*
  * validate a JWT access token (locally)
  *
  * NB: reuses the following settings from the OIDC (RP) configuration section, as documented
@@ -604,6 +694,10 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	 */
 	oidc_oauth_get_cached_access_token(r, c, access_token, &cached);
 	if (cached != NULL) {
+		if (oidc_oauth_validate_jwt_claims(r, c, cached) == FALSE) {
+			oidc_json_decref(cached);
+			return FALSE;
+		}
 		*token = cached;
 		*response = oidc_json_encode(r->pool, cached, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT);
 		return TRUE;
@@ -633,10 +727,14 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	oidc_debug(r, "successfully parsed JWT with header: %s", jwt->header.value.str);
 
 	/*
-	 * validate the access token JWT by validating the (optional) exp claim
+	 * validate the access token JWT by validating the exp claim, which is required: a JWT access
+	 * token without an expiry would be accepted forever (RFC 9068 section 4)
 	 * don't enforce anything around iat since it doesn't make much sense for access tokens
+	 * NB: "iss" is passed as NULL here and validated together with "aud" after the signature has
+	 *     been verified, so that neither claim is acted upon before the token is known to be
+	 *     authentic, and both are applied on the cache-hit path as well
 	 */
-	if (oidc_proto_jwt_validate(r, jwt, NULL, FALSE, FALSE, -1) == FALSE) {
+	if (oidc_proto_jwt_validate(r, jwt, NULL, TRUE, FALSE, -1) == FALSE) {
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -662,6 +760,12 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	}
 
 	oidc_debug(r, "successfully verified JWT access token: %s", jwt->payload.value.str);
+
+	/* the signature is authentic: now check that the token was actually meant for us */
+	if (oidc_oauth_validate_jwt_claims(r, c, jwt->payload.value.json) == FALSE) {
+		oidc_jwt_destroy(jwt);
+		return FALSE;
+	}
 
 	/* cache the validated claims bounded by the token's expiry (60 seconds when no exp claim
 	 * is present) so subsequent requests carrying the same bearer token skip re-verification */
