@@ -302,8 +302,17 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 	return TRUE;
 }
 
+/* number of seconds a validated token is cached for when its expiry claim cannot bound the entry */
+#define OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS 60
+
 /*
- * parse (custom/configurable) token expiry claim in introspection result
+ * parse the (custom/configurable) token expiry claim from an introspection result or from the payload of a
+ * locally validated JWT access token and bound the cache entry by it
+ *
+ * NB: FALSE is returned only when the claim is mandatory and absent or malformed, and the two callers act on
+ *     that differently: the introspection path rejects the token outright, whereas the JWT access token path
+ *     passes expiry_claim_is_mandatory = FALSE and therefore never sees it. When TRUE is returned and the
+ *     claim was absent or unusable, *cache_until is left untouched, so the caller's default applies.
  */
 static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_cfg_t *c,
 							  const oidc_json_t *introspection_response,
@@ -317,34 +326,39 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 
 	if (expiry == NULL) {
 		if (expiry_claim_is_mandatory) {
-			oidc_error(r, "introspection response JSON object did not contain an \"%s\" claim",
+			oidc_error(r, "the token claims did not contain the mandatory \"%s\" expiry claim",
 				   expiry_claim_name);
 			return FALSE;
 		}
 		return TRUE;
 	}
 
-	if (!oidc_json_is_integer(expiry)) {
+	/*
+	 * a NumericDate is a JSON number and may hold a non-integer value (RFC 7519 section 2), so accept any
+	 * number here: this matches what oidc_proto_jwt_validate accepted when it verified the same claim
+	 */
+	if (!oidc_json_is_number(expiry)) {
 		if (expiry_claim_is_mandatory) {
-			oidc_error(
-			    r,
-			    "introspection response JSON object contains a \"%s\" claim but it is not a JSON integer",
-			    expiry_claim_name);
+			oidc_error(r,
+				   "the token claims contain a \"%s\" expiry claim but it is not a JSON number (RFC "
+				   "7519 section 2)",
+				   expiry_claim_name);
 			return FALSE;
 		}
 		oidc_warn(r,
-			  "introspection response JSON object contains a \"%s\" claim that is not an (optional) JSON "
-			  "integer: the introspection result will NOT be cached",
-			  expiry_claim_name);
+			  "the token claims contain an (optional) \"%s\" expiry claim that is not a JSON number (RFC "
+			  "7519 section 2); caching the result for the default %d seconds instead",
+			  expiry_claim_name, OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 		return TRUE;
 	}
 
-	oidc_json_int_t value = oidc_json_integer_value(expiry);
+	/* whole seconds: truncating a NumericDate expires the entry no later than the claim allows */
+	apr_time_t value = (apr_time_t)oidc_json_number_value(expiry);
 	if (value <= 0) {
 		oidc_warn(r,
-			  "introspection response JSON object integer number value <= 0 (%ld); introspection result "
-			  "will not be cached",
-			  (long)value);
+			  "the \"%s\" expiry claim has a value <= 0 (%ld); caching the result for the default %d "
+			  "seconds instead",
+			  expiry_claim_name, (long)value, OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 		return TRUE;
 	}
 
@@ -471,7 +485,7 @@ static apr_byte_t oidc_oauth_introspection_active_is_valid(request_rec *r, const
 static apr_byte_t oidc_oauth_introspection_validate_and_cache(request_rec *r, oidc_cfg_t *c, const char *access_token,
 							      oidc_json_t *result) {
 	const oidc_json_t *active = oidc_json_object_get(result, OIDC_PROTO_ACTIVE);
-	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
+	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 
 	if (active != NULL) {
 		if (oidc_oauth_introspection_active_is_valid(r, active) == FALSE)
@@ -767,9 +781,10 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 		return FALSE;
 	}
 
-	/* cache the validated claims bounded by the token's expiry (60 seconds when no exp claim
-	 * is present) so subsequent requests carrying the same bearer token skip re-verification */
-	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(60);
+	/* cache the validated claims bounded by the token's expiry so subsequent requests carrying the same
+	 * bearer token skip re-verification; "exp" is mandatory and was verified above, so it always bounds
+	 * the entry here and the default below is not reached */
+	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 	if (oidc_oauth_parse_and_cache_token_expiry(r, c, jwt->payload.value.json, OIDC_CLAIM_EXP, TRUE, FALSE,
 						    &cache_until) == TRUE)
 		oidc_oauth_cache_access_token(r, c, cache_until, access_token, jwt->payload.value.json);

@@ -19,6 +19,14 @@
   authorization policy with "Require claim aud:<value>". Reported by EQSTLab
 - security: require the "exp" claim in locally validated JWT access tokens: it
   was optional, so a JWT access token without an expiry was accepted forever
+- fix: accept a token expiry claim that carries a non-integer value: a
+  NumericDate is a JSON number and may hold a fraction (RFC 7519 section 2), but
+  the claim was read back as a JSON integer when it bounds the validation cache
+  entry, whereas it is verified as a JSON number. A JWT access token with a
+  fractional "exp" was therefore cached for the 60 second default instead of
+  until its expiry, and an introspection result whose expiry claim was
+  configured as mandatory (OIDCOAuthTokenExpiryClaim ... mandatory) was rejected
+  outright, failing the whole introspection
 - perf: give the process-local derived-object caches a proper LRU eviction and
   an overflow warning: on a full cache the least-recently-used entry is evicted
   (retaining the hot working set) instead of clearing the whole cache, and a

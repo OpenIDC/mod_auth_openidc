@@ -181,6 +181,33 @@ START_TEST(test_oauth_check_userid_introspection_inactive) {
 }
 END_TEST
 
+/* with no "active" member the token's validity rests solely on the mandatory expiry claim; a
+ * NumericDate may hold a non-integer value (RFC 7519 section 2), so a JSON real must satisfy it
+ * rather than be rejected as malformed and fail the whole introspection */
+START_TEST(test_oauth_check_userid_introspection_mandatory_real_expiry) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	apr_time_t exp = apr_time_sec(apr_time_now()) + 300;
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = apr_psprintf(r->pool, "{\"sub\":\"alice\",\"exp\":%" APR_TIME_T_FMT ".5}", exp)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_ptr_null(oidc_cmd_oauth_token_expiry_claim_set(oidc_test_cmd_get(OIDCOAuthTokenExpiryClaim), NULL,
+								 OIDC_CLAIM_EXP, "absolute", "mandatory"));
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-REAL-EXP"), OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_oauth_check_userid_introspection_error_response) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -495,6 +522,42 @@ static char *e2e_sign_jwt_access_token_claims(request_rec *r, const char *secret
 	return cser;
 }
 
+/* build an HS256-signed JWT access token whose "exp" is a JSON real rather than a JSON integer:
+ * a NumericDate is a JSON number and may hold a non-integer value (RFC 7519 section 2) */
+static char *e2e_sign_jwt_access_token_real_exp(request_rec *r, const char *secret, int exp_offset_secs) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	oidc_json_t *payload = NULL;
+	apr_time_t now = apr_time_sec(apr_time_now());
+
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, FALSE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+
+	/* the JSON parser only yields a real for a literal that carries a fraction, so parse one in */
+	ck_assert_int_eq(
+	    oidc_json_decode_object(r, apr_psprintf(r->pool, "{\"exp\":%" APR_TIME_T_FMT ".5}", now + exp_offset_secs),
+				    &payload),
+	    TRUE);
+	oidc_json_t *exp = oidc_json_object_get(payload, OIDC_CLAIM_EXP);
+	ck_assert_int_eq(oidc_json_is_real(exp), TRUE);
+
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set(jwt->payload.value.json, OIDC_CLAIM_EXP, exp);
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + exp_offset_secs;
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+
+	oidc_json_decref(payload);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
 #define OIDC_TEST_OAUTH_AUD "https://my-api.example.org"
 #define OIDC_TEST_OAUTH_ISS "https://issuer.example.org"
 
@@ -662,6 +725,29 @@ START_TEST(test_oauth_check_userid_jwt_no_audience_configured) {
 
 	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
 	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/* a NumericDate may hold a non-integer value (RFC 7519 section 2), so a JWT access token whose "exp"
+ * is a JSON real must be validated and cached like any other
+ *
+ * NB: on this path a real "exp" that is not read back as a number only shortens the cache entry to
+ *     the default TTL, and the cache API exposes no way to read that TTL back, so this test cannot
+ *     assert it; test_oauth_check_userid_introspection_mandatory_real_expiry is what guards the
+ *     number-vs-integer read, since there the same claim decides whether the token is accepted */
+START_TEST(test_oauth_check_userid_jwt_real_exp) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *s_cache_entry = NULL;
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_real_exp(r, secret, 300);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	oidc_cache_get_access_token(r, access_token, &s_cache_entry);
+	ck_assert_ptr_nonnull(s_cache_entry);
 }
 END_TEST
 
@@ -961,6 +1047,7 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_inactive);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_error_response);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached);
+	tcase_add_test(introspect, test_oauth_check_userid_introspection_mandatory_real_expiry);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_jwks);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_remove_at_cache);
 	tcase_add_test(introspect, test_oauth_check_userid_subrequest);
@@ -983,6 +1070,7 @@ int main(void) {
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_issuer_claim);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_exp);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_audience_configured);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_real_exp);
 
 	TCase *metadata = tcase_create("metadata");
 	tcase_add_checked_fixture(metadata, oidc_test_setup, oidc_test_teardown);
