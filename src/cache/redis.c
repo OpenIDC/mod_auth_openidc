@@ -132,7 +132,7 @@ apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
  */
 const char *oidc_cache_redis_redact(apr_pool_t *pool, const char *str) {
 	const char *rv = NULL;
-	char *tuple = NULL;
+	const char *tuple = NULL;
 	char *token = NULL;
 	const char *at = NULL;
 
