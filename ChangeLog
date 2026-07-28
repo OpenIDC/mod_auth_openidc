@@ -1,3 +1,15 @@
+07/28/2026
+- security: never log the credentials that an OIDCRedisCacheServer value may
+  carry: the value is echoed verbatim when it fails to parse, and the failover
+  backend accepts per-server credentials in it as
+  [<username>:<password>@]<host>:<port>, so a misconfigured value could put a
+  password in the error log; the credentials part of each comma-separated tuple
+  is replaced with a placeholder now
+- security: don't log the cached value when the sanity check on a Redis reply
+  fails: the length mismatch that check guards against is a property of the
+  reply, not of its content, so report the two lengths instead of the value,
+  which is cached (session) data that has no business in the error log
+
 07/27/2026
 - security: add OIDCOAuthVerifyAudience and OIDCOAuthVerifyIssuer to bind
   locally validated JWT access tokens to this resource server. The local
@@ -6,7 +18,7 @@
   directive existed to configure what to check them against, so any token
   signed by the configured key (set) was accepted - including one that the
   Authorization Server issued for a completely different resource server, whose
-  claims were then used to set REMOTE_USER (RFC 9068 section 4, CWE-287).
+  claims were then used to set REMOTE_USER (RFC 9068 section 4).
   OIDCOAuthVerifyAudience takes one or more identifiers of this resource server
   and accepts a token when its "aud" claim - a string or an array - contains at
   least one of them; OIDCOAuthVerifyIssuer matches the "iss" claim. Both are
@@ -16,7 +28,11 @@
   changes, so existing deployments keep working; a startup warning is logged
   when JWT access tokens are validated locally without an audience configured.
   As an alternative (or in addition) the audience can be enforced in the
-  authorization policy with "Require claim aud:<value>". Reported by EQSTLab
+  authorization policy with "Require claim aud:<value>", which works on earlier
+  releases as well. Note that the OAuth 2.0 Resource Server functionality has
+  been deprecated since 2.4.0 and is superseded by mod_oauth2. Reported by
+  EQSTLab, see:
+    https://github.com/OpenIDC/mod_auth_openidc/security/advisories/GHSA-wcvh-g65p-v576
 - security: require the "exp" claim in locally validated JWT access tokens: it
   was optional, so a JWT access token without an expiry was accepted forever
 - fix: accept a token expiry claim that carries a non-integer value: a
@@ -27,6 +43,8 @@
   until its expiry, and an introspection result whose expiry claim was
   configured as mandatory (OIDCOAuthTokenExpiryClaim ... mandatory) was rejected
   outright, failing the whole introspection
+
+07/22/2026
 - perf: give the process-local derived-object caches a proper LRU eviction and
   an overflow warning: on a full cache the least-recently-used entry is evicted
   (retaining the hot working set) instead of clearing the whole cache, and a
