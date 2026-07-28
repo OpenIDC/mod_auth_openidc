@@ -126,6 +126,32 @@ apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context) {
 }
 
 /*
+ * return a copy of a (comma-separated) OIDCRedisCacheServer value with the credentials part of
+ * each tuple - everything up to the last '@' in it - replaced by a placeholder, so that a
+ * password configured there is never written to the log, not even when the value failed to parse
+ */
+const char *oidc_cache_redis_redact(apr_pool_t *pool, const char *str) {
+	const char *rv = NULL;
+	char *tuple = NULL;
+	char *token = NULL;
+	const char *at = NULL;
+
+	if (str == NULL)
+		return NULL;
+
+	/* tokenize a copy: apr_strtok modifies its input in place */
+	tuple = apr_strtok(apr_pstrdup(pool, str), ",", &token);
+	while (tuple != NULL) {
+		at = strrchr(tuple, '@');
+		rv = apr_pstrcat(pool, (rv != NULL) ? rv : "", (rv != NULL) ? "," : "",
+				 (at != NULL) ? "<credentials>@" : "", (at != NULL) ? at + 1 : tuple, NULL);
+		tuple = apr_strtok(NULL, ",", &token);
+	}
+
+	return (rv != NULL) ? rv : "";
+}
+
+/*
  * the oidc_cache_t post_config hook: initialize the offline config through
  * oidc_cache_redis_post_config (which validates that a server is configured),
  * then parse the server address and wire the connecting Redis operations
@@ -147,12 +173,14 @@ static int oidc_cache_redis_post_config_hook(apr_pool_t *pool, server_rec *s) {
 	char *scope_id;
 	rv = apr_parse_addr_port(&context->host_str, &scope_id, &context->port, cfg->cache.redis_server, pool);
 	if (rv != APR_SUCCESS) {
-		oidc_serror(s, "failed to parse cache server: '%s'", cfg->cache.redis_server);
+		oidc_serror(s, "failed to parse cache server: '%s'",
+			    oidc_cache_redis_redact(pool, cfg->cache.redis_server));
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	if (context->host_str == NULL) {
-		oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'", cfg->cache.redis_server);
+		oidc_serror(s, "failed to parse cache server, no hostname specified: '%s'",
+			    oidc_cache_redis_redact(pool, cfg->cache.redis_server));
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 

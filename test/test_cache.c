@@ -798,6 +798,36 @@ static void redis_mock_restore(request_rec *r) {
 	apr_table_unset(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL");
 }
 
+/*
+ * credentials that an OIDCRedisCacheServer value may carry per server must never reach the log:
+ * everything up to the last '@' of each comma-separated tuple is replaced by a placeholder
+ */
+START_TEST(test_cache_redis_redact) {
+	request_rec *r = oidc_test_request_get();
+	apr_pool_t *pool = r->pool;
+
+	ck_assert_ptr_null(oidc_cache_redis_redact(pool, NULL));
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, ""), "");
+
+	/* no credentials: passed through unchanged */
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "redis1:6379"), "redis1:6379");
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "redis1:6379,redis2:6380"), "redis1:6379,redis2:6380");
+
+	/* credentials on one or on every tuple */
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "u1:p1@redis1:6379"), "<credentials>@redis1:6379");
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "u1:p1@redis1:6379,redis2:6380"),
+			 "<credentials>@redis1:6379,redis2:6380");
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "u1:p1@redis1:6379,u2:p2@redis2:6380"),
+			 "<credentials>@redis1:6379,<credentials>@redis2:6380");
+
+	/* a password may itself contain ':' and '@': the last '@' of the tuple delimits it */
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "u:p@ss:w@rd@redis1:6379"), "<credentials>@redis1:6379");
+
+	/* an unparseable value is redacted too: that is exactly when it gets logged */
+	ck_assert_str_eq(oidc_cache_redis_redact(pool, "u1:p1@redis1"), "<credentials>@redis1");
+}
+END_TEST
+
 START_TEST(test_cache_redis_post_config_no_server) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -1578,6 +1608,7 @@ int main(void) {
 #ifdef USE_LIBHIREDIS
 	TCase *redis = tcase_create("redis");
 	tcase_add_checked_fixture(redis, redis_test_setup, oidc_test_teardown);
+	tcase_add_test(redis, test_cache_redis_redact);
 	tcase_add_test(redis, test_cache_redis_post_config_no_server);
 	tcase_add_test(redis, test_cache_redis_post_config_success);
 	tcase_add_test(redis, test_cache_redis_get_hit);

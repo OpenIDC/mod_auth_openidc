@@ -93,6 +93,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 				apr_time_t expiry);
 apr_status_t oidc_cache_redis_disconnect(oidc_cache_cfg_redis_t *context);
 
+const char *oidc_cache_redis_redact(apr_pool_t *pool, const char *str);
 apr_byte_t oidc_cache_redis_set_keepalive(request_rec *r, redisContext *rctx, const int keepalive);
 apr_byte_t oidc_cache_redis_set_auth(request_rec *r, redisContext *rctx, const char *username, const char *password);
 apr_byte_t oidc_cache_redis_set_database(request_rec *r, redisContext *rctx, const int database);
