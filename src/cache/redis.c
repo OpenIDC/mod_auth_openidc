@@ -606,10 +606,11 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 		goto end;
 	}
 
-	/* do a sanity check on the returned value */
+	/* do a sanity check on the returned value; report the two lengths but not the value
+	 * itself, which is cached (session) data that must not be written to the log */
 	if ((reply->str == NULL) || (reply->len != _oidc_strlen(reply->str))) {
-		oidc_error(r, "redisCommand reply->len (%d) != _oidc_strlen(reply->str): '%s'", (int)reply->len,
-			   reply->str);
+		oidc_error(r, "redisCommand reply->len (%d) != _oidc_strlen(reply->str) (%d)", (int)reply->len,
+			   (int)_oidc_strlen(reply->str));
 		goto end;
 	}
 
