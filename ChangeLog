@@ -9,6 +9,14 @@
   fails: the length mismatch that check guards against is a property of the
   reply, not of its content, so report the two lengths instead of the value,
   which is cached (session) data that has no business in the error log
+- session: take the OIDCSessionCacheFallbackToCookie fallback when the cache has
+  no entry for the session cookie, not only when the cache reports an error. On a
+  save that cannot reach the cache the module stores the whole session in the
+  cookie, but the load treated that cookie as a stale cache key: it deleted the
+  cookie and returned success, so the fallback branch never ran and the user was
+  sent round the authentication loop on every request. A backend whose writes fail
+  while its reads report a plain miss - a file cache on a directory it cannot
+  write to - hit this on every request
 
 07/27/2026
 - security: add OIDCOAuthVerifyAudience and OIDCOAuthVerifyIssuer to bind

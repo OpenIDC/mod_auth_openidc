@@ -383,6 +383,22 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 
 		/* cache backend does not contain an entry for the given key */
 		if (z->state == NULL) {
+
+			/* With OIDCSessionCacheFallbackToCookie the cookie is not necessarily a key into the
+			 * cache at all: oidc_session_save falls back to storing the whole session in it
+			 * whenever the cache write fails, and a backend that fails writes while reporting a
+			 * plain miss on reads - a file cache on a directory it cannot write to, say - arrives
+			 * here holding exactly such a session. Deleting the cookie would throw it away, and
+			 * returning success would skip the fallback in oidc_session_load, so the user would be
+			 * sent round the authentication loop on every request. Report failure instead and let
+			 * that fallback read the cookie as the session it is.
+			 *
+			 * A cookie that turns out to be neither is left in place rather than cleaned up here;
+			 * it is overwritten by the next successful login.
+			 */
+			if (oidc_cfg_session_cache_fallback_to_cookie_get(c))
+				return FALSE;
+
 			/* delete the session cookie */
 			oidc_http_set_cookie(r, oidc_cfg_dir_cookie_get(r), "", 0,
 					     OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));
