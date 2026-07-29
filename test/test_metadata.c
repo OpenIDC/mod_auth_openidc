@@ -388,6 +388,71 @@ START_TEST(test_metadata_jwks_get_forced_refresh_throttled) {
 }
 END_TEST
 
+/*
+ * the rate-limit window is configurable with the OIDC_JWKS_FORCED_REFRESH_INTERVAL environment
+ * variable: 0 disables the guard entirely, and anything outside 0-3600 (or not an integer at all)
+ * falls back to the 60s default rather than silently removing the guard
+ */
+START_TEST(test_metadata_jwks_get_forced_refresh_interval_envvar) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_test_http_response_t resp[2] = {
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}"},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k2\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}"}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resp, 2);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = apr_psprintf(r->pool, "%s/a", oidc_test_http_server_url(srv, r->pool));
+	jwks_uri.refresh_interval = 60;
+
+	/* the guard is on by default: the first forced refresh fetches and stamps */
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
+	ck_assert_str_eq(oidc_test_jwks_first_kid(j), "k1");
+	oidc_json_decref(j);
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+
+	/* out of range: falls back to the default, so the stamp still throttles */
+	apr_table_set(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL", "3601");
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+
+	/* negative and non-integer values likewise fall back to the default */
+	apr_table_set(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL", "-1");
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+	apr_table_set(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL", "60x");
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+
+	/* the upper bound itself is accepted */
+	apr_table_set(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL", "3600");
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+
+	/* 0 disables the guard: no longer throttled despite the marker left in the cache, and a second
+	 * forced refresh really does fetch again - it returns the second (k2) response */
+	apr_table_set(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL", "0");
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), FALSE);
+
+	j = NULL;
+	refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
+	ck_assert_str_eq(oidc_test_jwks_first_kid(j), "k2");
+	oidc_json_decref(j);
+
+	/* with the guard off no marker is written either, so it stays unthrottled */
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), FALSE);
+
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	apr_table_unset(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL");
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_metadata_jwks_get_http_failure) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1490,6 +1555,7 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_retrieve_invalid_metadata);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh_throttled);
+	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh_interval_envvar);
 	tcase_add_test(retrieve, test_metadata_jwks_get_http_failure);
 	tcase_add_test(retrieve, test_metadata_jwks_get_cache_hit);
 	tcase_add_test(retrieve, test_metadata_jwks_get_missing_keys);

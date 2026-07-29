@@ -1,4 +1,8 @@
 07/29/2026
+- jwks: make the forced-refresh overload guard configurable with the
+  OIDC_JWKS_FORCED_REFRESH_INTERVAL environment variable (0-3600 seconds, 0
+  disables it) instead of fixed at 60; an out-of-range or non-integer value is
+  ignored with a warning and the default applies
 - id_token: accept an unsigned (alg "none") id_token obtained over the
   back-channel again when the signing algorithm has been pinned to "none"
   itself, through OIDCIDTokenSignedResponseAlg or the client metadata. Since

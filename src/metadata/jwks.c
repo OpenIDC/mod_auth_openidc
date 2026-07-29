@@ -46,10 +46,45 @@ static const char *oidc_metadata_jwks_cache_key(const oidc_jwks_uri_t *jwks_uri)
 }
 
 /* rate-limit forced (i.e. cache-bypassing) refreshes of a jwks_uri to one per this many seconds */
-#define OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL 60
+#define OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_DEFAULT 60
+
+/* environment variable overriding that window, in seconds; 0 turns the rate limit off entirely */
+#define OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_ENVVAR "OIDC_JWKS_FORCED_REFRESH_INTERVAL"
+
+/* upper bound on the window: past an hour a genuine key rollover would go unnoticed for too long */
+#define OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_MAX 3600
 
 /* postfix distinguishing the forced-refresh marker from the JWKs document under the same key */
 #define OIDC_METADATA_JWKS_FORCED_REFRESH_POSTFIX "#forced"
+
+/*
+ * the length of the forced-refresh rate-limit window in seconds, overridable per server/directory
+ * with the OIDC_JWKS_FORCED_REFRESH_INTERVAL environment variable (0 - 3600, where 0 disables the
+ * guard). A value that is not an integer in that range falls back to the default, so a typo cannot
+ * silently remove the guard; the warning may repeat within a request, since the window is consulted
+ * on both the throttle check and the stamp that follows it.
+ */
+static int oidc_metadata_jwks_forced_refresh_interval(request_rec *r) {
+	int interval = 0;
+	const char *s_interval =
+	    (r->subprocess_env != NULL)
+		? apr_table_get(r->subprocess_env, OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_ENVVAR)
+		: NULL;
+
+	if (s_interval == NULL)
+		return OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_DEFAULT;
+
+	if ((_oidc_str_to_int_checked(s_interval, &interval) == FALSE) || (interval < 0) ||
+	    (interval > OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_MAX)) {
+		oidc_warn(
+		    r, "ignoring %s value \"%s\": must be an integer number of seconds between 0 and %d; using %d",
+		    OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_ENVVAR, s_interval,
+		    OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_MAX, OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_DEFAULT);
+		return OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL_DEFAULT;
+	}
+
+	return interval;
+}
 
 /* the shared-cache key recording that a forced refresh of this jwks_uri was recently attempted */
 static const char *oidc_metadata_jwks_forced_refresh_key(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
@@ -72,6 +107,10 @@ static const char *oidc_metadata_jwks_forced_refresh_key(request_rec *r, const o
  */
 apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
 	char *value = NULL;
+	/* a zero-length window disables the guard: never report a forced refresh as throttled, whatever
+	 * marker an earlier request may have left in the cache */
+	if (oidc_metadata_jwks_forced_refresh_interval(r) == 0)
+		return FALSE;
 	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), &value) == FALSE)
 		return FALSE;
 	return (value != NULL);
@@ -80,8 +119,13 @@ apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oid
 /* record a forced-refresh attempt so the next one within the window is rate-limited; stamped before
  * the fetch rather than after it, so a jwks_uri that is down or slow is not retried per request */
 static void oidc_metadata_jwks_forced_refresh_stamp(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
+	const int interval = oidc_metadata_jwks_forced_refresh_interval(r);
+	/* with the guard disabled there is nothing to record: writing a marker that expires immediately
+	 * would still put an entry in the shared cache on every forced refresh */
+	if (interval == 0)
+		return;
 	oidc_cache_set_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), "1",
-			    apr_time_now() + apr_time_from_sec(OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL));
+			    apr_time_now() + apr_time_from_sec(interval));
 }
 
 /*
@@ -195,7 +239,7 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 			oidc_debug(r,
 				   "not refreshing the JWKs from URI \"%s\": a forced refresh was already "
 				   "attempted less than %d seconds ago",
-				   url, OIDC_METADATA_JWKS_FORCED_REFRESH_INTERVAL);
+				   url, oidc_metadata_jwks_forced_refresh_interval(r));
 			// fall back to any cached JWKs
 		} else {
 			oidc_metadata_jwks_forced_refresh_stamp(r, jwks_uri);
