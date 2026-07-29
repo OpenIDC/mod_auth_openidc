@@ -415,11 +415,16 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 	oidc_debug(r, "successfully parsed (and possibly decrypted) JWT with header=%s, and payload=%s",
 		   (*jwt)->header.value.str, (*jwt)->payload.value.str);
 
-	// make a signature-validation exception for the 'code' flow with algorithm "none" (the id_token is
-	// then obtained over the TLS-protected back-channel), but not when an id_token signing algorithm has
-	// been pinned via OIDCIDTokenSignedResponseAlg: honor that pin and reject an unsigned token
-	if (is_code_flow == FALSE || _oidc_strcmp((*jwt)->header.alg, "none") != 0 ||
-	    oidc_cfg_provider_id_token_signed_response_alg_get(provider) != NULL) {
+	// make a signature-validation exception for the 'code' flow with algorithm "none": the id_token is
+	// then obtained over the TLS-protected back-channel, which OpenID Connect Core 1.0 section 3.1.3.7
+	// item 6 allows to stand in for validating the signature. A *different* algorithm pinned through
+	// OIDCIDTokenSignedResponseAlg (or the client metadata) overrides that exception: honor the pin and
+	// reject the unsigned token. A pin of "none" is not such an override - it is the operator, or the
+	// OP's own client registration, stating that this OP issues unsigned id_tokens - so it takes the
+	// exception too, rather than demanding a signature that by definition cannot verify
+	const char *pinned_alg = oidc_cfg_provider_id_token_signed_response_alg_get(provider);
+	if ((is_code_flow == FALSE) || (_oidc_strcmp((*jwt)->header.alg, "none") != 0) ||
+	    ((pinned_alg != NULL) && (_oidc_strcmp(pinned_alg, "none") != 0))) {
 
 		jwk = NULL;
 		if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE,

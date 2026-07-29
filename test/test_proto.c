@@ -853,6 +853,74 @@ static char *proto_sign_idtoken_hs256(request_rec *r, const char *sub, const cha
 	return cser;
 }
 
+/* build an unsigned (alg=none) id_token for the fixture provider; there is no signing step,
+ * oidc_jose_jwt_serialize emits the "<hdr>.<payload>." compact form for alg "none" itself */
+static char *proto_unsigned_idtoken(request_rec *r, const char *sub, const char *nonce) {
+	apr_pool_t *pool = r->pool;
+	oidc_jose_error_t err;
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(pool, "none");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://idp.example.com"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("client_id"));
+	if (sub != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string(sub));
+	if (nonce != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string(nonce));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 600));
+
+	char *cser = oidc_jose_jwt_serialize(pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+START_TEST(test_proto_idtoken_parse_alg_none) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_jwt_t *jwt = NULL;
+	char *s = NULL;
+
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "idtoken-none-secret-long-enough-1");
+
+	/* an unsigned id_token received over the back-channel ('code' flow) is accepted when no signing
+	 * algorithm has been pinned: OpenID Connect Core 1.0 section 3.1.3.7 item 6 lets the TLS server
+	 * validation stand in for the signature check */
+	s = proto_unsigned_idtoken(r, "alice", NULL);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, NULL, &jwt, TRUE), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+	ck_assert_str_eq(jwt->payload.sub, "alice");
+	oidc_jwt_destroy(jwt);
+	jwt = NULL;
+
+	/* ... and equally when the operator (or the OP's client registration) has pinned "none", which
+	 * states that this OP issues unsigned id_tokens rather than demanding a signature */
+	ck_assert_ptr_null(oidc_cfg_provider_id_token_signed_response_alg_set(r->pool, provider, "none"));
+	s = proto_unsigned_idtoken(r, "alice", NULL);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, NULL, &jwt, TRUE), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+	ck_assert_str_eq(jwt->payload.sub, "alice");
+	oidc_jwt_destroy(jwt);
+	jwt = NULL;
+
+	/* a pinned algorithm other than "none" overrides the exception: the unsigned token is rejected */
+	ck_assert_ptr_null(oidc_cfg_provider_id_token_signed_response_alg_set(r->pool, provider, "RS256"));
+	s = proto_unsigned_idtoken(r, "alice", NULL);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, NULL, &jwt, TRUE), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* the exception is back-channel only: an unsigned id_token delivered through the front channel
+	 * (implicit/hybrid) is rejected even with "none" pinned */
+	ck_assert_ptr_null(oidc_cfg_provider_id_token_signed_response_alg_set(r->pool, provider, "none"));
+	s = proto_unsigned_idtoken(r, "alice", NULL);
+	ck_assert_int_eq(oidc_proto_idtoken_parse(r, c, provider, s, NULL, &jwt, FALSE), FALSE);
+	ck_assert_ptr_null(jwt);
+}
+END_TEST
+
 START_TEST(test_proto_idtoken_parse_error_paths) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3113,6 +3181,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);
 	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
 	tcase_add_test(core, test_proto_idtoken_parse_error_paths);
+	tcase_add_test(core, test_proto_idtoken_parse_alg_none);
 	tcase_add_test(core, test_proto_jwt_verify_paths);
 	tcase_add_test(core, test_proto_validate_hash_error_paths);
 	tcase_add_test(core, test_proto_state_timestamp_and_bad_cookie);

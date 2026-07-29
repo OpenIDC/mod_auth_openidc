@@ -1,4 +1,14 @@
 07/29/2026
+- id_token: accept an unsigned (alg "none") id_token obtained over the
+  back-channel again when the signing algorithm has been pinned to "none"
+  itself, through OIDCIDTokenSignedResponseAlg or the client metadata. Since
+  2.4.19.4 any pinned algorithm suppressed the "code"-flow exception that
+  OpenID Connect Core 1.0 section 3.1.3.7 item 6 allows, so a pin of "none" -
+  the way an operator, or the OP's own client registration, declares that this
+  OP issues unsigned id_tokens - demanded a signature that cannot exist and
+  failed every login. A pin of any other algorithm still overrides the
+  exception and rejects the unsigned token, and an unsigned id_token received
+  over the front channel is still rejected in all cases
 - request: make the scope=openid parameter that accompanies a request_uri on the
   authorization request dependent on the configured OIDCProfile: OpenID Connect
   Core 1.0 requires it, but FAPI 2.0 Security Profile section 5.3.3.2 allows the
