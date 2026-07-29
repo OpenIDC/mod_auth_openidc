@@ -737,6 +737,88 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
 }
 END_TEST
 
+/* number of entries in a table for a given key, i.e. including duplicates that apr_table_get hides */
+static int e2e_table_count(const apr_table_t *table, const char *key) {
+	const apr_array_header_t *arr = apr_table_elts(table);
+	const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
+	int n = 0;
+	for (int i = 0; i < arr->nelts; i++)
+		if (_oidc_strnatcasecmp(elts[i].key, key) == 0)
+			n++;
+	return n;
+}
+
+/* extract the jti claim from the payload of a compact-serialized JWT */
+static const char *e2e_jwt_jti(request_rec *r, const char *s_jwt) {
+	const char *dot1 = _oidc_strstr(s_jwt, ".");
+	ck_assert_ptr_nonnull(dot1);
+	const char *dot2 = _oidc_strstr(dot1 + 1, ".");
+	ck_assert_ptr_nonnull(dot2);
+	char *s_payload = NULL;
+	ck_assert_int_gt(
+	    oidc_util_base64url_decode(r->pool, &s_payload, apr_pstrmemdup(r->pool, dot1 + 1, dot2 - (dot1 + 1))), 0);
+	oidc_json_t *payload = json_loads(s_payload, 0, NULL);
+	ck_assert_ptr_nonnull(payload);
+	char *jti = NULL;
+	oidc_json_object_get_string(r->pool, payload, OIDC_CLAIM_JTI, &jti, NULL);
+	oidc_json_decref(payload);
+	ck_assert_ptr_nonnull(jti);
+	return jti;
+}
+
+/* calling oidc_proto_token_endpoint_auth again on the same params table must replace the credentials
+ * it added before (never add a 2nd copy) and mint a fresh assertion: this is what allows a retry
+ * (the DPoP nonce retry in oidc_proto_token_endpoint_request) to re-authenticate with a new jti */
+START_TEST(test_proto_token_endpoint_auth_idempotent) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *err = oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir));
+	ck_assert_msg(err == NULL, "could not load private key: %s", err);
+
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
+							NULL, "https://idp.example.com/token", params, NULL, &basic,
+							&bearer),
+			 TRUE);
+	const char *assertion1 = apr_pstrdup(r->pool, apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION));
+	ck_assert_ptr_nonnull(assertion1);
+
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
+							NULL, "https://idp.example.com/token", params, NULL, &basic,
+							&bearer),
+			 TRUE);
+	const char *assertion2 = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion2);
+
+	/* exactly one of each, so the form body cannot carry two assertions */
+	ck_assert_int_eq(e2e_table_count(params, OIDC_PROTO_CLIENT_ASSERTION), 1);
+	ck_assert_int_eq(e2e_table_count(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE), 1);
+	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE, OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER);
+
+	/* and the replacement is a new assertion with a freshly generated jti */
+	ck_assert_str_ne(assertion1, assertion2);
+	ck_assert_str_ne(e2e_jwt_jti(r, assertion1), e2e_jwt_jti(r, assertion2));
+
+	/* the same must hold for the client_secret_post credentials */
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
+							"mysecret", NULL, "https://idp.example.com/token", params, NULL,
+							&basic, &bearer),
+			 TRUE);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
+							"mysecret", NULL, "https://idp.example.com/token", params, NULL,
+							&basic, &bearer),
+			 TRUE);
+	ck_assert_int_eq(e2e_table_count(params, OIDC_PROTO_CLIENT_ID), 1);
+	ck_assert_int_eq(e2e_table_count(params, OIDC_PROTO_CLIENT_SECRET), 1);
+}
+END_TEST
+
 START_TEST(test_proto_jwt_validate_edge_cases) {
 	request_rec *r = oidc_test_request_get();
 	apr_pool_t *pool = r->pool;
@@ -1716,6 +1798,99 @@ START_TEST(test_proto_token_endpoint_request_dpop_required_but_bearer) {
 			 FALSE);
 
 	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* the value of a single x-www-form-urlencoded parameter in a captured request body,
+ * plus the number of times that parameter occurs in it */
+static const char *e2e_form_param(apr_pool_t *pool, const char *body, const char *name, int *count) {
+	const char *value = NULL;
+	const char *needle = apr_psprintf(pool, "%s=", name);
+	const char *p = body;
+	*count = 0;
+	while ((p != NULL) && (p = _oidc_strstr(p, needle)) != NULL) {
+		/* only match at the start of the body or right after a parameter separator */
+		if ((p == body) || (*(p - 1) == OIDC_CHAR_AMP)) {
+			(*count)++;
+			p += _oidc_strlen(needle);
+			const char *amp = _oidc_strstr(p, "&");
+			if (value == NULL)
+				value = (amp != NULL) ? apr_pstrmemdup(pool, p, amp - p) : apr_pstrdup(pool, p);
+		} else {
+			p += _oidc_strlen(needle);
+		}
+	}
+	return value;
+}
+
+/* a "use_dpop_nonce" error must be retried with a nonce-bound DPoP proof *and* with freshly minted
+ * client authentication: reusing the client_assertion of the failed attempt replays its one-time jti */
+START_TEST(test_proto_token_endpoint_request_dpop_nonce_retry_new_assertion) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	apr_table_t *extra = apr_table_make(r->pool, 1);
+	apr_table_set(extra, OIDC_HTTP_HDR_DPOP_NONCE, "nonce-abc");
+	oidc_test_http_response_t resp[2] = {
+	    {.status_code = 400,
+	     .content_type = "application/json",
+	     .body = "{\"error\":\"use_dpop_nonce\"}",
+	     .extra_headers = extra},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = "{\"access_token\":\"AT-2\",\"token_type\":\"DPoP\",\"expires_in\":3600}"}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resp, 2);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(r->pool, provider, "required"));
+
+	/* a private key for both the DPoP proof and the private_key_jwt client assertion */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	oidc_cfg_provider_client_id_set(r->pool, provider, "myclient");
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_set(r->pool, c, provider, OIDC_PROTO_PRIVATE_KEY_JWT));
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-code");
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_endpoint_request(r, c, provider, params, &id_token, &access_token,
+							   &token_type, &expires_in, &refresh_token, &scope),
+			 TRUE);
+	/* the retry response is the one that was parsed */
+	ck_assert_str_eq(access_token, "AT-2");
+	ck_assert_str_eq(token_type, "DPoP");
+
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	const oidc_test_http_captured_t *cap1 = oidc_test_http_server_captured(srv, 0);
+	const oidc_test_http_captured_t *cap2 = oidc_test_http_server_captured(srv, 1);
+	ck_assert_ptr_nonnull(cap1);
+	ck_assert_ptr_nonnull(cap2);
+
+	/* the retry carries the server-provided nonce in its DPoP proof */
+	const char *dpop1 = apr_table_get(cap1->headers, OIDC_HTTP_HDR_DPOP);
+	const char *dpop2 = apr_table_get(cap2->headers, OIDC_HTTP_HDR_DPOP);
+	ck_assert_ptr_nonnull(dpop1);
+	ck_assert_ptr_nonnull(dpop2);
+	ck_assert_str_ne(dpop1, dpop2);
+
+	/* and a new client assertion, with a new jti, exactly once in the form body */
+	int n1 = 0, n2 = 0;
+	const char *a1 = e2e_form_param(r->pool, cap1->body, OIDC_PROTO_CLIENT_ASSERTION, &n1);
+	const char *a2 = e2e_form_param(r->pool, cap2->body, OIDC_PROTO_CLIENT_ASSERTION, &n2);
+	ck_assert_ptr_nonnull(a1);
+	ck_assert_ptr_nonnull(a2);
+	ck_assert_int_eq(n1, 1);
+	ck_assert_msg(n2 == 1, "the retry must carry exactly one client_assertion, found %d: %s", n2, cap2->body);
+	ck_assert_str_ne(a1, a2);
+	ck_assert_str_ne(e2e_jwt_jti(r, a1), e2e_jwt_jti(r, a2));
+
 	oidc_test_http_server_stop(srv);
 }
 END_TEST
@@ -3179,6 +3354,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_no_keys);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);
+	tcase_add_test(core, test_proto_token_endpoint_auth_idempotent);
 	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
 	tcase_add_test(core, test_proto_idtoken_parse_error_paths);
 	tcase_add_test(core, test_proto_idtoken_parse_alg_none);
@@ -3237,6 +3413,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_token_refresh_request_success);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_unsupported_token_type);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_required_but_bearer);
+	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_nonce_retry_new_assertion);
 	tcase_add_test(e2e, test_proto_response_code_missing_access_token);
 	tcase_add_test(e2e, test_proto_response_code_idtoken_happy);
 	tcase_add_test(e2e, test_proto_response_code_token_happy);

@@ -1,4 +1,9 @@
 07/29/2026
+- dpop: re-create the token endpoint client authentication when retrying a token
+  endpoint call with a server-provided DPoP nonce: a client_secret_jwt or
+  private_key_jwt assertion carries a one-time jti and a 60-second exp, so
+  resending the assertion of the "use_dpop_nonce" attempt could be rejected by
+  the OP as a replay
 - jwks: make the forced-refresh overload guard configurable with the
   OIDC_JWKS_FORCED_REFRESH_INTERVAL environment variable (0-3600 seconds, 0
   disables it) instead of fixed at 60; an out-of-range or non-integer value is

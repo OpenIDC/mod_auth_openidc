@@ -118,13 +118,28 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_prepare(request_rec *r, const o
 }
 
 /*
+ * add the configured token endpoint client authentication to the request; may be called more than
+ * once for the same params table (see the DPoP nonce retry) since all methods overwrite
+ */
+static apr_byte_t oidc_proto_token_endpoint_request_auth(request_rec *r, oidc_cfg_t *cfg,
+							 const oidc_provider_t *provider, apr_table_t *params,
+							 char **basic_auth, char **bearer_auth) {
+
+	return oidc_proto_token_endpoint_auth(
+	    r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider),
+	    oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
+	    oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
+	    oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, basic_auth, bearer_auth);
+}
+
+/*
  * retry the token endpoint call with a new DPoP header that carries the server-provided nonce;
  * on success, replaces *j_result with the freshly decoded response
  */
 static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
-						       const apr_table_t *params, const char *basic_auth,
-						       const char *bearer_auth, apr_hash_t *response_hdrs,
-						       char **response, oidc_json_t **j_result) {
+						       apr_table_t *params, char **basic_auth, char **bearer_auth,
+						       apr_hash_t *response_hdrs, char **response,
+						       oidc_json_t **j_result) {
 
 	char *dpop = NULL;
 
@@ -136,7 +151,12 @@ static apr_byte_t oidc_proto_token_endpoint_dpop_retry(request_rec *r, oidc_cfg_
 				      oidc_cfg_provider_token_endpoint_url_get(provider), "POST", NULL, &dpop) == FALSE)
 		return FALSE;
 
-	if (oidc_proto_token_endpoint_call(r, cfg, provider, params, basic_auth, bearer_auth, dpop, response,
+	/* refresh the client authentication: a client assertion carries a one-time jti and a short-lived
+	 * exp/iat, so replaying the assertion of the failed call risks a rejection by the OP */
+	if (oidc_proto_token_endpoint_request_auth(r, cfg, provider, params, basic_auth, bearer_auth) == FALSE)
+		return FALSE;
+
+	if (oidc_proto_token_endpoint_call(r, cfg, provider, params, *basic_auth, *bearer_auth, dpop, response,
 					   response_hdrs) == FALSE)
 		return FALSE;
 
@@ -213,11 +233,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, co
 	oidc_json_t *j_result = NULL;
 
 	/* add the token endpoint authentication credentials */
-	if (oidc_proto_token_endpoint_auth(
-		r, cfg, oidc_cfg_provider_token_endpoint_auth_get(provider),
-		oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
-		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
-		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
+	if (oidc_proto_token_endpoint_request_auth(r, cfg, provider, params, &basic_auth, &bearer_auth) == FALSE)
 		goto end;
 
 	/* add any configured extra static parameters to the token endpoint */
@@ -239,7 +255,7 @@ apr_byte_t oidc_proto_token_endpoint_request(request_rec *r, oidc_cfg_t *cfg, co
 
 	/* on a DPoP nonce error retry the call with a fresh nonce-bound DPoP header */
 	if ((oidc_json_check_error(r, j_result) == TRUE) &&
-	    (oidc_proto_token_endpoint_dpop_retry(r, cfg, provider, params, basic_auth, bearer_auth, response_hdrs,
+	    (oidc_proto_token_endpoint_dpop_retry(r, cfg, provider, params, &basic_auth, &bearer_auth, response_hdrs,
 						  &response, &j_result) == FALSE))
 		goto end;
 
