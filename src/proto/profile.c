@@ -56,6 +56,7 @@ typedef struct oidc_proto_profile_ops_t {
 	const oidc_proto_pkce_t *(*pkce)(const oidc_provider_t *provider);
 	oidc_dpop_mode_t (*dpop_mode)(const oidc_provider_t *provider);
 	int (*response_require_iss)(const oidc_provider_t *provider);
+	const char *(*request_uri_scope)(const oidc_provider_t *provider);
 } oidc_proto_profile_ops_t;
 
 /*
@@ -99,6 +100,13 @@ static int oidc_profile_oidc10_response_require_iss(const oidc_provider_t *provi
 	return oidc_cfg_provider_response_require_iss_get(provider);
 }
 
+static const char *oidc_profile_oidc10_request_uri_scope(const oidc_provider_t *provider) {
+	// OpenID Connect Core 1.0 incorporating errata set 2 section 6.2: even if a scope parameter is present in
+	// the referenced Request Object, a scope parameter MUST always be passed using the OAuth 2.0 request
+	// syntax containing the openid scope value
+	return OIDC_PROTO_SCOPE_OPENID;
+}
+
 static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_token_endpoint_auth_aud,
     oidc_profile_oidc10_revocation_endpoint_auth_aud,
@@ -107,6 +115,7 @@ static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_pkce,
     oidc_profile_oidc10_dpop_mode,
     oidc_profile_oidc10_response_require_iss,
+    oidc_profile_oidc10_request_uri_scope,
 };
 
 /*
@@ -150,6 +159,13 @@ static int oidc_profile_fapi20_response_require_iss(const oidc_provider_t *provi
 	return 1;
 }
 
+static const char *oidc_profile_fapi20_request_uri_scope(const oidc_provider_t *provider) {
+	// FAPI 2.0 Security Profile section 5.3.3.2: the client shall only send the client_id and request_uri
+	// request parameters to the authorization endpoint, all other parameters (scope included) are sent in
+	// the pushed authorization request
+	return NULL;
+}
+
 static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_token_endpoint_auth_aud,
     oidc_profile_fapi20_revocation_endpoint_auth_aud,
@@ -158,6 +174,7 @@ static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_pkce,
     oidc_profile_fapi20_dpop_mode,
     oidc_profile_fapi20_response_require_iss,
+    oidc_profile_fapi20_request_uri_scope,
 };
 
 /*
@@ -224,4 +241,12 @@ oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(const oidc_provider_t *provide
  */
 int oidc_proto_profile_response_require_iss_get(const oidc_provider_t *provider) {
 	return oidc_proto_profile_ops(provider)->response_require_iss(provider);
+}
+
+/*
+ * returns the value of the "scope" parameter to add to an authorization request that
+ * references its parameters through a "request_uri", or NULL when it must be omitted
+ */
+const char *oidc_proto_profile_request_uri_scope_get(const oidc_provider_t *provider) {
+	return oidc_proto_profile_ops(provider)->request_uri_scope(provider);
 }

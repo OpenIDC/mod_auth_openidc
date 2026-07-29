@@ -1,3 +1,11 @@
+07/29/2026
+- request: make the scope=openid parameter that accompanies a request_uri on the
+  authorization request dependent on the configured OIDCProfile: OpenID Connect
+  Core 1.0 requires it, but FAPI 2.0 Security Profile section 5.3.3.2 allows the
+  client_id and request_uri parameters only, so it is now omitted when the
+  profile is FAPI20; this fixes a regression for FAPI 2.0 deployments introduced
+  in 2.4.19.3 (and present in 2.4.19.4), which sent the parameter unconditionally
+
 07/28/2026
 - security: never log the credentials that an OIDCRedisCacheServer value may
   carry: the value is echoed verbatim when it fails to parse, and the failover

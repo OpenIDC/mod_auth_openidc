@@ -414,6 +414,9 @@ START_TEST(test_proto_profile_helpers) {
 	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"),
 			 "https://idp.example.com/token");
 
+	/* the post-PAR redirect carries scope=openid */
+	ck_assert_str_eq(oidc_proto_profile_request_uri_scope_get(provider), OIDC_PROTO_SCOPE_OPENID);
+
 	/* if profile is FAPI20 behavior changes */
 	/* set profile to FAPI20 */
 	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
@@ -426,6 +429,8 @@ START_TEST(test_proto_profile_helpers) {
 	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
 	/* response require iss should be true */
 	ck_assert_int_eq(oidc_proto_profile_response_require_iss_get(provider), 1);
+	/* the post-PAR redirect must carry client_id and request_uri only */
+	ck_assert_ptr_null(oidc_proto_profile_request_uri_scope_get(provider));
 }
 END_TEST
 
