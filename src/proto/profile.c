@@ -164,8 +164,20 @@ static oidc_dpop_mode_t oidc_profile_fapi20_dpop_mode(const oidc_provider_t *pro
 	// so stand down when the access tokens are certificate-bound (as resolved into the provider
 	// struct by oidc_metadata_provider_parse) and the OP does not advertise DPoP support; the
 	// configured mode then applies, so DPoP can still be asked for explicitly
-	if ((oidc_cfg_provider_cert_bound_tokens_get(provider) == OIDC_CERT_BOUND_TOKENS_ON) &&
-	    (oidc_cfg_provider_dpop_supported_get(provider) == FALSE))
+	oidc_cert_bound_tokens_t mode = oidc_cfg_provider_cert_bound_tokens_get(provider);
+
+	// still "auto" means oidc_metadata_provider_parse never ran for this provider, i.e. an OP whose
+	// endpoints are all configured by hand, with no provider metadata to resolve it against. Take the
+	// same decision the profile hands that function in oidc_profile_fapi20_cert_bound_tokens: under
+	// FAPI 2.0 a configured TLS client certificate is there for RFC 8705 binding
+	if (mode == OIDC_CERT_BOUND_TOKENS_AUTO) {
+		if (oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL)
+			mode = OIDC_CERT_BOUND_TOKENS_ON;
+		else
+			mode = OIDC_CERT_BOUND_TOKENS_OFF;
+	}
+
+	if ((mode == OIDC_CERT_BOUND_TOKENS_ON) && (oidc_cfg_provider_dpop_supported_get(provider) == FALSE))
 		return oidc_cfg_provider_dpop_mode_get(provider);
 	return OIDC_DPOP_MODE_REQUIRED;
 }

@@ -456,6 +456,22 @@ START_TEST(test_proto_profile_helpers) {
 	oidc_cfg_provider_dpop_supported_int_set(provider, FALSE);
 	oidc_cfg_provider_cert_bound_tokens_int_set(provider, OIDC_CERT_BOUND_TOKENS_OFF);
 	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+
+	/* a fully statically configured OP never goes through oidc_metadata_provider_parse, so
+	 * cert_bound_tokens is still "auto" here: a configured certificate then decides it, the same way
+	 * oidc_profile_fapi20_cert_bound_tokens would have */
+	oidc_cfg_provider_cert_bound_tokens_int_set(provider, OIDC_CERT_BOUND_TOKENS_AUTO);
+	/* ... with no certificate configured, DPoP stays mandatory */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider));
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+	/* ... and with one, it is not */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    pool, provider, apr_psprintf(pool, "%s/certificate.pem", dir)));
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_OFF);
+	/* ... unless the OP advertises DPoP support after all */
+	oidc_cfg_provider_dpop_supported_int_set(provider, TRUE);
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
 }
 END_TEST
 
