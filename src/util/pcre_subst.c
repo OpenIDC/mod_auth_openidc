@@ -95,7 +95,9 @@ static int findreplen(const char *rep, int nmat, const int *replen) {
 	while (*cp) {
 		if (*cp == '$' && isdigit(cp[1])) {
 			val = strtoul(&cp[1], &cp, 10);
-			if (val && val <= nmat + 1)
+			/* $1..$nmat are the captured subpatterns; replen/repstr hold exactly those, so
+			 * anything beyond nmat would read past the entries edit() filled in */
+			if (val && val <= nmat)
 				len += replen[val - 1];
 			else
 				fprintf(stderr, "repl %d out of range\n", val);
@@ -115,7 +117,9 @@ static void doreplace(char *out, const char *rep, int nmat, int *replen, const c
 	while (*cp) {
 		if (*cp == '$' && isdigit(cp[1])) {
 			val = strtoul(&cp[1], &cp, 10);
-			if (val && val <= nmat + 1) {
+			/* NB: the same bound as findreplen(), so that the number of bytes written here
+			 * matches the length it sized the output buffer for */
+			if (val && val <= nmat) {
 				strncpy(out, repstr[val - 1], replen[val - 1]);
 				out += replen[val - 1];
 			}
@@ -131,7 +135,10 @@ static char *edit(const char *str, int len, const char *rep, int nmat, const int
 	char *res, *cp;
 	int replen[OIDC_PCRE_MAXCAPTURE];
 	const char *repstr[OIDC_PCRE_MAXCAPTURE];
-	_oidc_memset(repstr, '\0', OIDC_PCRE_MAXCAPTURE);
+	/* NB: sizeof, not OIDC_PCRE_MAXCAPTURE: these are arrays of int/pointer, not of bytes, so a
+	 * count-sized memset would leave all but the first few entries holding stack garbage */
+	_oidc_memset(replen, 0, sizeof(replen));
+	_oidc_memset(repstr, '\0', sizeof(repstr));
 	if ((str == NULL) || (mvec == NULL))
 		return NULL;
 	nmat--;

@@ -1,4 +1,13 @@
 07/30/2026
+- util: fix an out-of-bounds read in the "$<n>" replacement handling used by
+  OIDCRemoteUserClaim/OIDCOAuthRemoteUserClaim, in builds against libpcre 1.x
+  (the libpcre2 path is unaffected). A group reference one past the number of
+  capture groups the pattern actually has was accepted, and the arrays holding
+  the captured substrings were cleared with a byte count instead of their size,
+  leaving all but the first few entries holding stack garbage. So a replacement
+  referring to e.g. "$2" against a pattern with a single capture group could
+  size the output buffer from an uninitialized length and copy from an
+  uninitialized pointer, crashing the child process or overflowing the heap
 - metadata: obtain RFC 8705 section 3 certificate-bound access tokens with a
   configured TLS client certificate (OIDCClientTokenEndpointCert/Key) when that
   certificate is not used for client authentication, e.g. alongside
