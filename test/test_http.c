@@ -165,6 +165,19 @@ START_TEST(test_redact_body_for_log) {
 	// client_assertion values (private_key_jwt) are masked
 	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "client_assertion=eyJhbGciOi.abc.def&scope=openid"),
 			 "client_assertion=***&scope=openid");
+
+	// a parameter that occurs more than once is masked at every occurrence, not just the first
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "code=first&scope=openid&code=second&code=third"),
+			 "code=***&scope=openid&code=***&code=***");
+
+	// the needle only matches at a parameter boundary: a parameter whose name merely ends in a
+	// sensitive one keeps its value
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "xcode=keepme&code=hideme"),
+			 "xcode=keepme&code=***");
+
+	// ... including as the very first parameter of the body
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "my_access_token=keepme&scope=openid"),
+			 "my_access_token=keepme&scope=openid");
 }
 END_TEST
 

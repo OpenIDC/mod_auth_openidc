@@ -1,4 +1,11 @@
 07/30/2026
+- http: redact every occurrence of a sensitive parameter in the debug log of an
+  outgoing request body, and only match a parameter name at a parameter
+  boundary so that e.g. "xcode=" is no longer taken for "code=". The scan
+  restarted from the beginning of the body after each rewrite, where it kept
+  finding the "<name>=***" it had just written, so a second occurrence was
+  never reached and three quarters of the work was a no-op repeated on every
+  outgoing HTTP call regardless of the log level
 - util: fix an out-of-bounds read in the "$<n>" replacement handling used by
   OIDCRemoteUserClaim/OIDCOAuthRemoteUserClaim, in builds against libpcre 1.x
   (the libpcre2 path is unaffected). A group reference one past the number of

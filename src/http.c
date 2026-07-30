@@ -588,15 +588,28 @@ const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
 
 	for (int i = 0; _oidc_http_sensitive_params[i] != NULL; i++) {
 		const char *needle = apr_pstrcat(pool, _oidc_http_sensitive_params[i], "=", NULL);
-		/* bounded: a well-formed body carries each parameter name at most once */
-		for (int iter = 0; iter < 4; iter++) {
-			const char *pos = _oidc_strstr(result, needle);
+		const apr_size_t needle_len = _oidc_strlen(needle);
+		/*
+		 * scan from an offset rather than from the start: each rewrite allocates a new string, so a
+		 * cursor into the old one would dangle, and resuming at the beginning would keep re-finding
+		 * the "<name>=***" just written instead of ever reaching a second occurrence
+		 */
+		apr_size_t offset = 0;
+		for (;;) {
+			const char *pos = _oidc_strstr(result + offset, needle);
 			if (pos == NULL)
 				break;
-			const char *value_start = pos + _oidc_strlen(needle);
-			const char *value_end = strchr(value_start, OIDC_CHAR_AMP);
-			apr_size_t prefix_len = value_start - result;
+			/* everything up to and including the "<name>=" is kept */
+			const apr_size_t prefix_len = (pos - result) + needle_len;
+			/* only redact at a parameter boundary, so that e.g. "xcode=" is not taken for "code=" */
+			if ((pos != result) && (pos[-1] != OIDC_CHAR_AMP)) {
+				offset = prefix_len;
+				continue;
+			}
+			const char *value_end = strchr(result + prefix_len, OIDC_CHAR_AMP);
 			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end ? value_end : "");
+			/* resume just after the "***" that replaced the value */
+			offset = prefix_len + 3;
 		}
 	}
 
