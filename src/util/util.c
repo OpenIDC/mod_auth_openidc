@@ -590,6 +590,42 @@ void oidc_util_apr_hash_clear(apr_hash_t *ht) {
 	}
 }
 
+/* the largest whole number of seconds apr_time_from_sec can represent */
+#define OIDC_UTIL_APR_TIME_SEC_MAX (APR_INT64_MAX / APR_USEC_PER_SEC)
+
+/*
+ * convert a number of seconds - typically a JWT "exp"/"iat", which RFC 7519 section 2 defines as a
+ * JSON number and so reaches us as a double - into an apr_time_t, saturating instead of wrapping
+ *
+ * Two things go wrong without this. Converting a double to an integer type is undefined once the
+ * value falls outside that type's range, which a JSON number trivially exceeds ("exp":1e300).
+ * And apr_time_from_sec multiplies by a million, so anything past OIDC_UTIL_APR_TIME_SEC_MAX wraps
+ * int64 - typically into a negative, i.e. already-expired, timestamp, which turns a far-future
+ * expiry into an immediate one.
+ *
+ * A negative or non-finite input yields 0.
+ */
+apr_time_t oidc_util_apr_time_from_sec(double seconds) {
+	/* NB: also catches NaN, which compares false against everything */
+	if (!(seconds > 0))
+		return 0;
+	if (seconds >= (double)OIDC_UTIL_APR_TIME_SEC_MAX)
+		return APR_INT64_MAX;
+	return apr_time_from_sec((apr_time_t)seconds);
+}
+
+/*
+ * add two non-negative apr_time_t values, saturating at APR_INT64_MAX rather than wrapping; used to
+ * turn a relative expiry into an absolute one without a far-future value folding back into the past
+ */
+apr_time_t oidc_util_apr_time_add(apr_time_t a, apr_time_t b) {
+	if ((a < 0) || (b < 0))
+		return (a > b) ? a : b;
+	if (a > APR_INT64_MAX - b)
+		return APR_INT64_MAX;
+	return a + b;
+}
+
 /*
  * return the OpenSSL version we compiled against
  */

@@ -933,6 +933,45 @@ START_TEST(test_util_mask_value) {
 }
 END_TEST
 
+START_TEST(test_util_apr_time_saturating) {
+	const apr_time_t sec_max = APR_INT64_MAX / APR_USEC_PER_SEC;
+
+	// ordinary NumericDate values convert as apr_time_from_sec would
+	ck_assert(oidc_util_apr_time_from_sec(1) == apr_time_from_sec(1));
+	ck_assert(oidc_util_apr_time_from_sec(1780000000) == apr_time_from_sec(1780000000));
+
+	// a fractional value truncates towards zero, expiring no later than the claim allows
+	ck_assert(oidc_util_apr_time_from_sec(1.9) == apr_time_from_sec(1));
+
+	// zero, negative and non-finite values collapse to 0 rather than converting undefined
+	ck_assert(oidc_util_apr_time_from_sec(0) == 0);
+	ck_assert(oidc_util_apr_time_from_sec(-1) == 0);
+	ck_assert(oidc_util_apr_time_from_sec(-1e300) == 0);
+	ck_assert(oidc_util_apr_time_from_sec((double)0.0 / 1.0) == 0);
+
+	// past what apr_time_t can hold the result saturates instead of wrapping negative
+	ck_assert(oidc_util_apr_time_from_sec((double)sec_max) == APR_INT64_MAX);
+	ck_assert(oidc_util_apr_time_from_sec(1e300) == APR_INT64_MAX);
+	ck_assert(oidc_util_apr_time_from_sec(1e300) > 0);
+
+	// the last value that still fits converts rather than saturating
+	ck_assert(oidc_util_apr_time_from_sec((double)(sec_max - 1)) < APR_INT64_MAX);
+	ck_assert(oidc_util_apr_time_from_sec((double)(sec_max - 1)) > 0);
+
+	// addition saturates too, so a far-future relative expiry does not fold back into the past
+	ck_assert(oidc_util_apr_time_add(1, 2) == 3);
+	ck_assert(oidc_util_apr_time_add(0, 0) == 0);
+	ck_assert(oidc_util_apr_time_add(APR_INT64_MAX, 1) == APR_INT64_MAX);
+	ck_assert(oidc_util_apr_time_add(APR_INT64_MAX, APR_INT64_MAX) == APR_INT64_MAX);
+	ck_assert(oidc_util_apr_time_add(APR_INT64_MAX - 1, 1) == APR_INT64_MAX);
+	ck_assert(oidc_util_apr_time_add(oidc_util_apr_time_from_sec(1e300), apr_time_now()) == APR_INT64_MAX);
+
+	// a negative operand (an "expires in -1" style value) yields the larger of the two
+	ck_assert(oidc_util_apr_time_add(-1, 5) == 5);
+	ck_assert(oidc_util_apr_time_add(5, -1) == 5);
+}
+END_TEST
+
 #ifdef HAVE_LIBPCRE2
 
 START_TEST(test_util_pcre_get_substring_error_arms) {
@@ -1351,6 +1390,7 @@ int main(void) {
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	tcase_add_test(c, test_util_mask_value);
+	tcase_add_test(c, test_util_apr_time_saturating);
 #ifdef HAVE_LIBPCRE2
 	tcase_add_test(c, test_util_pcre_get_substring_error_arms);
 #endif

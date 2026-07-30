@@ -159,5 +159,7 @@ apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix)
 const char *oidc_util_strcasestr(const char *s1, const char *s2);
 void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
+apr_time_t oidc_util_apr_time_from_sec(double seconds);
+apr_time_t oidc_util_apr_time_add(apr_time_t a, apr_time_t b);
 
 #endif /* _MOD_AUTH_OPENIDC_UTIL_H_ */

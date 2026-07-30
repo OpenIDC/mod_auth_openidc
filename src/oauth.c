@@ -352,19 +352,22 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 		return TRUE;
 	}
 
-	/* whole seconds: truncating a NumericDate expires the entry no later than the claim allows */
-	apr_time_t value = (apr_time_t)oidc_json_number_value(expiry);
-	if (value <= 0) {
+	/* whole seconds: truncating a NumericDate expires the entry no later than the claim allows.
+	 * NB: kept as a double up to oidc_util_apr_time_from_sec, which clamps before converting: a JSON
+	 *     number can hold a value no integer type can, and converting one that does not fit is
+	 *     undefined rather than merely inaccurate */
+	double value = oidc_json_number_value(expiry);
+	if (!(value > 0)) {
 		oidc_warn(r,
-			  "the \"%s\" expiry claim has a value <= 0 (%ld); caching the result for the default %d "
+			  "the \"%s\" expiry claim has a value <= 0 (%.0f); caching the result for the default %d "
 			  "seconds instead",
-			  expiry_claim_name, (long)value, OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
+			  expiry_claim_name, value, OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 		return TRUE;
 	}
 
-	*cache_until = apr_time_from_sec(value);
+	*cache_until = oidc_util_apr_time_from_sec(value);
 	if (expiry_format_absolute == FALSE)
-		(*cache_until) += apr_time_now();
+		*cache_until = oidc_util_apr_time_add(*cache_until, apr_time_now());
 
 	return TRUE;
 }

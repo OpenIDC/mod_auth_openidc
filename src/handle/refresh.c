@@ -328,8 +328,9 @@ static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_c
 		oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
 
 		if (oidc_cfg_provider_session_max_duration_get(provider) == 0) {
-			/* update the session expiry to match the expiry of the id_token */
-			apr_time_t session_expires = apr_time_from_sec(id_token_jwt->payload.exp);
+			/* update the session expiry to match the expiry of the id_token
+			 * NB: "exp" is a JSON number, so clamp rather than wrap on a far-future value */
+			apr_time_t session_expires = oidc_util_apr_time_from_sec(id_token_jwt->payload.exp);
 			oidc_session_set_session_expires(r, session, session_expires);
 
 			/* log message about the updated max session duration */

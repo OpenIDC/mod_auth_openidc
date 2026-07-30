@@ -1,4 +1,12 @@
 07/30/2026
+- oauth: clamp a token expiry claim instead of letting it wrap. A NumericDate is
+  a JSON number, so it may carry a value no integer type can hold; converting
+  one that does not fit is undefined, and converting seconds to the internal
+  microsecond representation multiplies by a million, which wraps into a
+  negative - i.e. already expired - timestamp somewhere beyond the year 292277.
+  A far-future expiry therefore made the validation result uncacheable, turning
+  every request into an introspection call. The same conversion of an id_token
+  "exp" when refreshing the session is clamped as well
 - dpop: apply the FAPI 2.0 "mutual-TLS or DPoP" rule to a statically configured
   OP too, i.e. one whose endpoints are all set with OIDCProvider* directives
   rather than obtained from OIDCProviderMetadataURL or OIDCMetadataDir. Standing
