@@ -140,7 +140,7 @@ static oidc_cache_mutex_t *_oidc_metrics_process_mutex = NULL;
 //   1024 sample size (compact, long keys, large json_int values, no description), timing + counter
 //   256 number of individual metrics collected
 //     4 number of vhosts supported
-#define OIDC_METRICS_CACHE_JSON_MAX_DEFAULT 1024 * 256 * 4
+#define OIDC_METRICS_CACHE_JSON_MAX_DEFAULT (1024 * 256 * 4)
 
 typedef struct oidc_metrics_bucket_t {
 	const char *name;

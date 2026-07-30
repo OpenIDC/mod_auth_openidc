@@ -189,7 +189,7 @@ int oidc_util_http_content_send(request_rec *r) {
 }
 
 /* the maximum size of data that we accept in a single POST value: 1MB */
-#define OIDC_MAX_POST_DATA_LEN 1024 * 1024
+#define OIDC_MAX_POST_DATA_LEN (1024 * 1024)
 
 /*
  * read all bytes from the HTTP request

@@ -430,7 +430,7 @@ const char *oidc_cmd_dir_path_scope_set(cmd_parms *cmd, void *m, const char *arg
 }
 
 #define OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MIN 0
-#define OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MAX 3600 * 24 * 365
+#define OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MAX (3600 * 24 * 365)
 
 /*
  * set the time in seconds that the access token needs to be valid for
@@ -529,7 +529,7 @@ const char *oidc_cfg_dir_accept_token_in_option_get(request_rec *r, const char *
 }
 
 #define OIDC_OAUTH_ACCESS_TOKEN_INTROSPECTION_INTERVAL_MIN -1
-#define OIDC_OAUTH_ACCESS_TOKEN_INTROSPECTION_INTERVAL_MAX 3600 * 24 * 365
+#define OIDC_OAUTH_ACCESS_TOKEN_INTROSPECTION_INTERVAL_MAX (3600 * 24 * 365)
 
 /* default value for the token introspection interval (0 = disabled, no expiry of claims) */
 #define OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL 0

@@ -117,7 +117,7 @@ OIDC_CFG_MEMBER_FUNCS_CACHE_BOOL(encrypt, cfg->cache.impl->encrypt_by_default)
 /* minimum shm cache size i.e. minimum number of entries  */
 #define OIDC_CACHE_SHM_SIZE_MIN 128
 /* maximum shm cache size i.e. maximum number of entries  */
-#define OIDC_CACHE_SHM_SIZE_MAX 1024 * 1024 * 1024
+#define OIDC_CACHE_SHM_SIZE_MAX (1024 * 1024 * 1024)
 /* default shm cache size i.e. the number of pre-allocated entries in the shm cache */
 #define OIDC_DEFAULT_CACHE_SHM_SIZE 10000
 
@@ -125,11 +125,11 @@ OIDC_CFG_MEMBER_FUNCS_CACHE_INT(shm_size_max, OIDC_CACHE_SHM_SIZE_MIN, OIDC_CACH
 				OIDC_DEFAULT_CACHE_SHM_SIZE)
 
 /* minimum size of a SHM cache entry */
-#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX 8192 + 512 + 32 // 8Kb plus overhead
+#define OIDC_MINIMUM_CACHE_SHM_ENTRY_SIZE_MAX (8192 + 512 + 32) // 8Kb plus overhead
 /* maximum size of a SHM cache entry */
-#define OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX 1024 * 1024 // 1Mb incl. overhead
+#define OIDC_MAXIMUM_CACHE_SHM_ENTRY_SIZE_MAX (1024 * 1024) // 1Mb incl. overhead
 /* default max cache entry size for shm: # value + # key + # overhead */
-#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX 16384 + 512 + 32
+#define OIDC_DEFAULT_CACHE_SHM_ENTRY_SIZE_MAX (16384 + 512 + 32)
 
 /*
  * set the maximum size of a shared memory cache entry and enforces a minimum
@@ -154,7 +154,7 @@ OIDC_CFG_MEMBER_FUNC_CACHE_TYPE_GET(shm_entry_size_max, int, OIDC_DEFAULT_CACHE_
 /* minimum cache files clean interval in seconds */
 #define OIDC_CACHE_FILE_CLEAN_INTERVAL_MIN 0
 /* maximum cache files clean interval in seconds */
-#define OIDC_CACHE_FILE_CLEAN_INTERVAL_MAX 3600 * 24 * 7
+#define OIDC_CACHE_FILE_CLEAN_INTERVAL_MAX (3600 * 24 * 7)
 /* default cache files clean interval in seconds */
 #define OIDC_DEFAULT_CACHE_FILE_CLEAN_INTERVAL 60
 

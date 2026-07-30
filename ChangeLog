@@ -1,4 +1,7 @@
 07/30/2026
+- build: parenthesize the arithmetic in the object-like macros defining size and
+  interval bounds; no behaviour change, since every current use happens to sit
+  in a context where the operators bind the intended way
 - util: size the output buffer of a regular-expression substitution from what
   the result actually needs, so OIDCRemoteUserClaim/OIDCOAuthRemoteUserClaim no
   longer fail on a long claim value. The buffer was fixed and the input was

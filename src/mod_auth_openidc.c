@@ -886,7 +886,7 @@ apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const ch
 	return TRUE;
 }
 
-#define OIDC_MAX_URL_LENGTH 8192 * 2
+#define OIDC_MAX_URL_LENGTH (8192 * 2)
 
 /*
  * fill the err_str/err_desc out-params, log the error and return FALSE

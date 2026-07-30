@@ -540,8 +540,8 @@ OIDC_PROVIDER_MEMBER_FUNCS_INT(idtoken_iat_slack, oidc_cfg_parse_int, OIDC_IDTOK
 			       OIDC_IDTOKEN_IAT_SLACK_MAX, OIDC_DEFAULT_IDTOKEN_IAT_SLACK)
 
 #define OIDC_SESSION_MAX_DURATION_MIN 15
-#define OIDC_SESSION_MAX_DURATION_MAX 3600 * 24 * 365
-#define OIDC_DEFAULT_SESSION_MAX_DURATION 3600 * 8
+#define OIDC_SESSION_MAX_DURATION_MAX (3600 * 24 * 365)
+#define OIDC_DEFAULT_SESSION_MAX_DURATION (3600 * 8)
 
 const char *oidc_cfg_provider_session_max_duration_set(apr_pool_t *pool, oidc_provider_t *provider, int arg) {
 	const char *rv = NULL;
@@ -567,7 +567,7 @@ const char *oidc_cmd_provider_session_max_duration_set(cmd_parms *cmd, void *ptr
 OIDC_PROVIDER_MEMBER_GET_INT_DEF(session_max_duration, int, OIDC_DEFAULT_SESSION_MAX_DURATION)
 
 #define OIDC_JWKS_REFRESH_INTERVAL_MIN 300
-#define OIDC_JWKS_REFRESH_INTERVAL_MAX 3600 * 24 * 365
+#define OIDC_JWKS_REFRESH_INTERVAL_MAX (3600 * 24 * 365)
 #define OIDC_DEFAULT_JWKS_REFRESH_INTERVAL 3600
 
 const char *oidc_cfg_provider_jwks_uri_refresh_interval_set(apr_pool_t *pool, oidc_provider_t *provider, int arg) {
@@ -730,7 +730,7 @@ const char *oidc_cfg_provider_token_endpoint_auth_alg_get(const oidc_provider_t 
 }
 
 #define OIDC_USERINFO_REFRESH_INTERVAL_MIN 0
-#define OIDC_USERINFO_REFRESH_INTERVAL_MAX 3600 * 24 * 365
+#define OIDC_USERINFO_REFRESH_INTERVAL_MAX (3600 * 24 * 365)
 #define OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL -1
 
 const char *oidc_cfg_provider_userinfo_refresh_interval_set(apr_pool_t *pool, oidc_provider_t *provider, int arg) {

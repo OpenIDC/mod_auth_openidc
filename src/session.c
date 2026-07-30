@@ -742,7 +742,7 @@ static const char *oidc_session_get_key2string(request_rec *r, const oidc_sessio
 	return s_value;
 }
 
-#define OIDC_SESSION_WARN_CLAIM_SIZE 1024 * 8
+#define OIDC_SESSION_WARN_CLAIM_SIZE (1024 * 8)
 #define OIDC_SESSION_WARN_CLAIM_SIZE_VAR "OIDC_SESSION_WARN_CLAIM_SIZE"
 
 /*
