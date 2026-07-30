@@ -336,23 +336,54 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 }
 
 /*
- * fill an endpoint URL from the provider metadata, preferring the RFC 8705 section 5
+ * read an endpoint URL out of the provider metadata, preferring the RFC 8705 section 5
  * "mtls_endpoint_aliases" entry when `j_aliases` is non-NULL (i.e. when mutual-TLS applies to this
- * provider) and it carries `key`; an explicitly configured endpoint is never overridden by either
+ * provider) and it carries `key`
+ *
+ * NB: falling back to the conventional endpoint is right when the aliases object does not mention
+ *     `key` - section 5 aliases only the endpoints it lists - but not when it does and the value is
+ *     unusable: the request would then go to the endpoint that does not bind the access token to the
+ *     TLS client certificate, which is the very thing the alias exists to arrange, and it would do
+ *     so silently. Report that as an error instead.
+ */
+static apr_byte_t oidc_metadata_provider_parse_url_mtls(request_rec *r, const oidc_provider_t *provider,
+							const oidc_json_t *j_provider, const oidc_json_t *j_aliases,
+							const char *key, char **value) {
+
+	*value = NULL;
+
+	if ((j_aliases != NULL) && (oidc_json_object_get(j_aliases, key) != NULL)) {
+		oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider),
+					j_aliases, key, value, NULL);
+		if (*value == NULL) {
+			oidc_error(r,
+				   "provider (%s) advertises a \"" OIDC_METADATA_MTLS_ENDPOINT_ALIASES
+				   "\" entry for \"%s\" that is not a valid URL; not falling back to the conventional "
+				   "endpoint, since that one would not bind the access token to the TLS client "
+				   "certificate",
+				   oidc_cfg_provider_issuer_get(provider), key);
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER, oidc_cfg_provider_issuer_get(provider), j_provider,
+				key, value, NULL);
+
+	return TRUE;
+}
+
+/*
+ * fill an endpoint URL as above; an explicitly configured endpoint is never overridden
  */
 #define OIDC_METADATA_PROVIDER_PARSE_URL_MTLS(j_provider, j_aliases, key, member)                                      \
 	;                                                                                                              \
 	do {                                                                                                           \
 		if (oidc_cfg_provider_##member##_get(provider) == NULL) {                                              \
 			char *_u_ = NULL;                                                                              \
-			if ((j_aliases) != NULL)                                                                       \
-				oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,                              \
-							oidc_cfg_provider_issuer_get(provider), j_aliases, key, &_u_,  \
-							NULL);                                                         \
-			if (_u_ == NULL)                                                                               \
-				oidc_metadata_parse_url(r, OIDC_METADATA_SUFFIX_PROVIDER,                              \
-							oidc_cfg_provider_issuer_get(provider), j_provider, key, &_u_, \
-							NULL);                                                         \
+			if (oidc_metadata_provider_parse_url_mtls(r, provider, j_provider, j_aliases, key, &_u_) ==    \
+			    FALSE)                                                                                     \
+				return FALSE;                                                                          \
 			OIDC_METADATA_PROVIDER_SET(member, _u_);                                                       \
 		}                                                                                                      \
 	} while (0)

@@ -206,6 +206,52 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
 END_TEST
 
 /*
+ * RFC 8705 section 5 aliases only the endpoints that "mtls_endpoint_aliases" lists, so an endpoint
+ * it does not mention falls back to the conventional one - but an entry that is there and unusable
+ * must not, since the conventional endpoint does not certificate-bind the access token.
+ */
+START_TEST(test_metadata_parse_mtls_endpoint_aliases_invalid) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_json_t *j = NULL;
+
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+
+	/* an alias entry that is not a valid URL fails the parse rather than silently downgrading */
+	const char *bad = "{"
+			  "\"issuer\":\"https://idp.example.com\","
+			  "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+			  "\"token_endpoint\":\"https://idp.example.com/token\","
+			  "\"token_endpoint_auth_methods_supported\":[\"tls_client_auth\"],"
+			  "\"mtls_endpoint_aliases\":{\"token_endpoint\":\"not a url\"}"
+			  "}";
+	ck_assert_int_eq(oidc_json_decode_object(r, bad, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), FALSE);
+	oidc_json_decref(j);
+
+	/* an endpoint the aliases simply do not list still falls back to the conventional one */
+	const char *partial = "{"
+			      "\"issuer\":\"https://idp.example.com\","
+			      "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+			      "\"token_endpoint\":\"https://idp.example.com/token\","
+			      "\"userinfo_endpoint\":\"https://idp.example.com/userinfo\","
+			      "\"token_endpoint_auth_methods_supported\":[\"tls_client_auth\"],"
+			      "\"mtls_endpoint_aliases\":{\"token_endpoint\":\"https://mtls.idp.example.com/token\"}"
+			      "}";
+	j = NULL;
+	provider = oidc_cfg_provider_create(r->pool);
+	ck_assert_int_eq(oidc_json_decode_object(r, partial, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
+	oidc_json_decref(j);
+}
+END_TEST
+
+/*
  * RFC 8705 section 3: a TLS client certificate that is not used for client authentication asks for
  * certificate-bound access tokens, which selects the mtls_endpoint_aliases too. Whether that is
  * inferred from the certificate depends on OIDCCertBoundAccessTokens and, under its "auto" default,
@@ -1886,6 +1932,7 @@ int main(void) {
 	tcase_add_test(parse, test_metadata_parse_populates_empty_provider);
 	tcase_add_test(parse, test_metadata_parse_preserves_existing_values);
 	tcase_add_test(parse, test_metadata_parse_mtls_endpoint_aliases);
+	tcase_add_test(parse, test_metadata_parse_mtls_endpoint_aliases_invalid);
 	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_advertised);
 	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_not_advertised);
 	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_off);

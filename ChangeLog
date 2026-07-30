@@ -1,4 +1,11 @@
 07/30/2026
+- metadata: report an "mtls_endpoint_aliases" entry that is not a valid URL as
+  an error instead of quietly using the conventional endpoint for it. RFC 8705
+  section 5 has the client use the alias for the endpoints that are listed, and
+  the conventional endpoint is precisely the one that does not bind the access
+  token to the TLS client certificate, so the fallback silently produced the
+  unbound tokens the aliases exist to avoid. An endpoint the aliases do not
+  mention at all still falls back, as it should
 - build: parenthesize the arithmetic in the object-like macros defining size and
   interval bounds; no behaviour change, since every current use happens to sit
   in a context where the operators bind the intended way
