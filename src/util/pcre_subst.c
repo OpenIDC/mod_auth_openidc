@@ -201,8 +201,8 @@ char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 		 * in outlen, so the retry is sized exactly and cannot come up short in turn; the buffer
 		 * comes out of the pool, so the first, too-small one needs no separate free */
 		output = apr_palloc(pool, outlen);
-		rc = pcre2_substitute(pcre->preg, subject, length, 0, options, 0, 0, replacement,
-				      PCRE2_ZERO_TERMINATED, output, &outlen);
+		rc = pcre2_substitute(pcre->preg, subject, length, 0, options, 0, 0, replacement, PCRE2_ZERO_TERMINATED,
+				      output, &outlen);
 	}
 	if ((rc > 0) && (outlen > 0))
 		rv = apr_pstrndup(pool, (const char *)output, outlen);
