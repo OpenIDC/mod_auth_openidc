@@ -144,6 +144,7 @@ const char *oidc_proto_profile_revocation_endpoint_auth_aud(const oidc_provider_
 const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t *pool, const oidc_provider_t *provider);
 const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(const oidc_provider_t *provider);
 oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(const oidc_provider_t *provider);
+oidc_cert_bound_tokens_t oidc_proto_profile_cert_bound_tokens_get(const oidc_provider_t *provider);
 int oidc_proto_profile_response_require_iss_get(const oidc_provider_t *provider);
 const char *oidc_proto_profile_request_uri_scope_get(const oidc_provider_t *provider);
 

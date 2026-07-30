@@ -60,10 +60,14 @@ apr_byte_t oidc_metadata_get(request_rec *r, oidc_cfg_t *cfg, const char *issuer
 
 	if (oidc_metadata_provider_get(r, cfg, issuer, &j_provider, allow_discovery) == FALSE)
 		goto end;
-	if (oidc_metadata_provider_parse(r, cfg, j_provider, *provider) == FALSE)
+	if (oidc_metadata_conf_get(r, issuer, &j_conf) == FALSE)
 		goto end;
 
-	if (oidc_metadata_conf_get(r, issuer, &j_conf) == FALSE)
+	/* the provider metadata is parsed against the settings of this OP, so those of its conf
+	 * metadata that it depends on are applied to the (still empty) provider struct up front */
+	oidc_metadata_conf_parse_pre_provider(r, cfg, j_conf, *provider);
+
+	if (oidc_metadata_provider_parse(r, cfg, j_provider, *provider) == FALSE)
 		goto end;
 	if (oidc_metadata_conf_parse(r, cfg, j_conf, *provider) == FALSE)
 		goto end;

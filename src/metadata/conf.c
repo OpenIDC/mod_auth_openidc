@@ -343,6 +343,25 @@ static void oidc_metadata_conf_parse_dpop_mode(request_rec *r, const oidc_json_t
 }
 
 /*
+ * apply the RFC 8705 certificate-bound access tokens mode
+ */
+static void oidc_metadata_conf_parse_cert_bound_tokens(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
+						       oidc_provider_t *provider) {
+	const char *rv = NULL;
+	char *value = NULL;
+
+	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_CERT_BOUND_TOKENS, &value, NULL);
+	if (value) {
+		rv = oidc_cfg_provider_cert_bound_tokens_set(r->pool, provider, value);
+		if (rv != NULL)
+			oidc_error(r, "oidc_cfg_provider_cert_bound_tokens_set: %s", rv);
+	} else {
+		oidc_cfg_provider_cert_bound_tokens_int_set(
+		    provider, oidc_cfg_provider_cert_bound_tokens_get(oidc_cfg_provider_get(cfg)));
+	}
+}
+
+/*
  * apply the HTTP method used to deliver the authentication request
  */
 static void oidc_metadata_conf_parse_auth_request_method(request_rec *r, const oidc_json_t *j_conf,
@@ -362,6 +381,27 @@ static void oidc_metadata_conf_parse_auth_request_method(request_rec *r, const o
 }
 
 /*
+ * apply the subset of the conf metadata that parsing the provider metadata depends on
+ *
+ * the RFC 8705 mutual-TLS decisions taken while parsing the provider metadata - which token endpoint
+ * authentication method to select out of "token_endpoint_auth_methods_supported" and whether to
+ * prefer the "mtls_endpoint_aliases" endpoints - need to know about the TLS client certificate, the
+ * profile and the authentication method configured for this OP. Those live in the .conf metadata,
+ * which is otherwise only applied *after* the provider metadata (so that it overrides it), leaving
+ * the decisions to be taken on the global configuration alone: a certificate configured in the .conf
+ * of a multi-provider (OIDCMetadataDir) setup would go unnoticed and its OP would keep talking to
+ * the conventional endpoints. Hence they are applied up front here, and again (idempotently) by
+ * oidc_metadata_conf_parse() in its regular slot.
+ */
+void oidc_metadata_conf_parse_pre_provider(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
+					   oidc_provider_t *provider) {
+	oidc_metadata_conf_parse_profile(r, cfg, j_conf, provider);
+	oidc_metadata_conf_parse_endpoint_auth(r, cfg, j_conf, provider);
+	oidc_metadata_conf_parse_tls_client(r, cfg, j_conf, provider);
+	oidc_metadata_conf_parse_cert_bound_tokens(r, cfg, j_conf, provider);
+}
+
+/*
  * parse the JSON conf metadata in to a oidc_provider_t struct
  */
 apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
@@ -376,6 +416,10 @@ apr_byte_t oidc_metadata_conf_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 	oidc_metadata_conf_parse_client(r, cfg, j_conf, provider);
 	oidc_metadata_conf_parse_endpoint_auth(r, cfg, j_conf, provider);
 	oidc_metadata_conf_parse_tls_client(r, cfg, j_conf, provider);
+	/* NB: no oidc_metadata_conf_parse_cert_bound_tokens() here: it is applied by
+	 *     oidc_metadata_conf_parse_pre_provider() only, since oidc_metadata_provider_parse() has
+	 *     resolved the setting into a definitive "on"/"off" on the provider by now and re-applying
+	 *     the configured (possibly "auto") value would discard that outcome */
 	oidc_metadata_conf_parse_dpop_mode(r, j_conf, provider);
 	oidc_metadata_conf_parse_auth_request_method(r, j_conf, provider);
 	return TRUE;

@@ -89,6 +89,26 @@ typedef enum {
 	OIDC_DPOP_MODE_REQUIRED = 3,
 } oidc_dpop_mode_t;
 
+/*
+ * RFC 8705 section 3: whether to obtain certificate-bound access tokens with the configured TLS
+ * client certificate when it is not (also) used for mutual-TLS client authentication, i.e. whether
+ * to prefer the "mtls_endpoint_aliases" endpoints and to ask for binding on client registration
+ *
+ * OFF   only when a mutual-TLS client authentication method is in effect, i.e. never inferred
+ *       from the presence of a certificate alone
+ * AUTO  additionally when a certificate is configured and the OP advertises support through
+ *       "tls_client_certificate_bound_access_tokens"
+ * ON    additionally when a certificate is configured, regardless of what the OP advertises
+ *
+ * NB: oidc_metadata_provider_parse() resolves the configured value to ON or OFF on the provider
+ *     struct it fills, recording the decision it took for the code that acts on it afterwards
+ */
+typedef enum {
+	OIDC_CERT_BOUND_TOKENS_OFF = 1,
+	OIDC_CERT_BOUND_TOKENS_AUTO = 2,
+	OIDC_CERT_BOUND_TOKENS_ON = 3,
+} oidc_cert_bound_tokens_t;
+
 typedef struct oidc_jwks_uri_t {
 	const char *uri;
 	int refresh_interval;
@@ -233,8 +253,12 @@ OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(response_require_iss)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_DECL(userinfo_refresh_interval, const char *)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(dpop_mode, oidc_dpop_mode_t, const char *)
 void oidc_cfg_provider_dpop_mode_int_set(oidc_provider_t *provider, oidc_dpop_mode_t arg);
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(cert_bound_tokens, oidc_cert_bound_tokens_t)
 
 // for metadata.c
+/* not configurable: set from "dpop_signing_alg_values_supported" in the provider metadata */
+void oidc_cfg_provider_dpop_supported_int_set(oidc_provider_t *provider, int arg);
+int oidc_cfg_provider_dpop_supported_get(const oidc_provider_t *provider);
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(userinfo_token_method, oidc_userinfo_token_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(auth_request_method, oidc_auth_request_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(profile, oidc_profile_t)

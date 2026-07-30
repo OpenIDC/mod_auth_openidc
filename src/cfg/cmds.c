@@ -508,6 +508,11 @@ const command_rec oidc_cfg_cmds[] = {
 		"The RFC 9449 DPoP mode used."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
+		OIDCCertBoundAccessTokens,
+		cert_bound_tokens,
+		"Whether to obtain RFC 8705 certificate-bound access tokens with the configured TLS client certificate when it is not used for client authentication (\"off\", \"auto\" or \"on\")."),
+	OIDC_CFG_CMD_PROVIDER(
+		AP_INIT_TAKE1,
 		OIDCClientID,
 		client_id,
 		"Client identifier used in calls to OpenID Connect OP."),

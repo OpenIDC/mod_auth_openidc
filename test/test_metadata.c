@@ -31,6 +31,7 @@
 #include "http_server.h"
 #include "metadata.h"
 #include "mod_auth_openidc.h"
+#include "proto/proto.h"
 #include "util.h"
 #include "util/util.h"
 
@@ -201,6 +202,188 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
 	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
 
 	oidc_json_decref(j);
+}
+END_TEST
+
+/*
+ * RFC 8705 section 3: a TLS client certificate that is not used for client authentication asks for
+ * certificate-bound access tokens, which selects the mtls_endpoint_aliases too. Whether that is
+ * inferred from the certificate depends on OIDCCertBoundAccessTokens and, under its "auto" default,
+ * on the OP advertising "tls_client_certificate_bound_access_tokens".
+ */
+
+#define OIDC_TEST_METADATA_CERT_BOUND(advertised)                                                                      \
+	"{"                                                                                                            \
+	"\"issuer\":\"https://idp.example.com\","                                                                      \
+	"\"authorization_endpoint\":\"https://idp.example.com/authorize\","                                            \
+	"\"token_endpoint\":\"https://idp.example.com/token\","                                                        \
+	"\"userinfo_endpoint\":\"https://idp.example.com/userinfo\","                                                  \
+	"\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\",\"tls_client_auth\"],"                     \
+	"\"tls_client_certificate_bound_access_tokens\":" advertised ","                                               \
+	"\"mtls_endpoint_aliases\":{"                                                                                  \
+	"\"token_endpoint\":\"https://mtls.idp.example.com/token\","                                                   \
+	"\"userinfo_endpoint\":\"https://mtls.idp.example.com/userinfo\""                                              \
+	"}"                                                                                                            \
+	"}"
+
+/* a client secret plus a certificate: client_secret_basic authentication with the certificate for binding only */
+static oidc_provider_t *oidc_test_metadata_cert_bound_parse(request_rec *r, oidc_cfg_t *c, const char *metadata) {
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j = NULL;
+
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+	oidc_cfg_provider_client_secret_set(r->pool, oidc_cfg_provider_get(c), "secret");
+
+	ck_assert_int_eq(oidc_json_decode_object(r, metadata, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	oidc_json_decref(j);
+
+	/* the certificate must not have changed the authentication method */
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "client_secret_basic");
+
+	return provider;
+}
+
+START_TEST(test_metadata_parse_cert_bound_tokens_advertised) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* "auto" (the default) + the OP advertising support: the mtls_endpoint_aliases are applied */
+	oidc_provider_t *provider = oidc_test_metadata_cert_bound_parse(r, c, OIDC_TEST_METADATA_CERT_BOUND("true"));
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/userinfo");
+	/* the decision is recorded so that client registration asks for binding as well */
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_ON);
+}
+END_TEST
+
+START_TEST(test_metadata_parse_cert_bound_tokens_not_advertised) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* "auto" + an OP that does not advertise support: the conventional endpoints are kept */
+	oidc_provider_t *provider = oidc_test_metadata_cert_bound_parse(r, c, OIDC_TEST_METADATA_CERT_BOUND("false"));
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_OFF);
+}
+END_TEST
+
+START_TEST(test_metadata_parse_cert_bound_tokens_off) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* "off": never inferred from the certificate, not even for an OP that advertises support */
+	ck_assert_ptr_null(oidc_cfg_provider_cert_bound_tokens_set(r->pool, oidc_cfg_provider_get(c), "off"));
+	oidc_provider_t *provider = oidc_test_metadata_cert_bound_parse(r, c, OIDC_TEST_METADATA_CERT_BOUND("true"));
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider), "https://idp.example.com/userinfo");
+}
+END_TEST
+
+START_TEST(test_metadata_parse_cert_bound_tokens_on) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* "on": the certificate itself is the signal, regardless of what the OP advertises */
+	ck_assert_ptr_null(oidc_cfg_provider_cert_bound_tokens_set(r->pool, oidc_cfg_provider_get(c), "on"));
+	oidc_provider_t *provider = oidc_test_metadata_cert_bound_parse(r, c, OIDC_TEST_METADATA_CERT_BOUND("false"));
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/userinfo");
+}
+END_TEST
+
+START_TEST(test_metadata_parse_mtls_explicit_endpoint_wins) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j = NULL;
+
+	/* mutual-TLS client authentication, i.e. the aliases apply */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+	/* ... but this endpoint was configured explicitly, which takes precedence over the alias */
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "https://configured.example.com/token");
+
+	ck_assert_int_eq(oidc_json_decode_object(r, OIDC_TEST_METADATA_CERT_BOUND("true"), &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	oidc_json_decref(j);
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "tls_client_auth");
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://configured.example.com/token");
+	/* the endpoints that were not configured explicitly do take the alias */
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/userinfo");
+}
+END_TEST
+
+#define OIDC_TEST_METADATA_PKEY_MTLS                                                                                   \
+	"{"                                                                                                            \
+	"\"issuer\":\"https://idp.example.com\","                                                                      \
+	"\"authorization_endpoint\":\"https://idp.example.com/authorize\","                                            \
+	"\"token_endpoint\":\"https://idp.example.com/token\","                                                        \
+	"\"registration_endpoint\":\"https://idp.example.com/register\","                                              \
+	"\"userinfo_endpoint\":\"https://idp.example.com/userinfo\","                                                  \
+	"\"mtls_endpoint_aliases\":{"                                                                                  \
+	"\"token_endpoint\":\"https://mtls.idp.example.com/token\","                                                   \
+	"\"registration_endpoint\":\"https://mtls.idp.example.com/register\","                                         \
+	"\"userinfo_endpoint\":\"https://mtls.idp.example.com/userinfo\","                                             \
+	"\"pushed_authorization_request_endpoint\":\"https://mtls.idp.example.com/par\""                               \
+	"},"                                                                                                           \
+	"\"jwks_uri\":\"https://idp.example.com/jwks\","                                                               \
+	"\"response_types_supported\":[\"code\"],"                                                                     \
+	"\"authorization_response_iss_parameter_supported\":true,"                                                     \
+	"\"code_challenge_methods_supported\":[\"S256\"],"                                                             \
+	"\"id_token_signing_alg_values_supported\":[\"PS256\"],"                                                       \
+	"\"tls_client_certificate_bound_access_tokens\":true,"                                                         \
+	"\"token_endpoint_auth_methods_supported\":[\"private_key_jwt\"],"                                             \
+	"\"pushed_authorization_request_endpoint\":\"https://idp.example.com/par\","                                   \
+	"\"require_pushed_authorization_requests\":true,"                                                              \
+	"\"token_endpoint_auth_signing_alg_values_supported\":[\"PS256\",\"ES256\"]"                                   \
+	"}"
+
+/*
+ * an OP that separates client authentication from certificate binding: private_key_jwt is the only
+ * supported authentication method, while the certificate is there for RFC 8705 section 3 binding.
+ * Every advertised alias is applied - including the registration endpoint - and the authorization
+ * endpoint (which carries no client credentials at all) is not.
+ */
+START_TEST(test_metadata_parse_mtls_aliases_private_key_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j = NULL;
+
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+
+	ck_assert_int_eq(oidc_json_decode_object(r, OIDC_TEST_METADATA_PKEY_MTLS, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), TRUE);
+	oidc_json_decref(j);
+
+	/* the certificate must not turn this in to mutual-TLS client authentication */
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "private_key_jwt");
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_ON);
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/userinfo");
+	ck_assert_str_eq(oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/par");
+	ck_assert_str_eq(oidc_cfg_provider_registration_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/register");
+	ck_assert_str_eq(oidc_cfg_provider_authorization_endpoint_url_get(provider),
+			 "https://idp.example.com/authorize");
 }
 END_TEST
 
@@ -764,6 +947,14 @@ START_TEST(test_metadata_oauth_provider_parse_mtls) {
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "client_secret_basic");
 	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://as.example.com/introspect");
 
+	/* ... unless the AS advertises certificate-bound access tokens: the certificate is then taken to
+	 * be there for section 3 binding and the mTLS alias endpoint is used with client_secret_basic
+	 * authentication too (OIDCCertBoundAccessTokens defaults to "auto") */
+	oidc_json_object_set_new(j, "tls_client_certificate_bound_access_tokens", oidc_json_boolean(1));
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "client_secret_basic");
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_url_get(c), "https://mtls.as.example.com/introspect");
+
 	oidc_json_decref(j);
 }
 END_TEST
@@ -967,6 +1158,112 @@ START_TEST(test_metadata_conf_then_client_response_type_fallback) {
 	ck_assert_int_eq(oidc_metadata_client_parse(r, c, j_client, provider), TRUE);
 	ck_assert_str_eq(oidc_cfg_provider_response_type_get(provider), "id_token");
 	oidc_json_decref(j_client);
+}
+END_TEST
+
+/*
+ * RFC 8705 in a multi-provider (OIDCMetadataDir) setup: the TLS client certificate and the profile
+ * are configured in the .conf metadata of this OP, i.e. nowhere in the global configuration, and
+ * must still drive the mutual-TLS endpoint selection - even though the .conf is parsed after the
+ * provider metadata that the selection is made in
+ */
+START_TEST(test_metadata_disk_mtls_aliases_from_conf) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), OIDC_TEST_METADATA_PKEY_MTLS);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       apr_psprintf(r->pool,
+				    "{\"scope\":\"openid email\","
+				    "\"profile\":\"FAPI20\","
+				    "\"id_token_signed_response_alg\":\"PS256\","
+				    "\"token_endpoint_tls_client_cert\":\"%s/certificate.pem\","
+				    "\"token_endpoint_tls_client_key\":\"%s/private.pem\"}",
+				    srcdir, srcdir));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"token_endpoint_auth_method\":\"private_key_jwt\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_auth_get(provider), "private_key_jwt");
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_ON);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_str_eq(oidc_cfg_provider_userinfo_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/userinfo");
+	ck_assert_str_eq(oidc_cfg_provider_pushed_authorization_request_endpoint_url_get(provider),
+			 "https://mtls.idp.example.com/par");
+
+	/* FAPI 2.0 sender-constrains through either mutual-TLS or DPoP: with the access tokens bound to
+	 * the certificate and this OP not advertising "dpop_signing_alg_values_supported", DPoP is not
+	 * required on top */
+	ck_assert_int_eq(oidc_cfg_provider_dpop_supported_get(provider), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_OFF);
+	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(provider), OIDC_DPOP_MODE_OFF);
+}
+END_TEST
+
+/* the same OP, now advertising DPoP support: the mutual-TLS endpoints are still selected, but FAPI 2.0
+ * keeps requiring DPoP since the OP offers it as the sender-constraining mechanism */
+START_TEST(test_metadata_disk_mtls_aliases_from_conf_dpop) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_json_t *j = NULL;
+	char *s_json = NULL;
+
+	/* graft "dpop_signing_alg_values_supported" on to the fixture */
+	ck_assert_int_eq(oidc_json_decode_object(r, OIDC_TEST_METADATA_PKEY_MTLS, &j), TRUE);
+	oidc_json_object_set_new(j, "dpop_signing_alg_values_supported", oidc_json_array());
+	oidc_json_array_append_new(oidc_json_object_get(j, "dpop_signing_alg_values_supported"),
+				   oidc_json_string("PS256"));
+	s_json = oidc_json_encode(r->pool, j, OIDC_JSON_COMPACT);
+	oidc_json_decref(j);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), s_json);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       apr_psprintf(r->pool,
+				    "{\"profile\":\"FAPI20\","
+				    "\"token_endpoint_tls_client_cert\":\"%s/certificate.pem\","
+				    "\"token_endpoint_tls_client_key\":\"%s/private.pem\"}",
+				    srcdir, srcdir));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"token_endpoint_auth_method\":\"private_key_jwt\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://mtls.idp.example.com/token");
+	ck_assert_int_eq(oidc_cfg_provider_dpop_supported_get(provider), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+}
+END_TEST
+
+/* a per-OP "cert_bound_tokens" in the .conf metadata overrides the inferred behaviour */
+START_TEST(test_metadata_disk_mtls_aliases_conf_off) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), OIDC_TEST_METADATA_PKEY_MTLS);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       apr_psprintf(r->pool,
+				    "{\"cert_bound_tokens\":\"off\","
+				    "\"token_endpoint_tls_client_cert\":\"%s/certificate.pem\","
+				    "\"token_endpoint_tls_client_key\":\"%s/private.pem\"}",
+				    srcdir, srcdir));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"token_endpoint_auth_method\":\"private_key_jwt\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_OFF);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_url_get(provider), "https://idp.example.com/token");
 }
 END_TEST
 
@@ -1479,6 +1776,51 @@ START_TEST(test_metadata_disk_dyn_registration_payload_fields) {
 }
 END_TEST
 
+/*
+ * RFC 8705 section 6.1: with a TLS client certificate configured for token binding only (i.e. not
+ * for client authentication) against an OP that advertises support, the registration request asks
+ * for certificate-bound access tokens
+ */
+START_TEST(test_metadata_disk_dyn_registration_cert_bound_tokens) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"https://idp.example.com/jwks\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\",\"id_token\"],"
+						 "\"tls_client_certificate_bound_access_tokens\":true,"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir), "{}");
+
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    r->pool, oidc_cfg_provider_get(c), apr_psprintf(r->pool, "%s/certificate.pem", srcdir)));
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "\"tls_client_certificate_bound_access_tokens\"") != NULL,
+		      "missing tls_client_certificate_bound_access_tokens in: %s", cap->body);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_metadata_disk_dyn_registration_custom_json_merge) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1544,6 +1886,12 @@ int main(void) {
 	tcase_add_test(parse, test_metadata_parse_populates_empty_provider);
 	tcase_add_test(parse, test_metadata_parse_preserves_existing_values);
 	tcase_add_test(parse, test_metadata_parse_mtls_endpoint_aliases);
+	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_advertised);
+	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_not_advertised);
+	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_off);
+	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_on);
+	tcase_add_test(parse, test_metadata_parse_mtls_explicit_endpoint_wins);
+	tcase_add_test(parse, test_metadata_parse_mtls_aliases_private_key_jwt);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse_mtls);
 
@@ -1594,6 +1942,10 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);
 	tcase_add_test(disk, test_metadata_disk_stale_client_reregistration);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_payload_fields);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_cert_bound_tokens);
+	tcase_add_test(disk, test_metadata_disk_mtls_aliases_from_conf);
+	tcase_add_test(disk, test_metadata_disk_mtls_aliases_from_conf_dpop);
+	tcase_add_test(disk, test_metadata_disk_mtls_aliases_conf_off);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_custom_json_merge);
 	tcase_add_test(disk, test_metadata_disk_provider_get_missing_no_discovery);
 

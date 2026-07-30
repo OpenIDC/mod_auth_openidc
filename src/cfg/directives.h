@@ -131,6 +131,7 @@
 #define OIDCProfile "OIDCProfile"
 #define OIDCPKCEMethod "OIDCPKCEMethod"
 #define OIDCDPoPMode "OIDCDPoPMode"
+#define OIDCCertBoundAccessTokens "OIDCCertBoundAccessTokens"
 #define OIDCResponseMode "OIDCResponseMode"
 #define OIDCClientJwksUri "OIDCClientJwksUri"
 #define OIDCIDTokenSignedResponseAlg "OIDCIDTokenSignedResponseAlg"

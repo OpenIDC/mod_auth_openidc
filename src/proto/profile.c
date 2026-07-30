@@ -55,6 +55,7 @@ typedef struct oidc_proto_profile_ops_t {
 	const apr_array_header_t *(*id_token_aud_values)(apr_pool_t *pool, const oidc_provider_t *provider);
 	const oidc_proto_pkce_t *(*pkce)(const oidc_provider_t *provider);
 	oidc_dpop_mode_t (*dpop_mode)(const oidc_provider_t *provider);
+	oidc_cert_bound_tokens_t (*cert_bound_tokens)(const oidc_provider_t *provider);
 	int (*response_require_iss)(const oidc_provider_t *provider);
 	const char *(*request_uri_scope)(const oidc_provider_t *provider);
 } oidc_proto_profile_ops_t;
@@ -96,6 +97,10 @@ static oidc_dpop_mode_t oidc_profile_oidc10_dpop_mode(const oidc_provider_t *pro
 	return oidc_cfg_provider_dpop_mode_get(provider);
 }
 
+static oidc_cert_bound_tokens_t oidc_profile_oidc10_cert_bound_tokens(const oidc_provider_t *provider) {
+	return oidc_cfg_provider_cert_bound_tokens_get(provider);
+}
+
 static int oidc_profile_oidc10_response_require_iss(const oidc_provider_t *provider) {
 	return oidc_cfg_provider_response_require_iss_get(provider);
 }
@@ -114,6 +119,7 @@ static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_id_token_aud_values,
     oidc_profile_oidc10_pkce,
     oidc_profile_oidc10_dpop_mode,
+    oidc_profile_oidc10_cert_bound_tokens,
     oidc_profile_oidc10_response_require_iss,
     oidc_profile_oidc10_request_uri_scope,
 };
@@ -152,7 +158,23 @@ static const oidc_proto_pkce_t *oidc_profile_fapi20_pkce(const oidc_provider_t *
 }
 
 static oidc_dpop_mode_t oidc_profile_fapi20_dpop_mode(const oidc_provider_t *provider) {
+	// FAPI 2.0 Security Profile section 5.3.2.1: access tokens shall be sender-constrained using
+	// *either* RFC 8705 mutual-TLS certificate binding *or* RFC 9449 DPoP. Mandating DPoP regardless
+	// breaks the mutual-TLS variant of the profile against an OP that does not support DPoP at all,
+	// so stand down when the access tokens are certificate-bound (as resolved into the provider
+	// struct by oidc_metadata_provider_parse) and the OP does not advertise DPoP support; the
+	// configured mode then applies, so DPoP can still be asked for explicitly
+	if ((oidc_cfg_provider_cert_bound_tokens_get(provider) == OIDC_CERT_BOUND_TOKENS_ON) &&
+	    (oidc_cfg_provider_dpop_supported_get(provider) == FALSE))
+		return oidc_cfg_provider_dpop_mode_get(provider);
 	return OIDC_DPOP_MODE_REQUIRED;
+}
+
+static oidc_cert_bound_tokens_t oidc_profile_fapi20_cert_bound_tokens(const oidc_provider_t *provider) {
+	// FAPI 2.0 Security Profile section 5.3.2.1: access tokens are sender-constrained through either
+	// mutual-TLS or DPoP, so a TLS client certificate configured against a FAPI 2.0 OP is there for
+	// RFC 8705 binding; use the mutual-TLS endpoints without requiring the OP to advertise support
+	return OIDC_CERT_BOUND_TOKENS_ON;
 }
 
 static int oidc_profile_fapi20_response_require_iss(const oidc_provider_t *provider) {
@@ -173,6 +195,7 @@ static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_id_token_aud_values,
     oidc_profile_fapi20_pkce,
     oidc_profile_fapi20_dpop_mode,
+    oidc_profile_fapi20_cert_bound_tokens,
     oidc_profile_fapi20_response_require_iss,
     oidc_profile_fapi20_request_uri_scope,
 };
@@ -233,6 +256,14 @@ const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(const oidc_provider_t *prov
  */
 oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(const oidc_provider_t *provider) {
 	return oidc_proto_profile_ops(provider)->dpop_mode(provider);
+}
+
+/*
+ * returns whether to obtain RFC 8705 certificate-bound access tokens with a configured TLS client
+ * certificate that is not (also) used for mutual-TLS client authentication
+ */
+oidc_cert_bound_tokens_t oidc_proto_profile_cert_bound_tokens_get(const oidc_provider_t *provider) {
+	return oidc_proto_profile_ops(provider)->cert_bound_tokens(provider);
 }
 
 /*

@@ -1,3 +1,53 @@
+07/30/2026
+- metadata: obtain RFC 8705 section 3 certificate-bound access tokens with a
+  configured TLS client certificate (OIDCClientTokenEndpointCert/Key) when that
+  certificate is not used for client authentication, e.g. alongside
+  private_key_jwt or client_secret_basic. Until now the "mtls_endpoint_aliases"
+  endpoints of the OP and the "tls_client_certificate_bound_access_tokens"
+  client registration parameter were tied to the mutual-TLS client
+  authentication methods, so a certificate presented for token binding only
+  kept talking to the conventional endpoints and silently ended up with
+  unbound tokens against an OP that separates the two. The new
+  OIDCCertBoundAccessTokens directive controls it: "auto" (the default) also
+  applies the aliases when a certificate is configured and the OP advertises
+  "tls_client_certificate_bound_access_tokens", "on" does not require the OP to
+  advertise it and "off" restores the previous behaviour of never inferring it
+  from the certificate alone. FAPI 2.0 (OIDCProfile) implies "on". The same
+  applies to the introspection endpoint on the OAuth 2.0 Resource Server side,
+  and it can be set per OP in the .conf metadata with the "cert_bound_tokens"
+  key
+- metadata: take the RFC 8705 mutual-TLS decisions - which token endpoint
+  authentication method to select out of
+  "token_endpoint_auth_methods_supported" and whether to prefer the
+  "mtls_endpoint_aliases" endpoints - against the settings of the OP they are
+  about. They were taken while parsing the provider metadata, i.e. before the
+  .conf metadata of that OP was applied, so in a multi-provider
+  (OIDCMetadataDir) setup a TLS client certificate ("token_endpoint_tls_client_
+  cert") or profile ("profile") configured there went unnoticed and its OP kept
+  talking to the conventional endpoints with unbound access tokens; only the
+  global OIDCClientTokenEndpointCert/OIDCProfile had any effect
+- metadata: apply an "mtls_endpoint_aliases" registration_endpoint (as
+  advertised by e.g. the OpenID Foundation conformance suite) to dynamic client
+  registration too, and present the configured TLS client certificate on the
+  registration request like at the other endpoints
+- dpop: do not require DPoP under OIDCProfile "FAPI20" when the access tokens
+  are sender-constrained through RFC 8705 mutual-TLS certificate binding
+  instead: FAPI 2.0 Security Profile section 5.3.2.1 allows either mechanism,
+  while DPoP was mandated unconditionally - and could not be turned off, since
+  the profile overrode OIDCDPoPMode - which broke the mutual-TLS variant of the
+  profile against an OP that does not support DPoP at all (the token endpoint
+  call failed on the "Bearer" token type it returns). An OP that advertises
+  "dpop_signing_alg_values_supported" keeps requiring DPoP, so this never
+  downgrades an OP that offers it; OIDCDPoPMode/"dpop_mode" now applies under
+  FAPI 2.0 for the certificate-bound case and can ask for DPoP on top
+- metadata: never override an explicitly configured endpoint URL
+  (OIDCProviderTokenEndpoint, OIDCProviderUserInfoEndpoint,
+  OIDCProviderRevocationEndpoint,
+  OIDCProviderPushedAuthorizationRequestEndpoint) with an
+  "mtls_endpoint_aliases" entry from the provider metadata; the precedence is
+  now explicit configuration, then the mutual-TLS alias, then the conventional
+  metadata endpoint
+
 07/29/2026
 - dpop: re-create the token endpoint client authentication when retrying a token
   endpoint call with a server-provided DPoP nonce: a client_secret_jwt or

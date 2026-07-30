@@ -31,6 +31,7 @@
 
 #include "cfg/oauth.h"
 #include "mod_auth_openidc.h"
+#include "proto/proto.h"
 #include "util/util.h"
 
 /*
@@ -78,8 +79,13 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 			oidc_error(r, "oidc_oauth_introspection_endpoint_auth_set error: %s", rv);
 	}
 
-	/* RFC 8705 section 5: when using mutual-TLS, prefer the "mtls_endpoint_aliases" introspection endpoint */
-	if (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_oauth_introspection_endpoint_auth_get(c))) {
+	/* RFC 8705 section 5: prefer the "mtls_endpoint_aliases" introspection endpoint when the mutual-TLS
+	 * behaviour applies, i.e. under mutual-TLS client authentication and (subject to
+	 * OIDCCertBoundAccessTokens) with a certificate configured for section 3 token binding only */
+	if (oidc_metadata_cert_bound_tokens_enabled(
+		r, j_provider, oidc_proto_profile_cert_bound_tokens_get(oidc_cfg_provider_get(c)),
+		oidc_cfg_oauth_introspection_endpoint_auth_get(c),
+		oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL) == TRUE) {
 		value = NULL;
 		const oidc_json_t *j_aliases = oidc_metadata_mtls_endpoint_aliases_get(j_provider);
 		if (j_aliases != NULL)

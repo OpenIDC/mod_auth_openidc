@@ -117,14 +117,18 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 	oidc_json_array_append_new(grant_types, oidc_json_string("refresh_token"));
 	oidc_json_object_set_new(data, OIDC_METADATA_GRANT_TYPES, grant_types);
 
-	if (oidc_cfg_provider_token_endpoint_auth_get(provider) != NULL) {
+	if (oidc_cfg_provider_token_endpoint_auth_get(provider) != NULL)
 		oidc_json_object_set_new(data, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD,
 					 oidc_json_string(oidc_cfg_provider_token_endpoint_auth_get(provider)));
-		/* RFC 8705 section 6.1: request certificate-bound access tokens when using mutual-TLS client auth */
-		if (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_provider_token_endpoint_auth_get(provider)))
-			oidc_json_object_set_new(data, OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS,
-						 oidc_json_boolean(1));
-	}
+
+	/* RFC 8705 section 6.1: request certificate-bound access tokens when the mutual-TLS behaviour
+	 * applies to this provider, which oidc_metadata_provider_parse resolved into the provider struct
+	 * (including the section 3 case of a certificate used for token binding only); the mutual-TLS
+	 * client authentication methods imply it by themselves */
+	if ((oidc_cfg_provider_cert_bound_tokens_get(provider) == OIDC_CERT_BOUND_TOKENS_ON) ||
+	    (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_provider_token_endpoint_auth_get(provider)) == TRUE))
+		oidc_json_object_set_new(data, OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS,
+					 oidc_json_boolean(1));
 
 	if (oidc_cfg_provider_client_contact_get(provider) != NULL) {
 		oidc_json_t *contacts = oidc_json_array();
@@ -220,12 +224,17 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 		oidc_json_decref(json);
 	}
 
-	/* dynamically register the client with the specified parameters */
+	/* dynamically register the client with the specified parameters
+	 * NB: the TLS client certificate is presented here as it is at the other endpoints, since the
+	 *     registration endpoint may be an RFC 8705 section 5 "mtls_endpoint_aliases" one */
 	if (oidc_http_post_json(r, oidc_cfg_provider_registration_endpoint_url_get(provider), data, NULL,
 				oidc_cfg_provider_registration_token_get(provider), NULL,
 				oidc_cfg_provider_ssl_validate_server_get(provider), response, NULL, NULL,
 				oidc_cfg_http_timeout_short_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
-				oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
+				oidc_cfg_dir_pass_cookies_get(r),
+				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
+				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
+				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
 		oidc_json_decref(data);
 		return FALSE;
 	}

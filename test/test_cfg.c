@@ -486,6 +486,27 @@ START_TEST(test_cmd_provider_dpop_mode) {
 }
 END_TEST
 
+START_TEST(test_cmd_provider_cert_bound_tokens) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCertBoundAccessTokens);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	/* unset defaults to "auto" */
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(p), OIDC_CERT_BOUND_TOKENS_AUTO);
+
+	ck_assert_ptr_null(oidc_cmd_provider_cert_bound_tokens_set(cmd, NULL, "off"));
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(p), OIDC_CERT_BOUND_TOKENS_OFF);
+	ck_assert_ptr_null(oidc_cmd_provider_cert_bound_tokens_set(cmd, NULL, "on"));
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(p), OIDC_CERT_BOUND_TOKENS_ON);
+	ck_assert_ptr_null(oidc_cmd_provider_cert_bound_tokens_set(cmd, NULL, "auto"));
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(p), OIDC_CERT_BOUND_TOKENS_AUTO);
+
+	/* unknown value: rejected and the default restored */
+	ck_assert_ptr_nonnull(oidc_cmd_provider_cert_bound_tokens_set(cmd, NULL, "sometimes"));
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(p), OIDC_CERT_BOUND_TOKENS_AUTO);
+}
+END_TEST
+
 START_TEST(test_cmd_provider_pkce) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPKCEMethod);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -2362,6 +2383,7 @@ int main(void) {
 	tcase_add_test(provider, test_cmd_provider_session_max_duration);
 	tcase_add_test(provider, test_cmd_provider_scope);
 	tcase_add_test(provider, test_cmd_provider_dpop_mode);
+	tcase_add_test(provider, test_cmd_provider_cert_bound_tokens);
 	tcase_add_test(provider, test_cmd_provider_pkce);
 	tcase_add_test(provider, test_cmd_provider_idtoken_iat_slack);
 	tcase_add_test(provider, test_cmd_provider_url_setters);

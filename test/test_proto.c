@@ -417,6 +417,9 @@ START_TEST(test_proto_profile_helpers) {
 	/* the post-PAR redirect carries scope=openid */
 	ck_assert_str_eq(oidc_proto_profile_request_uri_scope_get(provider), OIDC_PROTO_SCOPE_OPENID);
 
+	/* certificate-bound access tokens are inferred from a certificate as configured, i.e. "auto" */
+	ck_assert_int_eq(oidc_proto_profile_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_AUTO);
+
 	/* if profile is FAPI20 behavior changes */
 	/* set profile to FAPI20 */
 	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
@@ -427,10 +430,32 @@ START_TEST(test_proto_profile_helpers) {
 	ck_assert_ptr_eq(oidc_proto_profile_pkce_get(provider), &oidc_pkce_s256);
 	/* DPoP should be required */
 	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+	/* a configured TLS client certificate is taken to be there for RFC 8705 token binding */
+	ck_assert_int_eq(oidc_proto_profile_cert_bound_tokens_get(provider), OIDC_CERT_BOUND_TOKENS_ON);
 	/* response require iss should be true */
 	ck_assert_int_eq(oidc_proto_profile_response_require_iss_get(provider), 1);
 	/* the post-PAR redirect must carry client_id and request_uri only */
 	ck_assert_ptr_null(oidc_proto_profile_request_uri_scope_get(provider));
+
+	/* FAPI 2.0 section 5.3.2.1: access tokens are sender-constrained through *either* mutual-TLS or
+	 * DPoP, so with the access tokens certificate-bound (as resolved into the provider struct by
+	 * oidc_metadata_provider_parse) against an OP that does not support DPoP, DPoP is no longer
+	 * mandated and the configured mode applies */
+	oidc_cfg_provider_cert_bound_tokens_int_set(provider, OIDC_CERT_BOUND_TOKENS_ON);
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_OFF);
+	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(pool, provider, "required"));
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+	oidc_cfg_provider_dpop_mode_int_set(provider, OIDC_DPOP_MODE_OFF);
+
+	/* ... but an OP that does advertise DPoP support is taken to sender-constrain with it, even
+	 * when it also binds to the certificate: no silent downgrade of an OP that can do both */
+	oidc_cfg_provider_dpop_supported_int_set(provider, TRUE);
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
+
+	/* without certificate binding DPoP remains mandatory, whatever is configured */
+	oidc_cfg_provider_dpop_supported_int_set(provider, FALSE);
+	oidc_cfg_provider_cert_bound_tokens_int_set(provider, OIDC_CERT_BOUND_TOKENS_OFF);
+	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
 }
 END_TEST
 

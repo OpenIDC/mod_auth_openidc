@@ -97,6 +97,8 @@
 	INT(int, idtoken_iat_slack)                                                                                    \
 	INT(int, session_max_duration)                                                                                 \
 	INT(oidc_dpop_mode_t, dpop_mode)                                                                               \
+	INT(oidc_cert_bound_tokens_t, cert_bound_tokens)                                                               \
+	INT(int, dpop_supported)                                                                                       \
 	INT(int, userinfo_refresh_interval)                                                                            \
 	INT(oidc_userinfo_token_method_t, userinfo_token_method)                                                       \
 	INT(oidc_auth_request_method_t, auth_request_method)                                                           \
@@ -395,6 +397,39 @@ const char *oidc_cmd_provider_dpop_mode_set(cmd_parms *cmd, void *ptr, const cha
 		rv = oidc_cfg_parse_boolean(cmd->pool, arg2, &cfg->dpop_api_enabled);
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
+
+/*
+ * RFC 8705 certificate-bound access tokens
+ */
+#define OIDC_CERT_BOUND_TOKENS_OFF_STR "off"
+#define OIDC_CERT_BOUND_TOKENS_AUTO_STR "auto"
+#define OIDC_CERT_BOUND_TOKENS_ON_STR "on"
+
+static const char *oidc_cfg_provider_parse_cert_bound_tokens(apr_pool_t *pool, const char *arg,
+							     oidc_cert_bound_tokens_t *mode) {
+	static const oidc_cfg_option_t options[] = {
+	    {OIDC_CERT_BOUND_TOKENS_OFF, OIDC_CERT_BOUND_TOKENS_OFF_STR},
+	    {OIDC_CERT_BOUND_TOKENS_AUTO, OIDC_CERT_BOUND_TOKENS_AUTO_STR},
+	    {OIDC_CERT_BOUND_TOKENS_ON, OIDC_CERT_BOUND_TOKENS_ON_STR},
+	};
+	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)mode);
+}
+
+#define OIDC_DEFAULT_CERT_BOUND_TOKENS OIDC_CERT_BOUND_TOKENS_AUTO
+
+OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(cert_bound_tokens, oidc_cfg_provider_parse_cert_bound_tokens,
+				   oidc_cert_bound_tokens_t, OIDC_DEFAULT_CERT_BOUND_TOKENS)
+
+/*
+ * whether the OP supports RFC 9449 DPoP, i.e. advertises "dpop_signing_alg_values_supported"
+ *
+ * NB: hand-written rather than generated because this is not configurable: it records what the
+ *     provider metadata says, so there is no directive and no string setter for it
+ */
+void oidc_cfg_provider_dpop_supported_int_set(oidc_provider_t *provider, int arg) {
+	provider->dpop_supported = arg;
+}
+OIDC_PROVIDER_MEMBER_GET_INT_DEF(dpop_supported, int, 0)
 
 OIDC_PROVIDER_MEMBER_FUNCS_STR(issuer, NULL)
 OIDC_PROVIDER_MEMBER_FUNCS_URL(authorization_endpoint_url)

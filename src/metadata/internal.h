@@ -70,7 +70,11 @@
 #define OIDC_METADATA_RESPONSE_TYPES "response_types"
 #define OIDC_METADATA_GRANT_TYPES "grant_types"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD "token_endpoint_auth_method"
+/* NB: RFC 8705 uses this parameter both as authorization server metadata (section 3.3, advertising
+ *     support) and as client metadata (section 6.1, requesting it), so this single define is shared
+ *     by the provider and the client parsing */
 #define OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS "tls_client_certificate_bound_access_tokens"
+#define OIDC_METADATA_DPOP_SIGNING_ALG_VALUES_SUPPORTED "dpop_signing_alg_values_supported"
 #define OIDC_METADATA_CONTACTS "contacts"
 #define OIDC_METADATA_INITIATE_LOGIN_URI "initiate_login_uri"
 #define OIDC_METADATA_FRONTCHANNEL_LOGOUT_URI "frontchannel_logout_uri"
@@ -102,6 +106,7 @@
 #define OIDC_METADATA_RESPONSE_MODE "response_mode"
 #define OIDC_METADATA_PKCE_METHOD "pkce_method"
 #define OIDC_METADATA_DPOP_MODE "dpop_mode"
+#define OIDC_METADATA_CERT_BOUND_TOKENS "cert_bound_tokens"
 #define OIDC_METADATA_CLIENT_CONTACT "client_contact"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH "token_endpoint_auth"
 #define OIDC_METADATA_REGISTRATION_TOKEN "registration_token"
@@ -187,6 +192,10 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 						const char *preference);
 const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value);
+apr_byte_t oidc_metadata_cert_bound_tokens_enabled(request_rec *r, const oidc_json_t *j_provider,
+						   oidc_cert_bound_tokens_t mode, const char *auth, apr_byte_t b_cert);
+void oidc_metadata_conf_parse_pre_provider(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
+					   oidc_provider_t *provider);
 const oidc_json_t *oidc_metadata_mtls_endpoint_aliases_get(const oidc_json_t *j_provider);
 void oidc_metadata_parse_boolean(request_rec *r, const oidc_json_t *json, const char *key, int *value,
 				 int default_value);

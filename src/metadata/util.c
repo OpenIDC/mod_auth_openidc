@@ -209,6 +209,37 @@ const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t 
 }
 
 /*
+ * RFC 8705: decide whether the mutual-TLS behaviour applies to a provider, i.e. whether to prefer
+ * its "mtls_endpoint_aliases" endpoints (section 5) and to ask for certificate-bound access tokens
+ * on client registration (section 6.1).
+ *
+ * That is the case when a mutual-TLS client authentication method is in effect (`auth`), and also
+ * when a TLS client certificate is configured (`b_cert`) that is used for section 3 token binding
+ * only - the latter as far as `mode` allows inferring that intent from the certificate alone:
+ * "auto" additionally requires the OP to advertise support for certificate-bound access tokens,
+ * "on" takes the certificate itself as the signal and "off" never infers it. `j_provider` may be
+ * NULL when no provider metadata is at hand (nothing is advertised then).
+ */
+apr_byte_t oidc_metadata_cert_bound_tokens_enabled(request_rec *r, const oidc_json_t *j_provider,
+						   oidc_cert_bound_tokens_t mode, const char *auth, apr_byte_t b_cert) {
+	int advertised = FALSE;
+
+	if (oidc_cfg_endpoint_auth_is_mtls(auth) == TRUE)
+		return TRUE;
+
+	if ((b_cert == FALSE) || (mode == OIDC_CERT_BOUND_TOKENS_OFF))
+		return FALSE;
+
+	if (mode == OIDC_CERT_BOUND_TOKENS_ON)
+		return TRUE;
+
+	oidc_metadata_parse_boolean(r, j_provider, OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS,
+				    &advertised, FALSE);
+
+	return (advertised == TRUE) ? TRUE : FALSE;
+}
+
+/*
  * RFC 8705 section 5: return the "mtls_endpoint_aliases" metadata object holding the endpoint
  * URLs to prefer under mutual-TLS, or NULL when absent or not an object
  */
