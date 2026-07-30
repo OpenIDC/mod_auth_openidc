@@ -279,6 +279,86 @@ START_TEST(test_jose_jwe_decrypt_plaintext) {
 }
 END_TEST
 
+/*
+ * oidc_jwt_sign/oidc_jwt_parse take a "compress" flag that deflates the payload before signing and
+ * inflates it after verification; only the uncompressed form is used in the module itself, so the
+ * round trip is exercised here
+ */
+START_TEST(test_jwt_sign_parse_compressed) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	unsigned char key[32];
+	for (int i = 0; i < 32; i++)
+		key[i] = (unsigned char)(i + 1);
+	oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(pool, "hskid", key, 32, TRUE, &err);
+	ck_assert_ptr_nonnull(sym);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, 1, 1);
+	/* a payload with enough repetition that deflating it is not a no-op */
+	oidc_json_object_set_new(jwt->payload.value.json, "iss",
+				 oidc_json_string("https://idp.example.com/very/long/issuer/identifier"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud",
+				 oidc_json_string("https://idp.example.com/very/long/issuer/identifier"));
+	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_HS256);
+
+	ck_assert_msg(oidc_jwt_sign(pool, jwt, sym, TRUE, &err) == TRUE, "oidc_jwt_sign(compress) failed: %s",
+		      oidc_jose_e2s(pool, err));
+	char *s_jwt = oidc_jose_jwt_serialize(pool, jwt, &err);
+	ck_assert_ptr_nonnull(s_jwt);
+	oidc_jwt_destroy(jwt);
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, sym->kid, APR_HASH_KEY_STRING, sym);
+
+	/* parsing it back without asking for decompression yields an unusable payload */
+	oidc_jwt_t *plain = NULL;
+	ck_assert_int_eq(oidc_jwt_parse(pool, s_jwt, &plain, keys, FALSE, &err), FALSE);
+
+	/* ... and with it, the original claims come back */
+	oidc_jwt_t *parsed = NULL;
+	ck_assert_msg(oidc_jwt_parse(pool, s_jwt, &parsed, keys, TRUE, &err) == TRUE, "oidc_jwt_parse(compress): %s",
+		      oidc_jose_e2s(pool, err));
+	ck_assert_ptr_nonnull(parsed);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(parsed->payload.value.json, "iss")),
+			 "https://idp.example.com/very/long/issuer/identifier");
+	oidc_jwt_destroy(parsed);
+
+	oidc_jwk_destroy(sym);
+}
+END_TEST
+
+/*
+ * a JWK that cjose cannot import is retried as an "x5c" certificate chain, which cjose does not
+ * support natively; these are the shapes that retry rejects
+ */
+START_TEST(test_jwk_parse_x5c_malformed) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	static const char *const bad[] = {
+	    /* nothing to fall back on */
+	    "{\"kty\":\"RSA\"}",
+	    /* "x5c" present but not an array */
+	    "{\"kty\":\"RSA\",\"x5c\":\"not-an-array\"}",
+	    /* an empty array has no first element */
+	    "{\"kty\":\"RSA\",\"x5c\":[]}",
+	    /* the first element is not a string */
+	    "{\"kty\":\"RSA\",\"x5c\":[123]}",
+	    /* a string, but not a certificate */
+	    "{\"kty\":\"RSA\",\"x5c\":[\"bm90LWEtY2VydGlmaWNhdGU=\"]}",
+	    NULL,
+	};
+
+	for (int i = 0; bad[i] != NULL; i++) {
+		oidc_json_t *json = NULL;
+		char *s_err = NULL;
+		ck_assert_msg(oidc_json_parse(pool, bad[i], 0, &json, &s_err) == TRUE, "fixture %d is not valid JSON",
+			      i);
+		ck_assert_ptr_null(oidc_jwk_parse(pool, json, &err));
+		oidc_json_decref(json);
+	}
+}
+END_TEST
+
 START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -1190,6 +1270,8 @@ int main(void) {
 	tcase_add_test(core, test_jose_compress_uncompress_tiny);
 	tcase_add_test(core, test_jose_jwk_and_json_and_copy_lists);
 	tcase_add_test(core, test_jose_jwe_decrypt_plaintext);
+	tcase_add_test(core, test_jwt_sign_parse_compressed);
+	tcase_add_test(core, test_jwk_parse_x5c_malformed);
 	tcase_add_test(core, test_jwt_sign_verify_and_encrypt_decrypt);
 	tcase_add_test(core, test_jose_hash_bytes);
 	tcase_add_test(core, test_jwk_json_parse_and_jwks);
