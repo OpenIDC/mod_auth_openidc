@@ -1,4 +1,13 @@
 07/30/2026
+- session: refuse to write a client-side session cookie that would have to be
+  split over more chunks than can be read back. The reader rejects a chunk
+  count above 99 but the writer had no bound at all, so a session larger than
+  99 times OIDCSessionCookieChunkSize was written out and then dropped on the
+  very next request, sending the user round the authentication loop for ever
+  rather than failing visibly. With the default chunk size of 4000 that needs a
+  ~400Kb session, but OIDCSessionCookieChunkSize can be set as low as 256, at
+  which point ~25Kb is enough. It is now an error naming both the chunk size
+  and OIDCSessionType "server-cache" as the ways out
 - http: redact every occurrence of a sensitive parameter in the debug log of an
   outgoing request body, and only match a parameter name at a parameter
   boundary so that e.g. "xcode=" is no longer taken for "code=". The scan

@@ -318,7 +318,7 @@ START_TEST(test_set_cookie_and_chunked_set) {
 	for (int i = 0; i < 1000; i++)
 		large[i] = 'A' + (i % 26);
 	large[1000] = '\0';
-	oidc_http_set_chunked_cookie(r, "chunked", large, expires, 100, "SameSite=Lax");
+	ck_assert(oidc_http_set_chunked_cookie(r, "chunked", large, expires, 100, "SameSite=Lax") == TRUE);
 	/* ensure chunk counter cookie present in err_headers_out */
 	h = apr_table_elts(r->err_headers_out);
 	elts = (apr_table_entry_t *)h->elts;
@@ -330,6 +330,32 @@ START_TEST(test_set_cookie_and_chunked_set) {
 		}
 	}
 	ck_assert_msg(found_cnt == 1, "chunked counter cookie set");
+}
+END_TEST
+
+/*
+ * a value that would need more chunks than oidc_http_get_chunked_cookie accepts on the way back in
+ * must be refused outright rather than written out and dropped on the next request
+ */
+START_TEST(test_set_chunked_cookie_too_many_chunks) {
+	request_rec *r = oidc_test_request_get();
+	apr_time_t expires = apr_time_now() + apr_time_from_sec(3600);
+	/* 99 chunks of 100 is the maximum, so 9900 characters is the first length that needs 100 */
+	char *toolarge = apr_palloc(r->pool, 9901);
+	_oidc_memset(toolarge, 'A', 9900);
+	toolarge[9900] = '\0';
+
+	ck_assert(oidc_http_set_chunked_cookie(r, "toobig", toolarge, expires, 100, "SameSite=Lax") == FALSE);
+
+	/* nothing was written: neither the counter nor any individual chunk */
+	const apr_array_header_t *h = apr_table_elts(r->err_headers_out);
+	apr_table_entry_t *elts = (apr_table_entry_t *)h->elts;
+	for (int i = 0; i < h->nelts; i++)
+		ck_assert_ptr_null(_oidc_strstr(elts[i].val, "toobig"));
+
+	/* one chunk fewer is still accepted, and round-trips */
+	toolarge[9899] = '\0';
+	ck_assert(oidc_http_set_chunked_cookie(r, "toobig", toolarge, expires, 100, "SameSite=Lax") == TRUE);
 }
 END_TEST
 
@@ -908,6 +934,7 @@ int main(void) {
 	tcase_add_test(accept, test_hdr_setters_and_cookie_set);
 	tcase_add_test(accept, test_hdr_out_location_and_traceparent);
 	tcase_add_test(accept, test_set_cookie_and_chunked_set);
+	tcase_add_test(accept, test_set_chunked_cookie_too_many_chunks);
 	tcase_add_test(accept, test_other_header_getters);
 	tcase_add_test(accept, test_init_and_cleanup_noop);
 

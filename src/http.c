@@ -1300,6 +1300,10 @@ char *oidc_http_get_cookie(request_rec *r, const char *cookieName) {
 #define OIDC_HTTP_COOKIE_CHUNKS_SEPARATOR "_"
 #define OIDC_HTTP_COOKIE_CHUNKS_POSTFIX "chunks"
 
+/* the largest number of chunks a chunked cookie may be split over; the counter cookie holds it as
+ * a decimal number, so this bounds both what is written and what is accepted on the way back in */
+#define OIDC_HTTP_COOKIE_CHUNKS_MAX 99
+
 /*
  * get the name of the cookie that contains the number of chunks
  */
@@ -1337,7 +1341,7 @@ char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 	chunkCount = oidc_http_get_chunked_count(r, cookieName);
 	if (chunkCount == 0)
 		return oidc_http_get_cookie(r, cookieName);
-	if ((chunkCount < 0) || (chunkCount > 99)) {
+	if ((chunkCount < 0) || (chunkCount > OIDC_HTTP_COOKIE_CHUNKS_MAX)) {
 		oidc_warn(r, "chunk count out of bounds: %d", chunkCount);
 		return NULL;
 	}
@@ -1368,8 +1372,8 @@ static void oidc_http_clear_chunked_cookie(request_rec *r, const char *cookieNam
 /*
  * set a cookie value that is split over a number of chunked cookies
  */
-void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
-				  int chunkSize, const char *ext) {
+apr_byte_t oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue,
+					apr_time_t expires, int chunkSize, const char *ext) {
 	int cookieLength = (int)_oidc_strlen(cookieValue);
 	const char *chunkValue = NULL;
 
@@ -1377,18 +1381,31 @@ void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 	if ((chunkSize == 0) || ((cookieLength > 0) && (cookieLength < chunkSize))) {
 		oidc_http_set_cookie(r, cookieName, cookieValue, expires, ext);
 		oidc_http_clear_chunked_cookie(r, cookieName, expires, ext);
-		return;
+		return TRUE;
 	}
 
 	/* see if we need to clear a possibly chunked cookie */
 	if (cookieLength == 0) {
 		oidc_http_set_cookie(r, cookieName, "", expires, ext);
 		oidc_http_clear_chunked_cookie(r, cookieName, expires, ext);
-		return;
+		return TRUE;
 	}
 
 	/* set a chunked cookie */
 	int chunkCountValue = cookieLength / chunkSize + 1;
+
+	/* refuse to write what oidc_http_get_chunked_cookie would refuse to read back: writing it
+	 * anyway leaves the browser holding a value that is dropped on the next request, which for a
+	 * client-side session means authenticating over and over rather than a visible failure */
+	if (chunkCountValue > OIDC_HTTP_COOKIE_CHUNKS_MAX) {
+		oidc_error(r,
+			   "cookie \"%s\" would have to be split over %d chunks, which is more than the maximum of "
+			   "%d; increase " OIDCSessionCookieChunkSize " (currently %d) or store the session in a "
+			   "server-side cache with " OIDCSessionType " \"server-cache\"",
+			   cookieName, chunkCountValue, OIDC_HTTP_COOKIE_CHUNKS_MAX, chunkSize);
+		return FALSE;
+	}
+
 	const char *ptr = cookieValue;
 	for (int i = 0; i < chunkCountValue; i++) {
 		chunkValue = apr_pstrndup(r->pool, ptr, chunkSize);
@@ -1398,6 +1415,8 @@ void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const 
 	oidc_http_set_cookie(r, oidc_http_get_chunk_count_name(r, cookieName),
 			     apr_psprintf(r->pool, "%d", chunkCountValue), expires, ext);
 	oidc_http_set_cookie(r, cookieName, "", expires, ext);
+
+	return TRUE;
 }
 
 /*

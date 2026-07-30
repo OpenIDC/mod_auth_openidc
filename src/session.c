@@ -523,12 +523,13 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t 
 	if ((z->state != NULL) && (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
 		return FALSE;
 
-	oidc_http_set_chunked_cookie(
+	/* a session too large to be split over the maximum number of cookie chunks is a hard failure:
+	 * writing it anyway would have the browser drop it on the next request and send the user round
+	 * the authentication loop for ever, so report it to the caller instead */
+	return oidc_http_set_chunked_cookie(
 	    r, oidc_cfg_dir_cookie_get(r), cookieValue, oidc_cfg_persistent_session_cookie_get(c) ? z->expiry : -1,
 	    oidc_cfg_session_cookie_chunk_size_get(c),
 	    (z->state == NULL) ? OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r) : oidc_session_cookie_samesite(r, c, first_time));
-
-	return TRUE;
 }
 
 /*

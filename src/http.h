@@ -177,8 +177,8 @@ char *oidc_http_get_cookie(request_rec *r, const char *cookieName);
 void oidc_http_set_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
 			  const char *ext);
 char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int chunkSize);
-void oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue, apr_time_t expires,
-				  int chunkSize, const char *ext);
+apr_byte_t oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, const char *cookieValue,
+					apr_time_t expires, int chunkSize, const char *ext);
 
 const char **oidc_http_proxy_auth_options(void);
 unsigned long oidc_http_proxy_s2auth(const char *arg);
