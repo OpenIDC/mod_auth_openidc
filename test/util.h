@@ -66,7 +66,22 @@ void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg);
  */
 typedef int (*oidc_test_hook_post_config_fn)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, server_rec *s);
 typedef void (*oidc_test_hook_child_init_fn)(apr_pool_t *p, server_rec *s);
+typedef void (*oidc_test_hook_insert_filter_fn)(request_rec *r);
+typedef apr_status_t (*oidc_test_input_filter_fn)(ap_filter_t *f, apr_bucket_brigade *b, ap_input_mode_t mode,
+						  apr_read_type_e block, apr_off_t nbytes);
 oidc_test_hook_post_config_fn oidc_test_hook_post_config_get(void);
 oidc_test_hook_child_init_fn oidc_test_hook_child_init_get(void);
+oidc_test_hook_insert_filter_fn oidc_test_hook_insert_filter_get(void);
+oidc_test_input_filter_fn oidc_test_input_filter_get(void);
+
+/* the name ap_add_input_filter was last called with, i.e. whether the module inserted its filter */
+const char *oidc_test_added_input_filter_get(void);
+void oidc_test_added_input_filter_reset(void);
+
+/* prime the next ap_get_brigade() call to yield `body` followed by EOS, and to return `rc` */
+void oidc_test_brigade_prime(const char *body, apr_status_t rc);
+
+/* the first authz_provider the module registered, for driving its parse_require_line */
+const void *oidc_test_authz_provider_get(void);
 
 #endif // _MOD_AUTH_OPENIDC_TEST_UTIL_H_

@@ -172,8 +172,7 @@ START_TEST(test_redact_body_for_log) {
 
 	// the needle only matches at a parameter boundary: a parameter whose name merely ends in a
 	// sensitive one keeps its value
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "xcode=keepme&code=hideme"),
-			 "xcode=keepme&code=***");
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "xcode=keepme&code=hideme"), "xcode=keepme&code=***");
 
 	// ... including as the very first parameter of the body
 	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "my_access_token=keepme&scope=openid"),

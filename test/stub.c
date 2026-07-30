@@ -16,6 +16,15 @@
  * util.h instead; the two must stay in step. */
 typedef int (*oidc_test_hook_post_config_fn)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, server_rec *s);
 typedef void (*oidc_test_hook_child_init_fn)(apr_pool_t *p, server_rec *s);
+typedef void (*oidc_test_hook_insert_filter_fn)(request_rec *r);
+typedef apr_status_t (*oidc_test_input_filter_fn)(ap_filter_t *f, apr_bucket_brigade *b, ap_input_mode_t mode,
+						  apr_read_type_e block, apr_off_t nbytes);
+
+static oidc_test_hook_insert_filter_fn _oidc_test_hook_insert_filter = NULL;
+static oidc_test_input_filter_fn _oidc_test_input_filter = NULL;
+static const char *_oidc_test_added_input_filter = NULL;
+static const char *_oidc_test_brigade_body = NULL;
+static apr_status_t _oidc_test_brigade_rc = APR_SUCCESS;
 
 #define ap_HOOK_check_user_id_t void
 
@@ -25,9 +34,18 @@ ap_hook_check_authn(ap_HOOK_check_user_id_t *pf, const char *const *aszPre, cons
 	// comment explaining why the method is empty
 }
 
+/* the first authz provider the module registers, so its parse_require_line can be driven */
+static const void *_oidc_test_authz_provider = NULL;
+
+const void *oidc_test_authz_provider_get(void) {
+	return _oidc_test_authz_provider;
+}
+
 AP_DECLARE(apr_status_t)
 ap_register_auth_provider(apr_pool_t *pool, const char *provider_group, const char *provider_name,
 			  const char *provider_version, const void *provider, int type) {
+	if (_oidc_test_authz_provider == NULL)
+		_oidc_test_authz_provider = provider;
 	return 0;
 }
 
@@ -199,7 +217,7 @@ ap_hook_fixups(int (*handler)(request_rec *r), const char *const *aszPre, const 
 AP_DECLARE(void)
 ap_hook_insert_filter(void (*insert_filter)(request_rec *r), const char *const *aszPre, const char *const *aszSucc,
 		      int nOrder) {
-	// comment explaining why the method is empty
+	_oidc_test_hook_insert_filter = insert_filter;
 }
 
 /*
@@ -365,19 +383,53 @@ AP_DECLARE(char *) ap_server_root_relative(apr_pool_t *p, const char *file) {
 }
 
 AP_DECLARE(ap_filter_t *) ap_add_input_filter(const char *name, void *ctx, request_rec *r, conn_rec *c) {
+	_oidc_test_added_input_filter = name;
 	return NULL;
+}
+
+const char *oidc_test_added_input_filter_get(void) {
+	return _oidc_test_added_input_filter;
+}
+
+void oidc_test_added_input_filter_reset(void) {
+	_oidc_test_added_input_filter = NULL;
 }
 
 AP_DECLARE(apr_status_t)
 ap_get_brigade(ap_filter_t *filter, apr_bucket_brigade *bucket, ap_input_mode_t mode, apr_read_type_e block,
 	       apr_off_t readbytes) {
-	return APR_SUCCESS;
+	/* feed the caller the request body the next call is primed with, followed by EOS; an unprimed
+	 * call yields an empty brigade, as before. The input filter under test only appends its
+	 * captured POST parameters once it sees the EOS bucket, so a stub that produced nothing at all
+	 * left that half of it unreachable. */
+	if (_oidc_test_brigade_body != NULL) {
+		apr_bucket_alloc_t *ba = bucket->bucket_alloc;
+		APR_BRIGADE_INSERT_TAIL(
+		    bucket, apr_bucket_heap_create(_oidc_test_brigade_body, strlen(_oidc_test_brigade_body), NULL, ba));
+		APR_BRIGADE_INSERT_TAIL(bucket, apr_bucket_eos_create(ba));
+		_oidc_test_brigade_body = NULL;
+	}
+	return _oidc_test_brigade_rc;
+}
+
+void oidc_test_brigade_prime(const char *body, apr_status_t rc) {
+	_oidc_test_brigade_body = body;
+	_oidc_test_brigade_rc = rc;
 }
 
 AP_DECLARE(ap_filter_rec_t *)
 ap_register_input_filter(const char *name, ap_in_filter_func filter_func, ap_init_filter_func filter_init,
 			 ap_filter_type ftype) {
+	_oidc_test_input_filter = filter_func;
 	return NULL;
+}
+
+oidc_test_input_filter_fn oidc_test_input_filter_get(void) {
+	return _oidc_test_input_filter;
+}
+
+oidc_test_hook_insert_filter_fn oidc_test_hook_insert_filter_get(void) {
+	return _oidc_test_hook_insert_filter;
 }
 
 AP_DECLARE(char *) ap_make_dirstr_parent(apr_pool_t *p, const char *s) {
