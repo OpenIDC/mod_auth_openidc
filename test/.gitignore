@@ -50,3 +50,4 @@
 # inputs libFuzzer discovers and writes into the corpus dirs during a run are
 # named by their SHA1; keep the curated (human-named) seeds, ignore the rest
 /fuzz/corpus/*/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*
+/test_config

@@ -11,6 +11,12 @@
 
 // clang-format on
 
+/* NB: deliberately not "util.h": including it here pulls in <http_request.h>, whose AP_DECLARE_HOOK
+ * declarations collide with the hand-rolled ap_hook_* shims below. These mirror the declarations in
+ * util.h instead; the two must stay in step. */
+typedef int (*oidc_test_hook_post_config_fn)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, server_rec *s);
+typedef void (*oidc_test_hook_child_init_fn)(apr_pool_t *p, server_rec *s);
+
 #define ap_HOOK_check_user_id_t void
 
 AP_DECLARE(void)
@@ -196,16 +202,31 @@ ap_hook_insert_filter(void (*insert_filter)(request_rec *r), const char *const *
 	// comment explaining why the method is empty
 }
 
+/*
+ * the hooks the module registers are recorded rather than discarded, so a test can drive the
+ * server-lifetime entry points (post_config, child_init) the way httpd would; see test_config.c
+ */
+static oidc_test_hook_post_config_fn _oidc_test_hook_post_config = NULL;
+static oidc_test_hook_child_init_fn _oidc_test_hook_child_init = NULL;
+
+oidc_test_hook_post_config_fn oidc_test_hook_post_config_get(void) {
+	return _oidc_test_hook_post_config;
+}
+
+oidc_test_hook_child_init_fn oidc_test_hook_child_init_get(void) {
+	return _oidc_test_hook_child_init;
+}
+
 AP_DECLARE(void)
 ap_hook_post_config(int (*post_config)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, server_rec *s),
 		    const char *const *aszPre, const char *const *aszSucc, int nOrder) {
-	// comment explaining why the method is empty
+	_oidc_test_hook_post_config = post_config;
 }
 
 AP_DECLARE(void)
 ap_hook_child_init(void (*child_init)(apr_pool_t *p, server_rec *s), const char *const *aszPre,
 		   const char *const *aszSucc, int nOrder) {
-	// comment explaining why the method is empty
+	_oidc_test_hook_child_init = child_init;
 }
 
 AP_DECLARE(void)

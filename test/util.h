@@ -60,4 +60,13 @@ cmd_parms *oidc_test_cmd_get(const char *primitive);
 void oidc_test_set_auth_type(const char *auth_type);
 void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg);
 
+/*
+ * the server-lifetime hooks the module registers with httpd, recorded by the ap_hook_* stubs so a
+ * test can call them the way httpd would; NULL until auth_openidc_module.register_hooks() has run
+ */
+typedef int (*oidc_test_hook_post_config_fn)(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, server_rec *s);
+typedef void (*oidc_test_hook_child_init_fn)(apr_pool_t *p, server_rec *s);
+oidc_test_hook_post_config_fn oidc_test_hook_post_config_get(void);
+oidc_test_hook_child_init_fn oidc_test_hook_child_init_get(void);
+
 #endif // _MOD_AUTH_OPENIDC_TEST_UTIL_H_
