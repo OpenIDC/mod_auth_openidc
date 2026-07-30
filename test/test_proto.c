@@ -2924,6 +2924,51 @@ START_TEST(test_proto_jwks_uri_keys_kid_match) {
 }
 END_TEST
 
+/*
+ * the process-local selection cache: the result of picking a key out of the JWKs is kept per
+ * (uri, kid, x5t, kty), so validating a second token signed by the same key needs neither the
+ * shared cache nor a parse. The second lookup here is served entirely from that cache - the
+ * loopback server is already stopped by the time it runs.
+ */
+START_TEST(test_proto_jwks_uri_keys_selection_cached) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks =
+	    "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k1");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+
+	/* the forced first pass downloads, selects, and stores the selection */
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* the second, unforced pass is answered from the selection cache */
+	apr_hash_t *cached = apr_hash_make(r->pool);
+	force_refresh = FALSE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, cached, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(cached), 1);
+	/* NB: the entry handed back belongs to the cache, so it is not destroyed here - only the
+	 *     separately owned result of the first pass is */
+	ck_assert_ptr_nonnull(apr_hash_get(cached, "k1", APR_HASH_KEY_STRING));
+
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
 START_TEST(test_proto_jwks_uri_keys_no_kid_include_matching_kty) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3486,6 +3531,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);
 	tcase_add_test(e2e, test_proto_request_auth_unknown_method);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_kid_match);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_selection_cached);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_include_matching_kty);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_match_after_refresh);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_http_failure);

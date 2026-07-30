@@ -945,6 +945,16 @@ START_TEST(test_util_mask_value) {
 }
 END_TEST
 
+/*
+ * the oidc_cache_local_log_fn adapter the process-local caches are created with; it is only
+ * called once one of them is full and starts evicting, which no unit test reaches organically
+ */
+START_TEST(test_util_cache_local_warn) {
+	request_rec *r = oidc_test_request_get();
+	oidc_util_cache_local_warn(r->server, "session", 2000);
+}
+END_TEST
+
 START_TEST(test_util_apr_time_saturating) {
 	const apr_time_t sec_max = APR_INT64_MAX / APR_USEC_PER_SEC;
 
@@ -1402,6 +1412,7 @@ int main(void) {
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	tcase_add_test(c, test_util_mask_value);
+	tcase_add_test(c, test_util_cache_local_warn);
 	tcase_add_test(c, test_util_apr_time_saturating);
 #ifdef HAVE_LIBPCRE2
 	tcase_add_test(c, test_util_pcre_get_substring_error_arms);

@@ -1648,6 +1648,65 @@ START_TEST(test_cfg_child_init) {
 END_TEST
 
 /*
+ * which endpoint authentication methods are considered valid depends on two things: whether
+ * mutual-TLS is allowed at this call site (it is not when selecting out of an OP's advertised
+ * list for a client that has a secret) and whether a private key is configured for
+ * private_key_jwt. All four combinations are picked out by oidc_cfg_get_valid_endpoint_auth_function.
+ */
+START_TEST(test_cfg_valid_endpoint_auth_function) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_cfg_server_create(pool, r->server);
+	oidc_valid_function_t valid = NULL;
+
+	/* a freshly created config has no private keys */
+	ck_assert_ptr_null(oidc_cfg_private_keys_get(cfg));
+
+	/* no private key, no mutual-TLS: the shared-secret methods only */
+	valid = oidc_cfg_get_valid_endpoint_auth_function(cfg, FALSE);
+	ck_assert_ptr_nonnull(valid);
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC));
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST));
+	ck_assert_ptr_nonnull(valid(pool, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT));
+	ck_assert_ptr_nonnull(valid(pool, OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH));
+
+	/* no private key, mutual-TLS allowed: tls_client_auth joins them */
+	valid = oidc_cfg_get_valid_endpoint_auth_function(cfg, TRUE);
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC));
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH));
+	ck_assert_ptr_nonnull(valid(pool, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT));
+
+	/* with a private key configured, private_key_jwt becomes valid in both */
+	cfg->private_keys = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
+	valid = oidc_cfg_get_valid_endpoint_auth_function(cfg, FALSE);
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT));
+	ck_assert_ptr_nonnull(valid(pool, OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH));
+	valid = oidc_cfg_get_valid_endpoint_auth_function(cfg, TRUE);
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT));
+	ck_assert_ptr_null(valid(pool, OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH));
+
+	/* an unknown method is rejected whatever the combination */
+	ck_assert_ptr_nonnull(valid(pool, "no-such-method"));
+}
+END_TEST
+
+/* the key-list setters bypass the file parsing that the directive handlers do */
+START_TEST(test_cfg_provider_set_keys_direct) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+	apr_array_header_t *keys = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
+
+	ck_assert_ptr_null(oidc_cfg_provider_verify_public_keys_get(provider));
+	ck_assert_ptr_null(oidc_cfg_provider_verify_public_keys_set_keys(pool, provider, keys));
+	ck_assert_ptr_eq(oidc_cfg_provider_verify_public_keys_get(provider), keys);
+
+	ck_assert_ptr_null(oidc_cfg_provider_client_keys_get(provider));
+	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(pool, provider, keys));
+	ck_assert_ptr_eq(oidc_cfg_provider_client_keys_get(provider), keys);
+}
+END_TEST
+
+/*
  * Tests for cfg/dir.c uncovered setters/getters.
  */
 
@@ -2354,6 +2413,8 @@ int main(void) {
 	tcase_add_test(core, test_cfg_server_merge_crypto_passphrase_derived_keys);
 	tcase_add_test(core, test_cfg_crypto_passphrase_derive_keys_cached);
 	tcase_add_test(core, test_cfg_child_init);
+	tcase_add_test(core, test_cfg_valid_endpoint_auth_function);
+	tcase_add_test(core, test_cfg_provider_set_keys_direct);
 
 	TCase *dir = tcase_create("dir");
 	tcase_add_checked_fixture(dir, oidc_test_setup, oidc_test_teardown);
