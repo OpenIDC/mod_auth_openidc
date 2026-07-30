@@ -1,4 +1,11 @@
 07/30/2026
+- util: size the output buffer of a regular-expression substitution from what
+  the result actually needs, so OIDCRemoteUserClaim/OIDCOAuthRemoteUserClaim no
+  longer fail on a long claim value. The buffer was fixed and the input was
+  capped at 254 characters to compensate - a limit taken from an unrelated
+  constant (the maximum number of capture groups) and reported as "the maximum
+  allowed for pcre_subst". The remaining cap on the input is now its own
+  constant, at 4096 characters
 - oauth: clamp a token expiry claim instead of letting it wrap. A NumericDate is
   a JSON number, so it may carry a value no integer type can hold; converting
   one that does not fit is undefined, and converting seconds to the internal

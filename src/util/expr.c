@@ -64,10 +64,9 @@ apr_byte_t oidc_util_regexp_substitute(apr_pool_t *pool, const char *input, cons
 		goto out;
 	}
 
-	if (_oidc_strlen(input) >= OIDC_PCRE_MAXCAPTURE - 1) {
-		*error_str =
-		    apr_psprintf(pool, "string length (%d) is larger than the maximum allowed for pcre_subst (%d)",
-				 (int)_oidc_strlen(input), OIDC_PCRE_MAXCAPTURE - 1);
+	if (_oidc_strlen(input) > OIDC_PCRE_SUBST_MAX_INPUT_LEN) {
+		*error_str = apr_psprintf(pool, "string length (%d) is larger than the maximum allowed (%d)",
+					  (int)_oidc_strlen(input), OIDC_PCRE_SUBST_MAX_INPUT_LEN);
 		goto out;
 	}
 

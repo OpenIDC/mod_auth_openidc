@@ -227,13 +227,12 @@ START_TEST(test_util_expr_substitute) {
 	ck_assert_msg(rc == FALSE, "oidc_util_regexp_substitute returned TRUE");
 	ck_assert_ptr_nonnull(error_str);
 
+	/* an input past OIDC_PCRE_SUBST_MAX_INPUT_LEN is refused before the pattern is even applied */
 	error_str = NULL;
-	rc = oidc_util_regexp_substitute(
-	    pool,
-	    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	    regexp, replace, &output, &error_str);
+	char *toolong = apr_palloc(pool, OIDC_PCRE_SUBST_MAX_INPUT_LEN + 2);
+	_oidc_memset(toolong, 'a', OIDC_PCRE_SUBST_MAX_INPUT_LEN + 1);
+	toolong[OIDC_PCRE_SUBST_MAX_INPUT_LEN + 1] = '\0';
+	rc = oidc_util_regexp_substitute(pool, toolong, regexp, replace, &output, &error_str);
 	ck_assert_msg(rc == FALSE, "oidc_util_regexp_substitute returned TRUE");
 	ck_assert_ptr_nonnull(error_str);
 
@@ -247,6 +246,19 @@ START_TEST(test_util_expr_substitute) {
 	ck_assert_msg(rc == TRUE, "oidc_util_regexp_substitute returned FALSE");
 	ck_assert_ptr_null(error_str);
 	ck_assert_str_eq(output, "292");
+
+	/* a result longer than the initial output buffer is no longer truncated away into a failure:
+	 * the substitution is retried against a buffer sized from PCRE2_SUBSTITUTE_OVERFLOW_LENGTH */
+	error_str = NULL;
+	char *big = apr_palloc(pool, 3001);
+	_oidc_memset(big, 'x', 3000);
+	big[3000] = '\0';
+	char *big_input = apr_psprintf(pool, "match %s numbers", big);
+	rc = oidc_util_regexp_substitute(pool, big_input, "^match (.*) numbers$", replace, &output, &error_str);
+	ck_assert_msg(rc == TRUE, "oidc_util_regexp_substitute returned FALSE");
+	ck_assert_ptr_null(error_str);
+	ck_assert_int_eq((int)_oidc_strlen(output), 3000);
+	ck_assert_str_eq(output, big);
 }
 END_TEST
 

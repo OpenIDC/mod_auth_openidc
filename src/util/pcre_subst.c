@@ -188,16 +188,24 @@ char *pcre_subst(const pcre *ppat, const pcre_extra *extra, const char *str, int
 char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char *str, int len, const char *rep) {
 	char *rv = NULL;
 #ifdef HAVE_LIBPCRE2
-	PCRE2_UCHAR *output = (PCRE2_UCHAR *)malloc(sizeof(PCRE2_UCHAR) * OIDC_PCRE_MAXCAPTURE * 3);
-	PCRE2_SIZE outlen = OIDC_PCRE_MAXCAPTURE * 3;
+	PCRE2_SIZE outlen = OIDC_PCRE_SUBST_INITIAL_BUF_LEN;
+	PCRE2_UCHAR *output = apr_palloc(pool, outlen);
 	PCRE2_SPTR subject = (PCRE2_SPTR)str;
 	PCRE2_SIZE length = (PCRE2_SIZE)len;
 	PCRE2_SPTR replacement = (PCRE2_SPTR)rep;
-	if ((pcre2_substitute(pcre->preg, subject, length, 0, PCRE2_SUBSTITUTE_GLOBAL, 0, 0, replacement,
-			      PCRE2_ZERO_TERMINATED, output, &outlen) > 0) &&
-	    (outlen > 0))
+	const uint32_t options = PCRE2_SUBSTITUTE_GLOBAL | PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
+	int rc = pcre2_substitute(pcre->preg, subject, length, 0, options, 0, 0, replacement, PCRE2_ZERO_TERMINATED,
+				  output, &outlen);
+	if (rc == PCRE2_ERROR_NOMEMORY) {
+		/* PCRE2_SUBSTITUTE_OVERFLOW_LENGTH left the length the result needs (terminator included)
+		 * in outlen, so the retry is sized exactly and cannot come up short in turn; the buffer
+		 * comes out of the pool, so the first, too-small one needs no separate free */
+		output = apr_palloc(pool, outlen);
+		rc = pcre2_substitute(pcre->preg, subject, length, 0, options, 0, 0, replacement,
+				      PCRE2_ZERO_TERMINATED, output, &outlen);
+	}
+	if ((rc > 0) && (outlen > 0))
 		rv = apr_pstrndup(pool, (const char *)output, outlen);
-	free(output);
 #else
 	char *substituted = NULL;
 	substituted = pcre_subst(pcre->preg, 0, str, len, 0, 0, rep);
