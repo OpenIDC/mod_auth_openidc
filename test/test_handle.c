@@ -25,6 +25,7 @@
  *
  **************************************************************************/
 
+#include "cache/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
 #include "check_util.h"
@@ -2885,6 +2886,31 @@ START_TEST(test_handle_check_user_id_unauthenticated_redirects_to_op) {
 }
 END_TEST
 
+/*
+ * a request whose path is the configured OIDCRedirectURI is routed to the redirect-URI dispatcher
+ * rather than treated as a protected resource, so an unauthenticated one is served instead of
+ * being sent off to the OP
+ */
+START_TEST(test_handle_check_user_id_redirect_uri) {
+	request_rec *r = oidc_test_request_get();
+
+	/* the fixture's OIDCRedirectURI is https://www.example.com/protected/ */
+	ck_assert_int_eq(apr_uri_parse(r->pool, "https://www.example.com/protected/?jwks=1", &r->parsed_uri),
+			 APR_SUCCESS);
+	r->args = "jwks=1";
+	r->method_number = M_GET;
+	r->user = NULL;
+	apr_table_set(r->headers_in, "Accept", "*/*");
+
+	/* ?jwks is handled in the content handler, which the authn phase signals with r->user="" */
+	ck_assert_int_eq(oidc_check_user_id(r), OK);
+	ck_assert_ptr_nonnull(r->user);
+	ck_assert_str_eq(r->user, "");
+	/* ... and not redirected to the OP, which is what a protected resource would have done */
+	ck_assert_ptr_null(apr_table_get(r->headers_out, "Location"));
+}
+END_TEST
+
 START_TEST(test_handle_check_user_id_unauthenticated_not_auth_capable) {
 	request_rec *r = oidc_test_request_get();
 
@@ -3593,6 +3619,71 @@ START_TEST(test_handle_dispatch_jwks) {
 	ck_assert_int_eq(rc, OK);
 	ck_assert_ptr_nonnull(r->user);
 	ck_assert_str_eq(r->user, "");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/*
+ * the remaining dispatch-table entries whose handlers are thin wrappers around a sub-feature: each
+ * is asserted to have been routed to, by the distinctive status its sub-handler returns when the
+ * request carries nothing else it can use.
+ */
+
+START_TEST(test_handle_dispatch_request_uri) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a request object is fetched by reference from the cache; an unknown reference is a 404 */
+	r->args = "request_uri=nonexistent";
+	r->method_number = M_GET;
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_NOT_FOUND);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_remove_at_cache) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a token that was never cached cannot be invalidated */
+	r->args = "remove_at_cache=at-1";
+	r->method_number = M_GET;
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_NOT_FOUND);
+
+	/* ... one that was is removed */
+	char *entry = NULL;
+	oidc_cache_set_access_token(r, "at-1", "{\"sub\":\"alice\"}", apr_time_now() + apr_time_from_sec(60));
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+	oidc_cache_get_access_token(r, "at-1", &entry);
+	ck_assert_ptr_null(entry);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_dispatch_revoke_session) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* the named session is dropped from the server-side cache, and r->user is stamped so the
+	 * authorization phase does not reject the (unauthenticated) revocation call */
+	char *entry = NULL;
+	oidc_cache_set_session(r, "sess-1", "{\"sub\":\"alice\"}", apr_time_now() + apr_time_from_sec(60));
+	r->args = "revoke_session=sess-1";
+	r->method_number = M_GET;
+	r->user = NULL;
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+	ck_assert_ptr_nonnull(r->user);
+	oidc_cache_get_session(r, "sess-1", &entry);
+	ck_assert_ptr_null(entry);
 
 	oidc_session_free(r, session);
 }
@@ -4781,6 +4872,7 @@ int main(void) {
 	tcase_add_test(checkuid, test_handle_check_user_id_internal_redirect_restores_state);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_redirects_to_op);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_not_auth_capable);
+	tcase_add_test(checkuid, test_handle_check_user_id_redirect_uri);
 	tcase_add_test(checkuid, test_handle_check_user_id_existing_session);
 	tcase_add_test(checkuid, test_handle_check_user_id_existing_session_expired);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauth_action_pass);
@@ -4818,6 +4910,9 @@ int main(void) {
 	tcase_add_checked_fixture(dispatch, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(dispatch, test_handle_dispatch_jwks);
 	tcase_add_test(dispatch, test_handle_dispatch_dpop);
+	tcase_add_test(dispatch, test_handle_dispatch_request_uri);
+	tcase_add_test(dispatch, test_handle_dispatch_remove_at_cache);
+	tcase_add_test(dispatch, test_handle_dispatch_revoke_session);
 	tcase_add_test(dispatch, test_handle_dispatch_info_no_session_returns_unauthorized);
 	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);
 	tcase_add_test(dispatch, test_handle_dispatch_empty_args_routes_to_implicit_flow);
