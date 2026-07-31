@@ -8,6 +8,13 @@ on:
 jobs:
   build:
     name: Build and analyze
+    # skip the analysis on a pull request from a fork: GitHub deliberately withholds
+    # repository secrets from fork-triggered workflows, so SONAR_TOKEN is empty there
+    # and sonar-scanner exits 3 with "Not authorized or project not found" - a red
+    # check no contributor can act on, and one that would train us to ignore the very
+    # check that is supposed to report real findings. Skipping reports neutral instead
+    # of failed; the analysis of the same code still runs on the push to master
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
