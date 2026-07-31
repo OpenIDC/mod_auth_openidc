@@ -1,3 +1,19 @@
+07/31/2026
+- refresh: validate a refreshed id_token before applying it to the session.
+  oidc_refresh_token_grant_apply_id_token took the id_token returned by the token
+  endpoint apart with a bare oidc_jwt_parse and stored its claims unconditionally:
+  no decryption keys, no signature verification and none of the payload checks. It
+  now runs the same oidc_proto_idtoken_parse as the id_token obtained at
+  authentication time, as OpenID Connect Core 1.0 section 12.2 requires - keeping
+  the section 3.1.3.7 item 6 exception for an unsigned id_token received over the
+  TLS-protected back-channel, which a refresh response is - and additionally
+  refuses a refreshed id_token whose "sub" differs from the one the session was
+  established with. An id_token that does not validate no longer contributes its
+  claims, is no longer stored in its serialized form and is no longer handed back
+  to the caller; the refresh grant itself still succeeds, so the refreshed access
+  token is unaffected. Thanks to Sun Liqiang for reporting the missing signature
+  verification
+
 07/30/2026
 - metadata: report an "mtls_endpoint_aliases" entry that is not a valid URL as
   an error instead of quietly using the conventional endpoint for it. RFC 8705

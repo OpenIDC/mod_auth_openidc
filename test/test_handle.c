@@ -655,10 +655,13 @@ START_TEST(test_handle_refresh_grant_cached_results_clamps_and_id_token) {
 	oidc_session_load(r, &session);
 
 	/* a cached grant result with an out-of-int-range expires_in must be clamped, and with
-	 * session_max_duration == 0 a valid cached id_token updates the session expiry */
+	 * session_max_duration == 0 a valid cached id_token updates the session expiry; "valid"
+	 * includes verifiable, so the provider is configured with the key it was signed with */
 	oidc_cfg_provider_session_max_duration_set(r->pool, provider, 0);
-	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-cr1",
-						"cached-idtoken-secret-long-enough");
+	const char *secret = "cached-idtoken-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-cr1", secret);
 	char *s_json = apr_psprintf(r->pool,
 				    "{\"access_token\":\"AT-CACHED\",\"token_type\":\"Bearer\","
 				    "\"expires_in\":9999999999999,\"id_token\":\"%s\","
@@ -683,6 +686,162 @@ START_TEST(test_handle_refresh_grant_cached_results_clamps_and_id_token) {
 	new_at = NULL;
 	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, NULL), TRUE);
 	ck_assert_str_eq(new_at, "AT-CACHED-2");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* seed the refresh-token cache with a grant result carrying `id_token`, so that
+ * oidc_refresh_token_grant applies that id_token without contacting the OP */
+static void e2e_refresh_cache_seed(request_rec *r, oidc_session_t *session, const char *rt, const char *id_token) {
+	char *s_json = apr_psprintf(r->pool,
+				    "{\"access_token\":\"AT-%s\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+				    "\"id_token\":\"%s\",\"refresh_token\":\"%s-next\",\"ts\":%" APR_TIME_T_FMT "}",
+				    rt, id_token, rt, apr_time_sec(apr_time_now()));
+	oidc_session_set_refresh_token(r, session, rt);
+	oidc_cache_set_refresh_token(r, rt, s_json, apr_time_now() + apr_time_from_sec(30));
+}
+
+/* a refreshed id_token whose signature verifies against the provider's key is applied:
+ * its claims and its serialized form go into the session and it is handed back to the caller */
+START_TEST(test_handle_refresh_grant_id_token_validated) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "refresh-idtoken-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-rv", secret);
+	e2e_refresh_cache_seed(r, session, "RT-IDT-OK", id_token);
+
+	char *new_idt = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &new_idt), TRUE);
+	ck_assert_ptr_nonnull(new_idt);
+	ck_assert_str_eq(new_idt, id_token);
+
+	const oidc_json_t *claims = oidc_session_get_idtoken_claims(r, session);
+	ck_assert_ptr_nonnull(claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(claims, OIDC_CLAIM_SUB)), "alice");
+	/* store_id_token defaults to on, so the serialized form is persisted too */
+	ck_assert_str_eq(oidc_session_get_idtoken(r, session), id_token);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a refreshed id_token that does not verify contributes nothing: not its claims, not its
+ * serialized form, and it is not handed back as the caller's new id_token. The grant itself
+ * still succeeds - the refreshed access token is unaffected by a bad id_token */
+START_TEST(test_handle_refresh_grant_id_token_bad_signature) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "refresh-idtoken-secret-long-enough");
+
+	/* signed with a key the provider is not configured with */
+	char *id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "mallory", "nonce-rb",
+						"an-entirely-different-secret-key1");
+	e2e_refresh_cache_seed(r, session, "RT-IDT-BADSIG", id_token);
+
+	char *new_at = NULL, *new_idt = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, &new_idt), TRUE);
+	ck_assert_str_eq(new_at, "AT-RT-IDT-BADSIG");
+
+	ck_assert_ptr_null(new_idt);
+	ck_assert_ptr_null(oidc_session_get_idtoken_claims(r, session));
+	ck_assert_ptr_null(oidc_session_get_idtoken(r, session));
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* OpenID Connect Core 1.0 section 12.2: a refreshed id_token must not move an established
+ * session to a different subject, however well signed it is */
+START_TEST(test_handle_refresh_grant_id_token_sub_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "refresh-idtoken-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* the session was established for "alice" */
+	oidc_json_t *prior = oidc_json_object();
+	oidc_json_object_set_new(prior, OIDC_CLAIM_SUB, oidc_json_string("alice"));
+	oidc_session_set_idtoken_claims(r, session, prior);
+	oidc_json_decref(prior);
+
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "mallory", "nonce-rs", secret);
+	e2e_refresh_cache_seed(r, session, "RT-IDT-SUB", id_token);
+
+	char *new_idt = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &new_idt), TRUE);
+	ck_assert_ptr_null(new_idt);
+
+	/* the claims established at authentication time are retained */
+	const oidc_json_t *claims = oidc_session_get_idtoken_claims(r, session);
+	ck_assert_ptr_nonnull(claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(claims, OIDC_CLAIM_SUB)), "alice");
+	ck_assert_ptr_null(oidc_session_get_idtoken(r, session));
+
+	/* the same subject refreshing is applied normally */
+	id_token = e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-rs2", secret);
+	e2e_refresh_cache_seed(r, session, "RT-IDT-SUB-OK", id_token);
+	new_idt = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &new_idt), TRUE);
+	ck_assert_str_eq(new_idt, id_token);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* an OP that legitimately issues unsigned id_tokens keeps working across a refresh: section
+ * 3.1.3.7 item 6 lets the TLS-protected back-channel stand in for the signature check, and a
+ * refresh response is such a back-channel response */
+START_TEST(test_handle_refresh_grant_id_token_unsigned) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_jose_error_t err;
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "none");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://idp.example.com"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("client_id"));
+	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB, oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 600));
+	char *id_token = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(id_token);
+	oidc_jwt_destroy(jwt);
+
+	e2e_refresh_cache_seed(r, session, "RT-IDT-NONE", id_token);
+
+	char *new_idt = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &new_idt), TRUE);
+	ck_assert_str_eq(new_idt, id_token);
+	const oidc_json_t *claims = oidc_session_get_idtoken_claims(r, session);
+	ck_assert_ptr_nonnull(claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(claims, OIDC_CLAIM_SUB)), "alice");
+
+	/* ... but not when the operator has pinned a real signing algorithm */
+	ck_assert_ptr_null(oidc_cfg_provider_id_token_signed_response_alg_set(r->pool, provider, "RS256"));
+	e2e_refresh_cache_seed(r, session, "RT-IDT-NONE-PINNED", id_token);
+	new_idt = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, &new_idt), TRUE);
+	ck_assert_ptr_null(new_idt);
 
 	oidc_session_free(r, session);
 }
@@ -4715,6 +4874,10 @@ int main(void) {
 	tcase_add_test(refresh, test_handle_refresh_grant_cache_hit);
 	tcase_add_test(refresh, test_handle_refresh_grant_with_id_token);
 	tcase_add_test(refresh, test_handle_refresh_grant_cached_results_clamps_and_id_token);
+	tcase_add_test(refresh, test_handle_refresh_grant_id_token_validated);
+	tcase_add_test(refresh, test_handle_refresh_grant_id_token_bad_signature);
+	tcase_add_test(refresh, test_handle_refresh_grant_id_token_sub_mismatch);
+	tcase_add_test(refresh, test_handle_refresh_grant_id_token_unsigned);
 	tcase_add_test(refresh, test_handle_refresh_grant_cache_locks);
 	tcase_add_test(refresh, test_handle_refresh_before_expiry_due_paths);
 	tcase_add_test(refresh, test_handle_refresh_request_error_arms);

@@ -306,44 +306,86 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
 }
 
 /*
- * apply a refreshed id_token to the session: optionally persist the
- * serialized form, parse it, store its claims, update the session expiry
- * when no fixed max-duration is configured and return it to the caller
+ * OpenID Connect Core 1.0 section 12.2 requires the "sub" claim in an id_token obtained from a
+ * refresh grant to represent the same end-user as the one in the id_token that was issued at
+ * authentication time: refuse a refreshed id_token that would silently move an established
+ * session to a different subject. When no earlier claims are on record - the session was
+ * established without an id_token, or storing its claims was turned off - there is nothing to
+ * compare against and the check does not apply
  */
-static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_cfg_t *c, oidc_session_t *session,
+static apr_byte_t oidc_refresh_token_grant_id_token_sub_match(request_rec *r, const oidc_session_t *session,
+							      const oidc_jwt_t *jwt) {
+
+	const oidc_json_t *claims = oidc_session_get_idtoken_claims(r, session);
+	const char *sub =
+	    (claims != NULL) ? oidc_json_string_value(oidc_json_object_get(claims, OIDC_CLAIM_SUB)) : NULL;
+
+	if (sub == NULL)
+		return TRUE;
+
+	if (_oidc_strcmp(sub, jwt->payload.sub) != 0) {
+		oidc_error(r,
+			   "the \"%s\" claim (%s) in the refreshed id_token differs from the one established for this "
+			   "session (%s): rejecting the refreshed id_token",
+			   OIDC_CLAIM_SUB, jwt->payload.sub, sub);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
+ * apply a refreshed id_token to the session: validate it, store its claims and
+ * optionally its serialized form, update the session expiry when no fixed
+ * max-duration is configured and return it to the caller
+ */
+static void oidc_refresh_token_grant_apply_id_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 						    const oidc_provider_t *provider, char *s_id_token,
 						    char **new_id_token) {
 
 	oidc_jwt_t *id_token_jwt = NULL;
-	oidc_jose_error_t err;
+
+	/*
+	 * validate the refreshed id_token just like the one obtained at authentication time: section 12.2 of
+	 * OpenID Connect Core 1.0 requires it to be validated according to section 3.1.3.7, which is what
+	 * oidc_proto_idtoken_parse implements - decryption, signature verification and the "iss"/"aud"/"azp"/
+	 * "exp"/"iat" payload checks - including the exception that section 3.1.3.7 item 6 makes for an
+	 * unsigned id_token obtained over the TLS-protected back-channel; a refresh response is such a
+	 * back-channel response, hence is_code_flow=TRUE. There is no nonce to check here: the nonce belongs
+	 * to the authentication request, not to a refresh
+	 */
+	if (oidc_proto_idtoken_parse(r, c, provider, s_id_token, NULL, &id_token_jwt, TRUE) == FALSE) {
+		oidc_warn(r, "refreshed id_token could not be validated, retaining the claims obtained earlier");
+		return;
+	}
+
+	if (oidc_refresh_token_grant_id_token_sub_match(r, session, id_token_jwt) == FALSE) {
+		oidc_jwt_destroy(id_token_jwt);
+		return;
+	}
 
 	/* only store the serialized representation when configured so */
 	if (oidc_cfg_store_id_token_get(c))
 		oidc_session_set_idtoken(r, session, s_id_token);
 
-	if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE, &err) == FALSE) {
-		oidc_warn(r, "parsing of id_token failed");
-	} else {
-		/* store the claims payload in the id_token for later reference */
-		oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
+	/* store the claims payload in the id_token for later reference */
+	oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
 
-		if (oidc_cfg_provider_session_max_duration_get(provider) == 0) {
-			/* update the session expiry to match the expiry of the id_token
-			 * NB: "exp" is a JSON number, so clamp rather than wrap on a far-future value */
-			apr_time_t session_expires = oidc_util_apr_time_from_sec(id_token_jwt->payload.exp);
-			oidc_session_set_session_expires(r, session, session_expires);
+	if (oidc_cfg_provider_session_max_duration_get(provider) == 0) {
+		/* update the session expiry to match the expiry of the id_token
+		 * NB: "exp" is a JSON number, so clamp rather than wrap on a far-future value */
+		apr_time_t session_expires = oidc_util_apr_time_from_sec(id_token_jwt->payload.exp);
+		oidc_session_set_session_expires(r, session, session_expires);
 
-			/* log message about the updated max session duration */
-			oidc_log_session_expires(r, "session max lifetime", session_expires);
-		}
-
-		/* see if we need to return it as a parameter */
-		if (new_id_token != NULL)
-			*new_id_token = s_id_token;
+		/* log message about the updated max session duration */
+		oidc_log_session_expires(r, "session max lifetime", session_expires);
 	}
 
-	if (id_token_jwt != NULL)
-		oidc_jwt_destroy(id_token_jwt);
+	/* see if we need to return it as a parameter */
+	if (new_id_token != NULL)
+		*new_id_token = s_id_token;
+
+	oidc_jwt_destroy(id_token_jwt);
 }
 
 /*
