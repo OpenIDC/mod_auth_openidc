@@ -1,3 +1,11 @@
+07/31/2026
+- refresh: verify the JWS signature on a refreshed id_token before storing its
+  claims in the session. oidc_refresh_token_grant_apply_id_token parsed the
+  id_token from the token endpoint with oidc_jwt_parse, which decrypts but does
+  not validate the signature, so an operator that returned an unsigned "alg":"none"
+  id_token (or a token signed with an untrusted key) could inject arbitrary claims
+  into the session
+
 07/30/2026
 - metadata: report an "mtls_endpoint_aliases" entry that is not a valid URL as
   an error instead of quietly using the conventional endpoint for it. RFC 8705

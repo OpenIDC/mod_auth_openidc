@@ -316,6 +316,7 @@ static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_c
 
 	oidc_jwt_t *id_token_jwt = NULL;
 	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
 
 	/* only store the serialized representation when configured so */
 	if (oidc_cfg_store_id_token_get(c))
@@ -323,6 +324,17 @@ static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_c
 
 	if (oidc_jwt_parse(r->pool, s_id_token, &id_token_jwt, NULL, FALSE, &err) == FALSE) {
 		oidc_warn(r, "parsing of id_token failed");
+	} else if (oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(provider), 0, NULL, TRUE,
+						  &jwk) == FALSE) {
+		oidc_warn(r, "could not create symmetric key for refreshed id_token signature validation");
+	} else if (oidc_proto_jwt_verify(r, (oidc_cfg_t *)c, id_token_jwt, oidc_cfg_provider_jwks_uri_get(provider),
+					 oidc_cfg_provider_ssl_validate_server_get(provider),
+					 oidc_util_key_symmetric_merge(r->pool,
+								       oidc_cfg_provider_verify_public_keys_get(provider),
+								       jwk),
+					 oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
+		oidc_warn(r,
+			  "refreshed id_token signature could not be validated, discarding the id_token");
 	} else {
 		/* store the claims payload in the id_token for later reference */
 		oidc_session_set_idtoken_claims(r, session, id_token_jwt->payload.value.json);
@@ -342,6 +354,8 @@ static void oidc_refresh_token_grant_apply_id_token(request_rec *r, const oidc_c
 			*new_id_token = s_id_token;
 	}
 
+	if (jwk)
+		oidc_jwk_destroy(jwk);
 	if (id_token_jwt != NULL)
 		oidc_jwt_destroy(id_token_jwt);
 }
