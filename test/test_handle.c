@@ -674,8 +674,15 @@ START_TEST(test_handle_refresh_grant_cached_results_clamps_and_id_token) {
 	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, NULL), TRUE);
 	ck_assert_str_eq(new_at, "AT-CACHED");
 	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-CACHED-1b");
-	/* the session expiry was aligned with the id_token exp (now + 600) */
-	ck_assert_int_gt(oidc_session_get_session_expires(r, session), apr_time_now());
+	/* the session expiry was aligned with the id_token exp (now + 600); deliberately not
+	 * ck_assert_int_gt: check 0.9.x (el7) assigns both operands to an "int" before comparing
+	 * them, which truncates an apr_time_t to its low 32 bits and makes this comparison fail
+	 * whenever the sum crosses the signed boundary - ~14% of the time, on a 71.6 minute cycle */
+	apr_time_t session_expires = oidc_session_get_session_expires(r, session);
+	apr_time_t now = apr_time_now();
+	ck_assert_msg(session_expires > now,
+		      "session expiry (%" APR_TIME_T_FMT ") is not in the future (%" APR_TIME_T_FMT ")",
+		      session_expires, now);
 
 	/* a cached result with a garbage id_token and an expires_in below INT_MIN still applies
 	 * the access token; the id_token parse failure is only logged */
