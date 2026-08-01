@@ -1,3 +1,6 @@
+08/01/2026
+- release 2.4.20
+
 07/31/2026
 - refresh: validate a refreshed id_token before applying it to the session.
   oidc_refresh_token_grant_apply_id_token took the id_token returned by the token
