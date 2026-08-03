@@ -1,3 +1,9 @@
+08/03/2026
+- metrics: fix the description of the "authtype.handler" timer, which read
+  "authz+authz" instead of "authn+authz". The string is published verbatim in
+  the Prometheus "# HELP" line and in the description field of the JSON format,
+  so it was user-visible output, not just an internal comment
+
 08/01/2026
 - release 2.4.20
 

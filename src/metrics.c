@@ -76,7 +76,7 @@ const oidc_metrics_timing_info_t _oidc_metrics_timings_info[] = {
 
   // KEEP THIS: start-of-timers
 
-  { OM_CLASS_AUTH_TYPE, "handler", "the overall authz+authz processing time" },
+  { OM_CLASS_AUTH_TYPE, "handler", "the overall authn+authz processing time" },
 
   { OM_CLASS_AUTHN,    "request",  "authentication requests" },
   { OM_CLASS_AUTHN,    "response", "authentication responses" },
