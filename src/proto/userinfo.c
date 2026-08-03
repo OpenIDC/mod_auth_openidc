@@ -169,9 +169,37 @@ static const char *oidc_proto_userinfo_composite_source_payload(request_rec *r, 
 }
 
 /*
+ * verify the signature on a JWT from an aggregated/distributed claim source against the
+ * statically configured verification keys (OIDCProviderVerifyCertFiles); verification is
+ * opt-in: without configured keys the JWT is parsed and applied as before (the OIDC Core
+ * 1.0 section 5.6.2 JWT does not require signature validation unless the issuer's keys can
+ * be obtained, and the module has no other way to obtain them)
+ */
+static apr_byte_t oidc_proto_userinfo_composite_claim_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt,
+							     const char *key) {
+	const oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
+	const apr_array_header_t *verify_keys = oidc_cfg_provider_verify_public_keys_get(provider);
+	oidc_jwks_uri_t jwks_uri = {NULL, 0, NULL, NULL};
+
+	if (verify_keys == NULL)
+		return TRUE;
+
+	if (oidc_proto_jwt_verify(r, cfg, jwt, &jwks_uri, oidc_cfg_provider_ssl_validate_server_get(provider),
+				  oidc_util_key_symmetric_merge(r->pool, verify_keys, NULL), NULL) == FALSE) {
+		oidc_error(r,
+			   "signature on the JWT from aggregated/distributed claim source \"%s\" could not be "
+			   "validated against the statically configured verification keys, ignoring it",
+			   key);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
  * parse a single aggregated/distributed claim JWT and merge its payload into decoded[key]
  */
-static void oidc_proto_userinfo_composite_decode_source(request_rec *r, const oidc_cfg_t *cfg, const char *key,
+static void oidc_proto_userinfo_composite_decode_source(request_rec *r, oidc_cfg_t *cfg, const char *key,
 							const char *s_json, oidc_json_t *decoded) {
 	oidc_jose_error_t err;
 	oidc_jwt_t *jwt = NULL;
@@ -180,6 +208,8 @@ static void oidc_proto_userinfo_composite_decode_source(request_rec *r, const oi
 			   oidc_util_key_symmetric_merge(r->pool, oidc_cfg_private_keys_get(cfg), NULL), FALSE,
 			   &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from aggregated claim \"%s\": %s", key, oidc_jose_e2s(r->pool, err));
+	} else if (oidc_proto_userinfo_composite_claim_verify(r, cfg, jwt, key) == FALSE) {
+		oidc_error(r, "could not validate JWT from aggregated claim \"%s\", ignoring it", key);
 	} else {
 		oidc_json_t *v = oidc_json_object_get(decoded, key);
 		if (v == NULL) {
