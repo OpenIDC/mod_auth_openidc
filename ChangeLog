@@ -1,3 +1,12 @@
+08/03/2026
+- userinfo: validate the signature on JWT-encoded aggregated/distributed (composite)
+  claims returned in a UserInfo response against the statically configured verification
+  keys (OIDCProviderVerifyCertFiles). Composite-claims JWTs that fail signature validation
+  are discarded and their claims are not applied. Without configured verification keys the
+  composite-claims JWTs are applied as before, since OpenID Connect Core 1.0 section 5.6.2
+  does not require signature validation of these JWTs when the Claims Provider keys cannot
+  be obtained
+
 08/01/2026
 - release 2.4.20
 

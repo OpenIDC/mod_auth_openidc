@@ -2306,6 +2306,86 @@ START_TEST(test_proto_userinfo_request_composite_claims) {
 }
 END_TEST
 
+/* with OIDCProviderVerifyCertFiles configured, a composite-claims JWT that verifies
+ * against the configured key is applied, and one that does not is discarded */
+START_TEST(test_proto_userinfo_request_composite_claims_verify_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_jose_error_t err;
+
+	/* load test/private.pem so we can sign with the RSA key that matches test/public.pem */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *err2 = oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
+	ck_assert_msg(err2 == NULL, "could not load private key: %s", err2);
+	oidc_jwk_t *sign_jwk = oidc_util_key_list_first(oidc_cfg_private_keys_get(c), -1, NULL);
+	ck_assert_ptr_nonnull(sign_jwk);
+
+	/* configure the matching public key as a static verification key */
+	cmd = oidc_test_cmd_get(OIDCProviderVerifyCertFiles);
+	ck_assert_ptr_null(oidc_cmd_provider_verify_public_keys_set(
+	    cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/public.pem", dir)));
+
+	/* aggregated claim JWT that verifies against the configured key */
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	jwt->header.kid = apr_pstrdup(r->pool, "rsa-1");
+	oidc_json_object_set_new(jwt->payload.value.json, "credit_score", oidc_json_integer(700));
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, sign_jwk, FALSE, &err), TRUE);
+	char *src1_jwt = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	oidc_jwt_destroy(jwt);
+	ck_assert_ptr_nonnull(src1_jwt);
+
+	/* aggregated claim JWT signed with an unknown key: parses but must not verify */
+	oidc_jwk_t *bad_jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, "0123456789abcdef0123456789abcdef", 0, NULL, FALSE,
+							&bad_jwk),
+			 TRUE);
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	jwt->header.kid = apr_pstrdup(r->pool, "bogus");
+	oidc_json_object_set_new(jwt->payload.value.json, "shoe_size", oidc_json_integer(42));
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, bad_jwk, FALSE, &err), TRUE);
+	char *src2_jwt = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	oidc_jwk_destroy(bad_jwk);
+	oidc_jwt_destroy(jwt);
+	ck_assert_ptr_nonnull(src2_jwt);
+
+	/* userinfo response with one source that verifies and one that does not */
+	const char *userinfo_body = apr_psprintf(r->pool,
+						 "{\"sub\":\"alice\","
+						 "\"_claim_names\":{\"credit_score\":\"src1\",\"shoe_size\":\"src2\"},"
+						 "\"_claim_sources\":{\"src1\":{\"JWT\":\"%s\"},"
+						 "\"src2\":{\"JWT\":\"%s\"}}}",
+						 src1_jwt, src2_jwt);
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = userinfo_body};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	/* the verified JWT is applied, the one with an unverifiable signature is discarded */
+	ck_assert_int_eq((int)oidc_json_integer_value(oidc_json_object_get(userinfo_claims, "credit_score")), 700);
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "shoe_size"));
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "_claim_names"));
+	ck_assert_ptr_null(oidc_json_object_get(userinfo_claims, "_claim_sources"));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_json_decref(userinfo_claims);
+}
+END_TEST
+
 /* a DPoP-bound access token makes the userinfo request carry a DPoP proof */
 START_TEST(test_proto_userinfo_request_dpop) {
 	request_rec *r = oidc_test_request_get();
@@ -3508,6 +3588,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_response_idtoken_token_happy);
 	tcase_add_test(e2e, test_proto_response_type_mismatch);
 	tcase_add_test(e2e, test_proto_userinfo_request_composite_claims);
+	tcase_add_test(e2e, test_proto_userinfo_request_composite_claims_verify_keys);
 	tcase_add_test(e2e, test_proto_userinfo_request_dpop);
 	tcase_add_test(e2e, test_proto_userinfo_request_success);
 	tcase_add_test(e2e, test_proto_userinfo_request_sub_mismatch);
