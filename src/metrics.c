@@ -476,7 +476,7 @@ static inline const char *_metrics_value2key(const char *value) {
 /*
  * create a new counter entry in the collected JSON data
  */
-static oidc_json_t *oidc_metrics_counter_new(server_rec *s, apr_hash_t *htable) {
+static oidc_json_t *oidc_metrics_counter_new(apr_hash_t *htable) {
 	oidc_metrics_counter_t *counter = NULL;
 	char *value = NULL;
 	oidc_json_t *j_values = NULL;
@@ -558,7 +558,7 @@ static void oidc_metrics_counter_set_or_update(server_rec *s, oidc_json_t *paren
 	if (j_counter != NULL)
 		oidc_metrics_counter_update(s, j_counter, counter_hash);
 	else
-		oidc_json_object_set_new(parent, key, oidc_metrics_counter_new(s, counter_hash));
+		oidc_json_object_set_new(parent, key, oidc_metrics_counter_new(counter_hash));
 }
 
 /*
@@ -580,7 +580,7 @@ static void oidc_metrics_store_counter_entry(server_rec *s, apr_pool_t *pool, oi
 	j_names = oidc_json_object_get(j_counters, class_name);
 	if (j_names == NULL) {
 		j_names = oidc_json_object();
-		oidc_json_object_set_new(j_names, name, oidc_metrics_counter_new(s, counter_hash));
+		oidc_json_object_set_new(j_names, name, oidc_metrics_counter_new(counter_hash));
 		oidc_json_object_set_new(j_counters, class_name, j_names);
 		return;
 	}

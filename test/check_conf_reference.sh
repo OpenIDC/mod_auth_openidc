@@ -44,13 +44,14 @@ dir="${srcdir:-}"
 [ -n "$dir" ] || dir=$(dirname "$0")
 
 find_input() {
-	for cand in "$dir/../$1" "../$1" "$(dirname "$0")/../$1"; do
+	want=$1
+	for cand in "$dir/../$want" "../$want" "$(dirname "$0")/../$want"; do
 		if [ -f "$cand" ]; then
 			echo "$cand"
 			return 0
 		fi
 	done
-	echo "ERROR: cannot locate $1 -- cannot verify the reference config" >&2
+	echo "ERROR: cannot locate $want -- cannot verify the reference config" >&2
 	return 1
 }
 
