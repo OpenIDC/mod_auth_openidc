@@ -27,6 +27,8 @@
 - ci: run "make check" on the clang static-analysis leg too, so those type checks
   cover the test suite rather than only the module sources
 - ci: pin the third-party GitHub Actions by commit SHA instead of by mutable tag
+- configure: fail when --with-hiredis is given but hiredis is absent; the unflagged
+  default still probes and degrades silently, as its help string advertises
 
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read

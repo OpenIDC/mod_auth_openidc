@@ -144,7 +144,7 @@ AC_SUBST([ZLIB_LIBS])
 AC_ARG_WITH([hiredis],
 	[AS_HELP_STRING([--with-hiredis],
 	[support Redis @<:@default=check@:>@])],
-	[],
+	[with_hiredis_explicit=yes],
 	[with_hiredis=yes])
 AS_CASE(["$with_hiredis"],
 	[yes], [
@@ -152,6 +152,14 @@ AS_CASE(["$with_hiredis"],
 	],
 	[no], [HAVE_LIBHIREDIS=0],
 	[PKG_CHECK_MODULES([HIREDIS], [hiredis], [HAVE_LIBHIREDIS=1], [HAVE_LIBHIREDIS=0])])
+
+# an explicit --with-hiredis is a request, not a probe: fail rather than silently
+# handing back a module without Redis support. The unflagged default stays "check",
+# which is what the help string above advertises, and --without-hiredis is honoured.
+if test "x$with_hiredis_explicit" = "xyes" && test "x$with_hiredis" != "xno" && test "x$HAVE_LIBHIREDIS" = "x0" ; then
+	AC_MSG_ERROR([--with-hiredis was given but hiredis was not found: install the hiredis development package, or omit --with-hiredis to build without Redis support])
+fi
+
 AM_CONDITIONAL(HAVE_LIBHIREDIS, [test x"$HAVE_LIBHIREDIS" = "x1"])
 AC_SUBST(HIREDIS_CFLAGS)
 AC_SUBST(HIREDIS_LIBS)
