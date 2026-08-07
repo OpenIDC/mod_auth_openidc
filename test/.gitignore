@@ -13,6 +13,9 @@
 /Makefile.in
 /test
 /test-cmd
+# not built here, but the enterprise branch adds it to noinst_PROGRAMS, so it is
+# left behind in a shared worktree and is otherwise easy to commit by accident
+/test-perf
 /test_jose
 /test_util
 /Makefile
