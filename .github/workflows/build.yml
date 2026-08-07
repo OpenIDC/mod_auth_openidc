@@ -28,10 +28,17 @@ jobs:
       # grew it during 2.4, so spelling it out would break the older httpd in the
       # distro matrix. NB: several of these only fire in an optimized build (gcc
       # reports -Wmaybe-uninitialized from LTO), so a syntax-only check is not enough.
+      #
+      # The four -W flags after the exclusions are ones the tree is already clean on,
+      # added purely so a regression fails the build. -Wwrite-strings is deliberately
+      # not among them: it retypes string literals as const char[], which cascades
+      # into -Wdiscarded-qualifiers across the config and metrics tables and would
+      # mean const-correcting a large part of the tree for no defect found.
       run: |
         ./autogen.sh
         ./configure --with-jq \
-          CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Werror"
+          CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
+                  -Wformat-security -Wimplicit-fallthrough -Wpointer-arith -Wstrict-prototypes -Werror"
     - name: Make
       run: make
     - name: Test
@@ -364,7 +371,8 @@ jobs:
         ./configure --with-jq CC=clang \
           CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
                   -Wno-unknown-warning-option -Wno-null-pointer-subtraction \
-                  -Wimplicit-int-conversion -Wcast-function-type-mismatch -Werror"
+                  -Wimplicit-int-conversion -Wcast-function-type-mismatch \
+                  -Wformat-security -Wimplicit-fallthrough -Wpointer-arith -Wstrict-prototypes -Werror"
         # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
         # -ffat-lto-objects); strip them on the clang leg so an older runner
         # clang cannot choke on them (LTO is irrelevant for an analysis build)

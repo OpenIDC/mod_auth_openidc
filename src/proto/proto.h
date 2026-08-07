@@ -258,7 +258,7 @@ apr_byte_t oidc_proto_response_idtoken(request_rec *r, oidc_cfg_t *c, const oidc
 				       oidc_jwt_t **jwt);
 
 // state.c
-oidc_proto_state_t *oidc_proto_state_new();
+oidc_proto_state_t *oidc_proto_state_new(void);
 void oidc_proto_state_destroy(oidc_proto_state_t *proto_state);
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, const oidc_cfg_t *c, const char *cookieValue);
 char *oidc_proto_state_to_cookie(request_rec *r, const oidc_cfg_t *c, const oidc_proto_state_t *proto_state);

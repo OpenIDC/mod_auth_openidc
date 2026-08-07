@@ -20,6 +20,8 @@
   building a module with the claims-expression directives compiled out
 - proto: pass the server config in explicitly rather than looking it up from the global
   module config, so no protocol code depends on a live Apache server record
+- ci: promote -Wformat-security, -Wimplicit-fallthrough, -Wpointer-arith and
+  -Wstrict-prototypes to errors on the gcc and clang legs, which the tree already passes
 
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read

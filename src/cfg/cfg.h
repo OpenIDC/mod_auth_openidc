@@ -160,7 +160,7 @@ const char *oidc_cfg_remote_user_claim_name_get(const oidc_cfg_t *cfg);
 oidc_provider_t *oidc_cfg_provider_get(oidc_cfg_t *);
 int oidc_cfg_merged_get(const oidc_cfg_t *cfg);
 
-void oidc_pre_config_init();
+void oidc_pre_config_init(void);
 
 void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *s);
 void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD);

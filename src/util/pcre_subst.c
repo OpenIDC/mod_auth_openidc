@@ -359,7 +359,7 @@ int oidc_pcre_exec(apr_pool_t *pool, struct oidc_pcre *pcre, const char *input, 
 
 #ifndef HAVE_LIBPCRE2
 #ifdef DEBUG_BUILD
-int main() {
+int main(void) {
 	char *pat = "quick\\s(\\w+)\\s(fox)";
 	char *rep = "$1ish $2";
 	char *str = "The quick brown foxy";

@@ -74,7 +74,7 @@ static void oidc_proto_state_set_string_value(oidc_proto_state_t *proto_state, c
 /*
  * create a new state object
  */
-oidc_proto_state_t *oidc_proto_state_new() {
+oidc_proto_state_t *oidc_proto_state_new(void) {
 	return oidc_json_object();
 }
 

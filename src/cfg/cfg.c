@@ -1022,7 +1022,7 @@ oidc_cfg_t *oidc_cfg_request_view(apr_pool_t *pool, const oidc_cfg_t *c) {
 /*
  * initialize before the post config handler runs
  */
-void oidc_pre_config_init() {
+void oidc_pre_config_init(void) {
 #if OPENSSL_API_COMPAT < 0x10100000L
 	ERR_load_crypto_strings();
 	OpenSSL_add_all_algorithms();

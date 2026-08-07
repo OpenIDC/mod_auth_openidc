@@ -241,15 +241,15 @@ void oidc_test_teardown(void) {
 	pool = NULL;
 }
 
-apr_pool_t *oidc_test_pool_get() {
+apr_pool_t *oidc_test_pool_get(void) {
 	return pool;
 }
 
-request_rec *oidc_test_request_get() {
+request_rec *oidc_test_request_get(void) {
 	return request;
 }
 
-oidc_cfg_t *oidc_test_cfg_get() {
+oidc_cfg_t *oidc_test_cfg_get(void) {
 	return (oidc_cfg_t *)ap_get_module_config(request->server->module_config, &auth_openidc_module);
 }
 
