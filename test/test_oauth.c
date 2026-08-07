@@ -116,11 +116,18 @@ START_TEST(test_oauth_check_userid_options_no_token) {
 	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
 	r->method_number = M_OPTIONS;
 
+	/* the request is let through unauthenticated, so a claim header the client
+	 * supplied itself must not survive to the backend */
+	apr_table_set(r->headers_in, "OIDC_CLAIM_sub", "admin");
+	apr_table_set(r->headers_in, "X-Original", "kept");
+
 	/* OPTIONS without a token is special-cased: returns OK with an empty user */
 	int rc = oidc_oauth_check_userid(r, c, NULL);
 	ck_assert_int_eq(rc, OK);
 	ck_assert_ptr_nonnull(r->user);
 	ck_assert_str_eq(r->user, "");
+	ck_assert_table_unset(r->headers_in, "OIDC_CLAIM_sub");
+	ck_assert_table_str(r->headers_in, "X-Original", "kept");
 }
 END_TEST
 

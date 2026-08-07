@@ -1,4 +1,8 @@
 08/07/2026
+- security: scrub client-supplied OIDC_* headers on the request paths that are let
+  through without authentication - the CORS preflight (OPTIONS) shortcuts and the two
+  redirect-URI/JWKS content-handler dispatches - so a forged claim header cannot reach
+  the application on a request where no authentication took place
 - cfg: accept "OIDCSessionCookieChunkSize 0", which auth_openidc.conf and the directive
   help both document as the way to disable chunking, and which the runtime already
   honours, but which the parser rejected as below the 256 minimum

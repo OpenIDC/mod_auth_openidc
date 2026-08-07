@@ -850,8 +850,10 @@ static int oidc_oauth_check_userid_redirect_uri(request_rec *r, oidc_cfg_t *c) {
 		/*
 		 * Will be handled in the content handler; avoid:
 		 * No authentication done but request not allowed without authentication
-		 * by setting r->user
+		 * by setting r->user. No authentication happened, so any OIDC_* headers
+		 * on this request came from the client and must not survive it.
 		 */
+		oidc_scrub_headers(r);
 		r->user = "";
 		return OK;
 	}
@@ -916,6 +918,10 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 	/* get the bearer access token from the Authorization header */
 	if ((access_token == NULL) && (oidc_oauth_get_bearer_token(r, &access_token) == FALSE)) {
 		if (r->method_number == M_OPTIONS) {
+			/* a CORS preflight is let through unauthenticated, so the OIDC_* headers
+			 * it carries are the client's own and must be scrubbed like on any other
+			 * path that returns OK without authenticating */
+			oidc_scrub_headers(r);
 			r->user = "";
 			return OK;
 		}

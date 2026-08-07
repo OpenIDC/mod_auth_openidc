@@ -1098,6 +1098,9 @@ static int oidc_redirect_uri_handle_discovery_response(request_rec *r, oidc_cfg_
  * by setting r->user
  */
 static int oidc_redirect_uri_handle_in_content_handler(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
+	/* no authentication happened, so any OIDC_* headers on this request are the
+	 * client's own and must not be passed on */
+	oidc_scrub_headers(r);
 	r->user = "";
 	return OK;
 }
@@ -1419,6 +1422,9 @@ static int oidc_check_mixed_userid_oauth(request_rec *r, oidc_cfg_t *c) {
 	}
 
 	if (r->method_number == M_OPTIONS) {
+		/* see the identical case in oidc_oauth_check_userid(): a CORS preflight is let
+		 * through unauthenticated, so its OIDC_* headers are the client's own */
+		oidc_scrub_headers(r);
 		r->user = "";
 		return OK;
 	}
