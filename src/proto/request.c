@@ -43,7 +43,6 @@
 #include "cfg/dir.h"
 #include "metadata.h"
 #include "metrics.h"
-#include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
 

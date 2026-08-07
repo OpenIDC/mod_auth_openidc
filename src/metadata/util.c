@@ -32,7 +32,6 @@
 
 #include "cfg/parse.h"
 #include "jose.h"
-#include "mod_auth_openidc.h"
 #include "util/util.h"
 
 #include <apr_strings.h>

@@ -43,7 +43,7 @@
 
 #include "cfg/dir.h"
 #include "metrics.h"
-#include "mod_auth_openidc.h"
+#include "session.h"
 #include "util/util.h"
 
 #include "util/cache_local.h"

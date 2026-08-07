@@ -12,6 +12,8 @@
   reporting a pass after skipping all of them
 - jose: test the compression backend macro with "#elif defined(USE_ZLIB)", matching
   the "#ifdef USE_LIBBROTLI" above it and keeping the file -Wundef clean
+- src: drop the include of mod_auth_openidc.h from 11 files that use nothing from it,
+  and include session.h directly in session.c, which was picking it up transitively
 
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read

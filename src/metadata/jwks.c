@@ -32,7 +32,6 @@
 #include "cache/cache.h"
 #include "http.h"
 #include "metrics.h"
-#include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
 

@@ -32,7 +32,6 @@
 #include "cfg/parse.h"
 #include "http.h"
 #include "metrics.h"
-#include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/cache_local.h"
 #include "util/util.h"

@@ -42,7 +42,6 @@
 
 #include "cfg/dir.h"
 #include "cfg/parse.h"
-#include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
 

@@ -45,7 +45,6 @@
 #include "cfg/parse.h"
 #include "metadata.h"
 #include "metrics.h"
-#include "mod_auth_openidc.h"
 #include "util/util.h"
 
 #include <openssl/opensslconf.h>
