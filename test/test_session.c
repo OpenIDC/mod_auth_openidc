@@ -438,13 +438,15 @@ START_TEST(test_session_state_unshare_on_write) {
 	ck_assert_int_eq(z3->state_shared, TRUE);
 	oidc_session_free(r, z3);
 
-	/* saving a state-less session with sid/sub indexes clears those cache entries */
+	/* saving a state-less session with sid/sub indexes clears those cache entries;
+	 * load it from a cookie-less request so its state is naturally empty */
+	apr_table_unset(r->headers_in, "Cookie");
 	oidc_session_t *z4 = NULL;
 	oidc_session_load(r, &z4);
+	ck_assert_ptr_null(z4->state);
 	z4->uuid = apr_pstrdup(r->pool, uuid);
 	z4->sid = apr_pstrdup(r->pool, "kill-sid");
 	z4->sub = apr_pstrdup(r->pool, "kill-sub");
-	z4->state = NULL;
 	ck_assert_int_eq(oidc_session_save(r, z4, OIDC_SESSION_SAVE_NEW), TRUE);
 	oidc_session_free(r, z4);
 }
