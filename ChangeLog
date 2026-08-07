@@ -1,4 +1,6 @@
 08/07/2026
+- metrics: flush on a scratch pool and serve a scrape from the request pool, rather than
+  copying and re-serializing the whole document onto the never-cleared process pool
 - metrics: build the per-sample lookup key on the request pool, so only the copy the
   hash retains on insert is allocated from the never-cleared process pool
 - cache: fail a file cache write when the value could not be fully written, instead of

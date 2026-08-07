@@ -303,9 +303,9 @@ static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
 /*
  * retrieve the (JSON) serialized (global) metrics data from shared memory
  */
-static inline char *_oidc_metrics_storage_get(server_rec *s) {
+static inline char *_oidc_metrics_storage_get(server_rec *s, apr_pool_t *pool) {
 	const char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
-	return p && (*p != 0) ? apr_pstrndup(s->process->pool, p, _oidc_metrics_shm_size(s)) : NULL;
+	return p && (*p != 0) ? apr_pstrndup(pool, p, _oidc_metrics_shm_size(s)) : NULL;
 }
 
 /*
@@ -341,9 +341,9 @@ static oidc_json_t *oidc_metrics_json_load(apr_pool_t *pool, const char *s_json,
 /*
  * parse a string into a JSON object in a server_rec context
  */
-static oidc_json_t *oidc_metrics_json_parse_s(server_rec *s, const char *s_json) {
+static oidc_json_t *oidc_metrics_json_parse_s(server_rec *s, apr_pool_t *pool, const char *s_json) {
 	char *s_err = NULL;
-	oidc_json_t *json = oidc_metrics_json_load(s->process->pool, s_json, &s_err);
+	oidc_json_t *json = oidc_metrics_json_load(pool, s_json, &s_err);
 	if (json == NULL)
 		oidc_serror(s, "JSON parsing failed: %s", s_err);
 	return json;
@@ -396,16 +396,16 @@ static void oidc_metrics_reset_server(const oidc_json_t *j_server) {
 /*
  * reset the serialized (global) metrics data in shared memory
  */
-static inline void oidc_metrics_storage_reset(server_rec *s) {
+static inline void oidc_metrics_storage_reset(server_rec *s, apr_pool_t *pool) {
 	const char *s_json = NULL;
 	oidc_json_t *json = NULL;
 	void *iter = NULL;
 
 	/* get the global stringified JSON metrics */
-	s_json = _oidc_metrics_storage_get(s);
+	s_json = _oidc_metrics_storage_get(s, pool);
 
 	/* parse the metrics string to JSON */
-	json = oidc_metrics_json_parse_s(s, s_json);
+	json = oidc_metrics_json_parse_s(s, pool, s_json);
 	if (json == NULL)
 		json = oidc_json_object();
 
@@ -416,7 +416,7 @@ static inline void oidc_metrics_storage_reset(server_rec *s) {
 	}
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_json_encode(s->process->pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
+	s_json = oidc_json_encode(pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	oidc_json_decref(json);
@@ -480,7 +480,7 @@ static oidc_json_t *oidc_metrics_counter_new(server_rec *s, apr_hash_t *htable) 
 	oidc_metrics_counter_t *counter = NULL;
 	char *value = NULL;
 	oidc_json_t *j_values = NULL;
-	for (apr_hash_index_t *hi = apr_hash_first(s->process->pool, htable); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, htable); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&value, NULL, (void **)&counter);
 		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0) {
 			j_values = oidc_json_integer(counter->count);
@@ -501,7 +501,7 @@ static void oidc_metrics_counter_update(server_rec *s, oidc_json_t *j_counter, a
 	oidc_metrics_counter_t *counter = NULL;
 	char *value = NULL;
 	oidc_json_t *j_value = NULL;
-	for (apr_hash_index_t *hi = apr_hash_first(s->process->pool, htable); hi; hi = apr_hash_next(hi)) {
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, htable); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&value, NULL, (void **)&counter);
 		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0) {
 			j_value = j_counter;
@@ -565,9 +565,9 @@ static void oidc_metrics_counter_set_or_update(server_rec *s, oidc_json_t *paren
  * merge a single local counter entry into the global counters object;
  * keys of the form "class.name" are nested as j_counters[class][name]
  */
-static void oidc_metrics_store_counter_entry(server_rec *s, oidc_json_t *j_counters, const char *key,
+static void oidc_metrics_store_counter_entry(server_rec *s, apr_pool_t *pool, oidc_json_t *j_counters, const char *key,
 					     apr_hash_t *counter_hash) {
-	const char *class_name = apr_pstrdup(s->process->pool, key);
+	const char *class_name = apr_pstrdup(pool, key);
 	char *name = _oidc_strstr(class_name, ".");
 	oidc_json_t *j_names = NULL;
 
@@ -591,21 +591,19 @@ static void oidc_metrics_store_counter_entry(server_rec *s, oidc_json_t *j_count
 /*
  * merge all locally collected counters into the global JSON
  */
-static void oidc_metrics_store_counters(server_rec *s, oidc_json_t *json) {
+static void oidc_metrics_store_counters(server_rec *s, apr_pool_t *pool, oidc_json_t *json) {
 	const char *name = NULL;
 	const char *key = NULL;
 	apr_hash_t *server_hash = NULL;
 	apr_hash_t *counter_hash = NULL;
 	oidc_json_t *j_counters = NULL;
 
-	for (apr_hash_index_t *hi1 = apr_hash_first(s->process->pool, _oidc_metrics.counters); hi1;
-	     hi1 = apr_hash_next(hi1)) {
+	for (apr_hash_index_t *hi1 = apr_hash_first(NULL, _oidc_metrics.counters); hi1; hi1 = apr_hash_next(hi1)) {
 		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
 		j_counters = oidc_json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_COUNTERS);
-		for (apr_hash_index_t *hi2 = apr_hash_first(s->process->pool, server_hash); hi2;
-		     hi2 = apr_hash_next(hi2)) {
+		for (apr_hash_index_t *hi2 = apr_hash_first(NULL, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
 			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&counter_hash);
-			oidc_metrics_store_counter_entry(s, j_counters, key, counter_hash);
+			oidc_metrics_store_counter_entry(s, pool, j_counters, key, counter_hash);
 		}
 	}
 }
@@ -621,12 +619,10 @@ static void oidc_metrics_store_timings(server_rec *s, oidc_json_t *json) {
 	oidc_json_t *j_timings = NULL;
 	const oidc_json_t *j_timer = NULL;
 
-	for (apr_hash_index_t *hi1 = apr_hash_first(s->process->pool, _oidc_metrics.timings); hi1;
-	     hi1 = apr_hash_next(hi1)) {
+	for (apr_hash_index_t *hi1 = apr_hash_first(NULL, _oidc_metrics.timings); hi1; hi1 = apr_hash_next(hi1)) {
 		apr_hash_this(hi1, (const void **)&name, NULL, (void **)&server_hash);
 		j_timings = oidc_json_object_get(oidc_metrics_server_get(json, name), OIDC_METRICS_TIMINGS);
-		for (apr_hash_index_t *hi2 = apr_hash_first(s->process->pool, server_hash); hi2;
-		     hi2 = apr_hash_next(hi2)) {
+		for (apr_hash_index_t *hi2 = apr_hash_first(NULL, server_hash); hi2; hi2 = apr_hash_next(hi2)) {
 			apr_hash_this(hi2, (const void **)&key, NULL, (void **)&timing);
 			j_timer = oidc_json_object_get(j_timings, key);
 			if (j_timer != NULL)
@@ -643,26 +639,35 @@ static void oidc_metrics_store_timings(server_rec *s, oidc_json_t *json) {
 static void oidc_metrics_store(server_rec *s) {
 	const char *s_json = NULL;
 	oidc_json_t *json = NULL;
+	apr_pool_t *pool = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
 		return;
 
+	/* everything below is scratch: the whole document is read, re-serialized and copied
+	 * into shared memory on every flush, so it must not come from the process pool,
+	 * which is never cleared for the lifetime of the server */
+	if (apr_pool_create(&pool, s->process->pool) != APR_SUCCESS) {
+		oidc_serror(s, "apr_pool_create failed: cannot flush metrics");
+		return;
+	}
+
 	/* lock the shared memory for other processes */
-	oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_global_mutex);
+	oidc_cache_mutex_lock(pool, s, _oidc_metrics_global_mutex);
 
 	/* get the global stringified JSON metrics */
-	s_json = _oidc_metrics_storage_get(s);
+	s_json = _oidc_metrics_storage_get(s, pool);
 
 	/* parse the metrics string to JSON */
-	json = oidc_metrics_json_parse_s(s, s_json);
+	json = oidc_metrics_json_parse_s(s, pool, s_json);
 	if (json == NULL)
 		json = oidc_json_object();
 
-	oidc_metrics_store_counters(s, json);
+	oidc_metrics_store_counters(s, pool, json);
 	oidc_metrics_store_timings(s, json);
 
 	/* serialize the metrics data, preserve order is required for Prometheus */
-	s_json = oidc_json_encode(s->process->pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
+	s_json = oidc_json_encode(pool, json, OIDC_JSON_COMPACT | OIDC_JSON_PRESERVE_ORDER);
 
 	/* free the JSON data */
 	oidc_json_decref(json);
@@ -671,7 +676,9 @@ static void oidc_metrics_store(server_rec *s) {
 	_oidc_metrics_storage_set(s, s_json);
 
 	/* unlock the shared memory for other processes */
-	oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_global_mutex);
+	oidc_cache_mutex_unlock(pool, s, _oidc_metrics_global_mutex);
+
+	apr_pool_destroy(pool);
 }
 
 #define OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR "OIDC_METRICS_CACHE_STORAGE_INTERVAL"
@@ -1571,12 +1578,13 @@ int oidc_metrics_handle_request(request_rec *r) {
 	/* lock the global shared memory */
 	oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_global_mutex);
 
-	/* retrieve the JSON formatted metrics as a string */
-	s_json = _oidc_metrics_storage_get(r->server);
+	/* retrieve the JSON formatted metrics as a string; NB: on the request pool, since
+	 * it is handed to the content handler below, after the mutex has been released */
+	s_json = _oidc_metrics_storage_get(r->server, r->pool);
 
 	/* now that the metrics have been consumed, clear the shared memory segment */
 	if (oidc_metric_reset(r, handler->reset))
-		oidc_metrics_storage_reset(r->server);
+		oidc_metrics_storage_reset(r->server, r->pool);
 
 	/* unlock the global shared memory */
 	oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_global_mutex);
