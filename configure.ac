@@ -161,7 +161,7 @@ HAVE_LIBJQ=0
 
 AC_ARG_WITH([jq], AS_HELP_STRING([--with-jq=PATH], [location of libjq development headers]),)
 
-if test -n "$with_jq"
+if test -n "$with_jq" && test "x$with_jq" != "xno"
 then
 	if test "$JQ_CFLAGS" == ""; then
 		if test "$with_jq" == "yes"; then
@@ -178,13 +178,20 @@ then
 		fi
 	fi
 
+	old_CPPFLAGS=$CPPFLAGS
+	old_LDFLAGS=$LDFLAGS
+
 	CPPFLAGS="$JQ_CFLAGS $CPPFLAGS"
 	AC_CHECK_HEADER([jq.h], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])
 
 	LDFLAGS="$JQ_LIBS $LDFLAGS"
 	AC_CHECK_LIB([jq], [jq_init], [HAVE_LIBJQ=1], [HAVE_LIBJQ=0])
-	if test "x$have_jq" = "x0" ; then
-		AC_MSG_WARN("cannot find library for -ljq.")
+
+	CPPFLAGS=$old_CPPFLAGS
+	LDFLAGS=$old_LDFLAGS
+
+	if test "x$HAVE_LIBJQ" = "x0" ; then
+		AC_MSG_ERROR([--with-jq was given but libjq was not found: install the libjq development package, or omit --with-jq to build without claims-expression support])
 	fi
 fi
 

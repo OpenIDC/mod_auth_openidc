@@ -16,6 +16,8 @@
   and include session.h directly in session.c, which was picking it up transitively
 - ci: set an explicit GITHUB_TOKEN permission scope on all three workflows, which ran
   at the repository default; only the issue-triage job gets a write scope
+- configure: fail when --with-jq is given but libjq is absent, instead of silently
+  building a module with the claims-expression directives compiled out
 
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read
