@@ -498,7 +498,6 @@ END_TEST
 /* OIDCFilterClaimsExpr JQ-filters the claims before they are stored in the session */
 START_TEST(test_session_claim_jq_filter) {
 	request_rec *r = oidc_test_request_get();
-	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_session_t *z = NULL;
 	oidc_session_load(r, &z);
 
