@@ -96,7 +96,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCCookieDomain,
 		cookie_domain,
-		"Specify domain element for OIDC session cookie."),
+		"Specify the domain element for the OIDC session and state cookies."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCCookieHTTPOnly,
@@ -111,7 +111,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE123,
 		OIDCOutgoingProxy,
 		outgoing_proxy,
-		"Specify an outgoing proxy for your network (<host>[:<port>]."),
+		"Specify an outgoing proxy for your network (<host>[:<port>])."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE12,
 		OIDCCryptoPassphrase,
@@ -176,13 +176,13 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCSessionCookieChunkSize,
 		session_cookie_chunk_size,
-		"Chunk size for client-cookie session storage type in bytes. Defaults to 4k. Set 0 to suppress chunking."),
+		"Chunk size for client-cookie session storage type in bytes. Defaults to 4000. Set 0 to suppress chunking."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE2,
 		OIDCPreservePostTemplates,
 		post_preserve_templates,
-		"Name of POST preserve and restore templates:"
-		"1) preserve: needs to contain two \"%s\" characters, the first for the JSON POST data, the second for the URL to redirect to."
+		"Name of POST preserve and restore templates: "
+		"1) preserve: needs to contain two \"%s\" characters, the first for the JSON POST data, the second for the URL to redirect to. "
 		"2) restore: needs to contain one \"%s\", which contains the (original) URL to POST the restored data to"
 		),
 	OIDC_CFG_CMD(
@@ -199,7 +199,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_ITERATE,
 		OIDCMetricsData,
 		metrics_hook_data,
-		"The data that will be returned from the metrics hook."),
+		"The classes of metrics that will be collected; publish them with " OIDCMetricsPublish "."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCMetricsPublish,
@@ -224,7 +224,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCStateInputHeaders,
 		state_input_headers,
-		"Specify header name which is used as the input for calculating the fingerprint of the state during authentication."),
+		"Which request headers are used as input for calculating the fingerprint of the state during authentication."),
 	OIDC_CFG_CMD(
 		AP_INIT_ITERATE,
 		OIDCRedirectURLsAllowed,
@@ -249,7 +249,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_ITERATE,
 		OIDCXForwardedHeaders,
 		x_forwarded_headers,
-		"Sets the value of the interpreted X-Forwarded-* headers."),
+		"Selects which X-Forwarded-* headers sent by a proxy are honoured."),
 #ifdef USE_LIBJQ
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
@@ -420,7 +420,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCIDTokenEncryptedResponseEnc,
 		id_token_encrypted_response_enc,
-		"The algorithm that the OP should use to encrypt to the id_token with the Content Encryption Key (used only in dynamic client registration)."),
+		"The algorithm that the OP should use to encrypt the id_token with the Content Encryption Key (used only in dynamic client registration)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_ITERATE,
 		OIDCIDTokenAudValues,
@@ -430,17 +430,17 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCUserInfoSignedResponseAlg,
 		userinfo_signed_response_alg,
-		"The algorithm that the OP should use to sign the UserInfo response (used only in dynamic client registration)."),
+		"The algorithm that the OP must use to sign the UserInfo response; required to verify a signed UserInfo JWT."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoEncryptedResponseAlg,
 		userinfo_encrypted_response_alg,
-		"The algorithm that the OP should use to encrypt the Content Encryption Key that is used to encrypt the UserInfo response (used only in dynamic client registration)."),
+		"The algorithm that the OP must use to encrypt the Content Encryption Key that encrypts the UserInfo response; setting it enables decryption of that response."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoEncryptedResponseEnc,
 		userinfo_encrypted_response_enc,
-		"The algorithm that the OP should use to encrypt to encrypt the UserInfo response with the Content Encryption Key (used only in dynamic client registration)"),
+		"The algorithm that the OP must use to encrypt the UserInfo response with the Content Encryption Key."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCUserInfoTokenMethod,
@@ -490,17 +490,17 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCAuthRequestParams,
 		auth_request_params,
-		"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\"."),
+		"Extra parameters that need to be sent in the Authorization Request (must be query-encoded like \"display=popup&prompt=consent\")."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCLogoutRequestParams,
 		logout_request_params,
-		"Extra parameters that need to be sent in the Logout Request (must be query-encoded like \"client_id=myclient&prompt=none\"."),
+		"Extra parameters that need to be sent in the Logout Request (must be query-encoded like \"client_id=myclient&prompt=none\")."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCPKCEMethod,
 		pkce,
-		"The RFC 7636 PCKE mode used."),
+		"The RFC 7636 PKCE mode used."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE12,
 		OIDCDPoPMode,
@@ -550,7 +550,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCProviderAuthRequestMethod,
 		auth_request_method,
-		"HTTP method used to send the authentication request to the provider (GET or POST)."),
+		"HTTP method used to send the authentication request to the provider (GET, POST or PAR)."),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
 		OIDCProfile,
@@ -588,7 +588,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCOAuthIntrospectionEndpointParams,
 		introspection_endpoint_params,
-		"Extra parameters that need to be sent in the token introspection request (must be query-encoded like \"grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer\"."),
+		"Extra parameters that need to be sent in the token introspection request (must be query-encoded like \"grant_type=urn%3Apingidentity.com%3Aoauth2%3Agrant_type%3Avalidate_bearer\")."),
 	OIDC_CFG_CMD_OAUTH(
 		AP_INIT_TAKE1,
 		OIDCOAuthIntrospectionEndpointAuth,
@@ -618,7 +618,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCOAuthIntrospectionTokenParamName,
 		introspection_token_param_name,
-		"Name of the parameter whose value carries the access token value in an validation request to the token introspection endpoint."),
+		"Name of the parameter whose value carries the access token value in a validation request to the token introspection endpoint."),
 	OIDC_CFG_CMD_OAUTH(
 		AP_INIT_TAKE123,
 		OIDCOAuthTokenExpiryClaim,
@@ -653,7 +653,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCOAuthVerifyJwksUri,
 		verify_jwks_uri,
-		"The JWKs URL on which the Authorization publishes the keys used to sign its JWT access tokens."),
+		"The JWKs URL on which the Authorization Server publishes the keys used to sign its JWT access tokens."),
 	OIDC_CFG_CMD_OAUTH(
 		AP_INIT_ITERATE,
 		OIDCOAuthVerifyAudience,
@@ -701,7 +701,7 @@ const command_rec oidc_cfg_cmds[] = {
 		AP_INIT_TAKE1,
 		OIDCCookiePath,
 		cookie_path,
-		"Define the cookie path for the session cookie."),
+		"Define the cookie path for the session and state cookies."),
 	OIDC_CFG_CMD_DIR(
 		AP_INIT_TAKE1,
 		OIDCStateCookiePrefix,

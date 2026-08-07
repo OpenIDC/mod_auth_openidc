@@ -1,4 +1,7 @@
 08/07/2026
+- doc: correct 17 directive descriptions shown by "httpd -L", most importantly the three
+  OIDCUserInfo*ResponseAlg entries, which claimed to apply only to dynamic client
+  registration although they are required to verify and decrypt a UserInfo JWT
 - doc: correct the OIDCMetricsData class list in auth_openidc.conf, which offered an
   invalid "requests" class that makes Apache refuse to start, omitted "provider" from
   the syntax line and omitted the "logout" class entirely
