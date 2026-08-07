@@ -381,7 +381,7 @@ static char *oidc_proto_request_object_encrypt(request_rec *r, oidc_cfg_t *cfg, 
 /*
  * generate a request object
  */
-static char *oidc_proto_request_object_create(request_rec *r, const struct oidc_provider_t *provider,
+static char *oidc_proto_request_object_create(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
 					      oidc_json_t *request_object_config, apr_table_t *params, int ttl) {
 
 	oidc_jose_error_t err;
@@ -389,8 +389,6 @@ static char *oidc_proto_request_object_create(request_rec *r, const struct oidc_
 	oidc_jwt_t *jwe = NULL;
 
 	oidc_debug(r, "enter");
-
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	/* create the request object value */
 	oidc_jwt_t *request_object = oidc_jwt_new(r->pool, TRUE, TRUE);
@@ -460,7 +458,7 @@ out:
 /*
  * generate a request object and pass it by reference in the authorization request
  */
-static char *oidc_proto_request_uri_create(request_rec *r, const struct oidc_provider_t *provider,
+static char *oidc_proto_request_uri_create(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
 					   oidc_json_t *request_object_config, const char *redirect_uri,
 					   apr_table_t *params, int ttl) {
 
@@ -475,7 +473,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, const struct oidc_pro
 		resolver_url = apr_pstrdup(r->pool, redirect_uri);
 
 	const char *serialized_request_object =
-	    oidc_proto_request_object_create(r, provider, request_object_config, params, ttl);
+	    oidc_proto_request_object_create(r, cfg, provider, request_object_config, params, ttl);
 
 	/* generate a temporary reference, store the request object in the cache and generate a Request URI that
 	 * references it */
@@ -496,7 +494,7 @@ static char *oidc_proto_request_uri_create(request_rec *r, const struct oidc_pro
 /*
  * Generic function to generate request/request_object parameter with value
  */
-void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provider_t *provider,
+void oidc_proto_request_object_param_add(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
 					 const char *redirect_uri, apr_table_t *params) {
 
 	/* parse the request object configuration from a string in to a JSON structure */
@@ -531,10 +529,11 @@ void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provi
 	oidc_json_object_get_int(request_object_config, OIDC_REQUEST_OBJECT_TTL, &ttl, OIDC_REQUEST_OBJECT_TTL_DEFAULT);
 	if (_oidc_strcmp(parameter, OIDC_PROTO_REQUEST_URI) == 0) {
 		/* parameter is "request_uri" */
-		value = oidc_proto_request_uri_create(r, provider, request_object_config, redirect_uri, params, ttl);
+		value =
+		    oidc_proto_request_uri_create(r, cfg, provider, request_object_config, redirect_uri, params, ttl);
 	} else {
 		/* parameter is "request" */
-		value = oidc_proto_request_object_create(r, provider, request_object_config, params, ttl);
+		value = oidc_proto_request_object_create(r, cfg, provider, request_object_config, params, ttl);
 	}
 
 	/* don't add an empty parameter when creating the request object failed */

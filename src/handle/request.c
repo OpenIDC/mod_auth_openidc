@@ -234,7 +234,7 @@ static int oidc_request_auth_send_get(request_rec *r, const struct oidc_provider
 /*
  * send an OpenID Connect authorization request to the specified provider
  */
-int oidc_request_auth(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
+int oidc_request_auth(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider, const char *login_hint,
 		      const char *redirect_uri, const char *state, oidc_proto_state_t *proto_state,
 		      const char *id_token_hint, const char *code_challenge, const char *auth_request_params,
 		      const char *path_scope) {
@@ -255,8 +255,8 @@ int oidc_request_auth(request_rec *r, const struct oidc_provider_t *provider, co
 
 	/* assemble parameters to call the authorization endpoint */
 	apr_table_t *params = apr_table_make(r->pool, 4);
-	oidc_proto_request_auth_params_set(r, provider, login_hint, redirect_uri, state, proto_state, id_token_hint,
-					   code_challenge, auth_request_params, path_scope, params);
+	oidc_proto_request_auth_params_set(r, cfg, provider, login_hint, redirect_uri, state, proto_state,
+					   id_token_hint, code_challenge, auth_request_params, path_scope, params);
 
 	/* send the full authentication request via POST, PAR or GET */
 	switch (oidc_proto_profile_auth_request_method_get(provider)) {
@@ -264,7 +264,7 @@ int oidc_request_auth(request_rec *r, const struct oidc_provider_t *provider, co
 		rv = oidc_request_auth_send_post(r, provider, params);
 		break;
 	case OIDC_AUTH_REQUEST_METHOD_PAR:
-		rv = oidc_proto_request_auth_push(r, provider, params);
+		rv = oidc_proto_request_auth_push(r, cfg, provider, params);
 		break;
 	case OIDC_AUTH_REQUEST_METHOD_GET:
 		rv = oidc_request_auth_send_get(r, provider, params);
@@ -400,7 +400,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 	}
 
 	/* send off to the OpenID Connect Provider */
-	rc = oidc_request_auth(r, provider, login_hint, oidc_util_url_redirect_uri(r, c), state, proto_state,
+	rc = oidc_request_auth(r, c, provider, login_hint, oidc_util_url_redirect_uri(r, c), state, proto_state,
 			       id_token_hint, code_challenge, auth_request_params, path_scope);
 
 	OIDC_METRICS_TIMING_ADD(r, c, OM_AUTHN_REQUEST);

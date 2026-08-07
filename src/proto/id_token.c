@@ -348,10 +348,8 @@ apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *pro
 /*
  * check whether the provided JWT is a valid id_token for the specified "provider"
  */
-static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, const oidc_provider_t *provider, oidc_jwt_t *jwt,
-					      const char *nonce) {
-
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, oidc_cfg_t *cfg, const oidc_provider_t *provider,
+					      oidc_jwt_t *jwt, const char *nonce) {
 
 	oidc_debug(r, "enter, jwt.header=\"%s\", jwt.payload=\"%s\", nonce=\"%s\"", jwt->header.value.str,
 		   jwt->payload.value.str, nonce);
@@ -450,7 +448,7 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 	}
 
 	/* this is where the meat is */
-	if (oidc_proto_validate_idtoken(r, provider, *jwt, nonce) == FALSE) {
+	if (oidc_proto_validate_idtoken(r, cfg, provider, *jwt, nonce) == FALSE) {
 		oidc_error(r, "id_token payload could not be validated, aborting");
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;

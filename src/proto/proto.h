@@ -222,17 +222,18 @@ int oidc_proto_return_www_authenticate(request_rec *r, const char *error, const 
 
 // request.c
 /* proto/request_object.c: add a JAR "request"/"request_uri" parameter to the authorization request */
-void oidc_proto_request_object_param_add(request_rec *r, const struct oidc_provider_t *provider,
+void oidc_proto_request_object_param_add(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
 					 const char *redirect_uri, apr_table_t *params);
 
 /* assemble the parameters for a request to the authorization endpoint */
-void oidc_proto_request_auth_params_set(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
-					const char *redirect_uri, const char *state,
+void oidc_proto_request_auth_params_set(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
+					const char *login_hint, const char *redirect_uri, const char *state,
 					const oidc_proto_state_t *proto_state, const char *id_token_hint,
 					const char *code_challenge, const char *auth_request_params,
 					const char *path_scope, apr_table_t *params);
 /* send the assembled parameters to the Pushed Authorization Request endpoint and redirect (RFC 9126) */
-int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provider_t *provider, apr_table_t *params);
+int oidc_proto_request_auth_push(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
+				 apr_table_t *params);
 
 // response.c
 apr_byte_t oidc_proto_response_is_post(const request_rec *r, oidc_cfg_t *cfg);

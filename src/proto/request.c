@@ -77,8 +77,8 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 /*
  * send a Pushed Authorization Request (PAR) to the Provider
  */
-int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provider_t *provider, apr_table_t *params) {
-	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+int oidc_proto_request_auth_push(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
+				 apr_table_t *params) {
 	char *response = NULL;
 	char *basic_auth = NULL;
 	char *bearer_auth = NULL;
@@ -187,8 +187,8 @@ static void oidc_proto_request_auth_scope_set(request_rec *r, const struct oidc_
 /*
  * assemble all parameters that go into the authentication request
  */
-void oidc_proto_request_auth_params_set(request_rec *r, const struct oidc_provider_t *provider, const char *login_hint,
-					const char *redirect_uri, const char *state,
+void oidc_proto_request_auth_params_set(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provider_t *provider,
+					const char *login_hint, const char *redirect_uri, const char *state,
 					const oidc_proto_state_t *proto_state, const char *id_token_hint,
 					const char *code_challenge, const char *auth_request_params,
 					const char *path_scope, apr_table_t *params) {
@@ -245,5 +245,5 @@ void oidc_proto_request_auth_params_set(request_rec *r, const struct oidc_provid
 
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)
-		oidc_proto_request_object_param_add(r, provider, redirect_uri, params);
+		oidc_proto_request_object_param_add(r, cfg, provider, redirect_uri, params);
 }
