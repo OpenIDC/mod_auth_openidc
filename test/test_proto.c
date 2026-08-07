@@ -3311,6 +3311,32 @@ START_TEST(test_proto_request_auth_with_request_object_encrypt_bad_alg) {
 }
 END_TEST
 
+START_TEST(test_proto_auth_request_params_cannot_duplicate_ours) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	/* auth_request_params arrives with the request: a key that duplicates one this module
+	 * sets itself must be dropped rather than sent alongside ours, since RFC 6749 3.1 does
+	 * not allow the parameter twice and the provider decides which one wins */
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-dup", ps, NULL,
+				   NULL, "redirect_uri=https%3A%2F%2Fevil.example%2Fcb&acr_values=loa3", NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "evil.example") == NULL,
+		      "an injected duplicate redirect_uri must not reach the provider");
+	/* a parameter that collides with nothing is still added */
+	ck_assert_msg(_oidc_strstr(loc, "acr_values=loa3") != NULL,
+		      "a non-colliding extra parameter must still be sent");
+}
+END_TEST
+
 START_TEST(test_proto_request_auth_post_html) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -4009,6 +4035,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_request_auth_with_copy_and_remove_from_request);
 	tcase_add_test(e2e, test_proto_request_auth_request_object_copy_param_types);
 	tcase_add_test(e2e, test_proto_userinfo_request_signed_jwt_response);
+	tcase_add_test(e2e, test_proto_auth_request_params_cannot_duplicate_ours);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);
 	tcase_add_test(e2e, test_proto_request_auth_unknown_method);

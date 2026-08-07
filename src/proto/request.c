@@ -47,9 +47,23 @@
 #include "util/util.h"
 
 /*
- * add extra configured authentication request parameters (global or per-path)
+ * add extra authentication request parameters (global or per-path) to the authorization request
+ *
+ * Every parameter this module owns has already been put in the table by the caller, so a key
+ * that is present here is a collision with one of those. Sending it twice is not allowed
+ * (RFC 6749 3.1) and leaves it to the provider which one wins, so:
+ *
+ *  - a configured value (OIDCAuthRequestParams, provider metadata) is the operator's, and
+ *    replaces ours rather than being sent alongside it
+ *  - a value that came in on the request is not, and is dropped: otherwise a link could add a
+ *    second redirect_uri, prompt or max_age and rely on the provider preferring it
+ *
+ * A "#" value means "forward the same-named parameter from the current request", so its value
+ * is request-supplied whatever the source of the directive - the operator opted into
+ * forwarding that parameter, not into letting a request override one of ours.
  */
-static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, const char *auth_request_params) {
+static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, const char *auth_request_params,
+					       apr_byte_t configured) {
 	char *key = NULL;
 	char *val = NULL;
 
@@ -57,20 +71,31 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 		return;
 
 	while (*auth_request_params) {
+		apr_byte_t from_request = FALSE;
 		val = ap_getword(r->pool, &auth_request_params, OIDC_CHAR_AMP);
 		if (val == NULL)
 			break;
 		key = ap_getword(r->pool, (const char **)&val, OIDC_CHAR_EQUAL);
 		ap_unescape_url(key);
 		ap_unescape_url(val);
-		if (_oidc_strcmp(val, OIDC_STR_HASH) != 0) {
-			apr_table_add(params, key, val);
+		if (_oidc_strcmp(val, OIDC_STR_HASH) == 0) {
+			if (oidc_util_url_has_parameter(r, key) == FALSE)
+				continue;
+			oidc_util_url_parameter_get(r, key, &val);
+			from_request = TRUE;
+		}
+		if (apr_table_get(params, key) != NULL) {
+			if ((configured == FALSE) || (from_request == TRUE)) {
+				oidc_warn(r,
+					  "dropping authorization request parameter \"%s\": it would duplicate one "
+					  "that this module sets itself",
+					  key);
+				continue;
+			}
+			apr_table_set(params, key, val);
 			continue;
 		}
-		if (oidc_util_url_has_parameter(r, key) == TRUE) {
-			oidc_util_url_parameter_get(r, key, &val);
-			apr_table_add(params, key, val);
-		}
+		apr_table_add(params, key, val);
 	}
 }
 
@@ -238,10 +263,10 @@ void oidc_proto_request_auth_params_set(request_rec *r, oidc_cfg_t *cfg, const s
 		apr_table_setn(params, OIDC_PROTO_PROMPT, prompt);
 
 	/* add any statically configured custom authorization request parameters */
-	oidc_proto_request_auth_params_add(r, params, oidc_cfg_provider_auth_request_params_get(provider));
+	oidc_proto_request_auth_params_add(r, params, oidc_cfg_provider_auth_request_params_get(provider), TRUE);
 
 	/* add any dynamically configured custom authorization request parameters */
-	oidc_proto_request_auth_params_add(r, params, auth_request_params);
+	oidc_proto_request_auth_params_add(r, params, auth_request_params, FALSE);
 
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)

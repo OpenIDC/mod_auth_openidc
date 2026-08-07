@@ -1,4 +1,7 @@
 08/07/2026
+- security: do not let an extra authorization request parameter duplicate one that the
+  module sets itself; a request-supplied one is dropped and a configured one replaces
+  ours, rather than both being sent and the provider deciding which wins
 - security: HTML-escape the three values still interpolated raw into an attribute on a
   generated page: the redirect URI in the discovery page's provider links and form action,
   which a relative OIDCRedirectURI resolves against the request's host, and the provider's
