@@ -897,14 +897,16 @@ static inline apr_hash_t *_oidc_metrics_server_hash(request_rec *r, apr_hash_t *
  */
 static inline oidc_metrics_timing_t *_oidc_metrics_timing_get(request_rec *r, unsigned int type) {
 	oidc_metrics_timing_t *result = NULL;
-	const char *key = _oidc_metrics_type_name2key(r->server->process->pool, type, NULL);
+	/* NB: the lookup key is request-scoped; only the copy the hash retains on insert
+	 * below is allocated process-wide, since that pool is never cleared */
+	const char *key = _oidc_metrics_type_name2key(r->pool, type, NULL);
 	apr_hash_t *server_hash = _oidc_metrics_server_hash(r, _oidc_metrics.timings);
 	/* get the entry to the specified metric */
 	result = apr_hash_get(server_hash, key, APR_HASH_KEY_STRING);
 	if (result == NULL) {
 		/* allocate the timing structure in the process pool */
 		result = apr_pcalloc(r->server->process->pool, sizeof(oidc_metrics_timing_t));
-		apr_hash_set(server_hash, key, APR_HASH_KEY_STRING, result);
+		apr_hash_set(server_hash, apr_pstrdup(r->server->process->pool, key), APR_HASH_KEY_STRING, result);
 	}
 	return result;
 }
@@ -928,7 +930,8 @@ static inline oidc_metrics_counter_t *_oidc_metrics_counter_value_get(request_re
  */
 static inline apr_hash_t *_oidc_metrics_counter_get(request_rec *r, unsigned int type, const char *name) {
 	apr_hash_t *result = NULL;
-	const char *key = _oidc_metrics_type_name2key(r->server->process->pool, type, name);
+	/* NB: request-scoped lookup key, process-wide copy only on insert - see above */
+	const char *key = _oidc_metrics_type_name2key(r->pool, type, name);
 	apr_hash_t *server_hash = _oidc_metrics_server_hash(r, _oidc_metrics.counters);
 
 	/* get the entry to the specified metric */
@@ -936,7 +939,7 @@ static inline apr_hash_t *_oidc_metrics_counter_get(request_rec *r, unsigned int
 	if (result == NULL) {
 		/* allocate the values hashtable in the process pool */
 		result = apr_hash_make(r->server->process->pool);
-		apr_hash_set(server_hash, key, APR_HASH_KEY_STRING, result);
+		apr_hash_set(server_hash, apr_pstrdup(r->server->process->pool, key), APR_HASH_KEY_STRING, result);
 	}
 
 	return result;
