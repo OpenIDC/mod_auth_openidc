@@ -383,6 +383,7 @@ START_TEST(test_metrics_flushed_twice_updates_entries) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
 		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
 		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "404");
+		OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_ID_TOKEN, "email", "alice@example.com");
 		OIDC_METRICS_TIMING_START(r, c);
 		apr_sleep(apr_time_from_msec(1));
 		OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
@@ -402,6 +403,71 @@ START_TEST(test_metrics_flushed_twice_updates_entries) {
 	ck_assert_msg(_oidc_strstr(body, "value=\"200\"} 2") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "value=\"404\"} 1") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "name=\"email\"") != NULL, "BODY=[%s]", body);
+
+	/* the status formatter with a name+value selector digs into the nested
+	 * name -> value counter object */
+	r->args = "format=status&server_name=www.example.com&counter=claim.id_token"
+		  "&name=email&value=alice%40example.com";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "OK: 2") != NULL, "BODY=[%s]", body);
+
+	/* a name that does not exist under the counter yields the bare OK */
+	r->args = "format=status&server_name=www.example.com&counter=claim.id_token"
+		  "&name=missing&value=whatever";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+/* an out-of-bounds OIDC_METRICS_CACHE_JSON_MAX falls back to the default shm size */
+START_TEST(test_metrics_shm_size_env_out_of_bounds) {
+	request_rec *r = oidc_test_request_get();
+	setenv("OIDC_METRICS_CACHE_JSON_MAX", "0", 1);
+	metrics_subsystem_setup(r);
+	r->args = "format=status";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	metrics_subsystem_teardown(r);
+	unsetenv("OIDC_METRICS_CACHE_JSON_MAX");
+}
+END_TEST
+
+/* a negative elapsed time is discarded; a sum overflow resets the timing entry */
+START_TEST(test_metrics_timing_negative_and_overflow) {
+	request_rec *r = oidc_test_request_get();
+	metrics_subsystem_setup(r);
+
+	oidc_metrics_timing_add(r, OM_PROVIDER_TOKEN, -5);
+
+	/* two huge samples: the second would overflow the jansson integer range and
+	 * resets the entry instead */
+	apr_time_t huge = APR_INT64_MAX / 2 + 10;
+	oidc_metrics_timing_add(r, OM_PROVIDER_TOKEN, huge);
+	oidc_metrics_timing_add(r, OM_PROVIDER_TOKEN, huge);
+
+	metrics_subsystem_teardown(r);
+}
+END_TEST
+
+/* staggered flush rounds: a counters-only round followed by a timings-only round, so
+ * each flush finds the other family absent in the shm JSON; a status counter query
+ * against the timings-only server section reports the bare OK */
+START_TEST(test_metrics_flushed_staggered_families) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+
+	/* round 1: counters only */
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_CONNECT_ERROR);
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "connect", 5000));
+
+	/* round 2: timings only */
+	OIDC_METRICS_TIMING_START(r, c);
+	apr_sleep(apr_time_from_msec(1));
+	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "token", 5000));
 
 	e2e_metrics_teardown_flushed(r);
 }
@@ -469,6 +535,9 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
+	tcase_add_test(flushed, test_metrics_shm_size_env_out_of_bounds);
+	tcase_add_test(flushed, test_metrics_timing_negative_and_overflow);
+	tcase_add_test(flushed, test_metrics_flushed_staggered_families);
 
 	Suite *s = suite_create("metrics");
 	suite_add_tcase(s, classname);
