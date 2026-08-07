@@ -15,11 +15,14 @@ jobs:
       issues: write
     steps: 
       - if: github.event.action == 'opened'
-        uses: actions-ecosystem/action-add-labels@v1
+        # third-party actions are pinned by commit SHA: a tag is mutable, so a
+        # compromised upstream account could repoint v1 at arbitrary code that
+        # would then run with this job's issues:write token
+        uses: actions-ecosystem/action-add-labels@18f1af5e3544586314bbe15c0273249c770b2daf # v1
         name: Label Invalid
         with:
           labels: invalid
-      - uses: peter-evans/close-issue@v2
+      - uses: peter-evans/close-issue@1373cadf1f0c96c1420bc000cfba2273ea307fd1 # v2
         name: Close Issue
         with:
           comment: "https://github.com/OpenIDC/mod_auth_openidc/wiki#20-why-is-my-ticket-closed-as-invalid"
