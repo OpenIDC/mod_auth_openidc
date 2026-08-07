@@ -42,6 +42,7 @@
 
 #include "cfg/dir.h"
 #include "metadata.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -110,18 +111,26 @@ int oidc_proto_request_auth_push(request_rec *r, const struct oidc_provider_t *p
 		oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, &basic_auth, &bearer_auth) == FALSE)
 		goto out;
 
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	if (oidc_http_post_form(r, endpoint_url, params, basic_auth, bearer_auth, NULL,
 				oidc_cfg_provider_ssl_validate_server_get(provider), &response, NULL, NULL,
 				oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
 				oidc_cfg_dir_pass_cookies_get(r),
 				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
 				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
-				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE)
+				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_PAR_ERROR);
 		goto out;
+	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_PAR);
 
 	/* check for errors, the response itself will have been logged already */
-	if (oidc_json_decode_and_check_error(r, response, &j_result) == FALSE)
+	if (oidc_json_decode_and_check_error(r, response, &j_result) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_PAR_ERROR);
 		goto out;
+	}
 
 	/* get the request_uri from the parsed response */
 	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_REQUEST_URI, &request_uri, NULL);

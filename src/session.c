@@ -663,9 +663,12 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, oidc_session_sav
 
 	/* if we get here we configured client-cookie or saving in the cache failed */
 	if ((oidc_cfg_session_type_get(c) == OIDC_SESSION_TYPE_CLIENT_COOKIE) ||
-	    ((rc == FALSE) && oidc_cfg_session_cache_fallback_to_cookie_get(c)))
+	    ((rc == FALSE) && oidc_cfg_session_cache_fallback_to_cookie_get(c))) {
+		if (oidc_cfg_session_type_get(c) != OIDC_SESSION_TYPE_CLIENT_COOKIE)
+			OIDC_METRICS_COUNTER_INC(r, c, OM_SESSION_FALLBACK_COOKIE);
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z, first_time);
+	}
 
 	return rc;
 }

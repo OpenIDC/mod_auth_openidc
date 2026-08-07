@@ -32,6 +32,7 @@
 
 #include "cfg/dir.h"
 #include "http.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -235,6 +236,7 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
 				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
 				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_REGISTRATION_ERROR);
 		oidc_json_decref(data);
 		return FALSE;
 	}
@@ -242,6 +244,7 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 
 	/* decode and see if it is not an error response somehow */
 	if (oidc_json_decode_and_check_error(r, *response, j_client) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_REGISTRATION_ERROR);
 		oidc_error(r, "JSON parsing of dynamic client registration response failed");
 		return FALSE;
 	}

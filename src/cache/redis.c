@@ -45,6 +45,7 @@
 
 #include "cache/redis.h"
 #include "cfg/cfg_int.h"
+#include "metrics.h"
 
 #define REDIS_CONNECT_TIMEOUT_DEFAULT 5
 #define REDIS_TIMEOUT_DEFAULT 5
@@ -532,12 +533,16 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 	redisReply *reply = NULL;
 	char *errstr = NULL;
 	va_list ap;
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	int retries = oidc_cache_redis_env2int(r, OIDC_REDIS_MAX_TRIES_ENV_VAR, OIDC_REDIS_MAX_TRIES_DEFAULT);
 	apr_time_t interval = apr_time_from_msec(
 	    oidc_cache_redis_env2int(r, OIDC_REDIS_RETRY_INTERVAL_ENV_VAR, OIDC_REDIS_RETRY_INTERVAL_DEFAULT));
 
 	/* try to execute a command at max n times while reconnecting */
 	for (int i = 1; i <= retries; i++) {
+
+		if (i > 1)
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_RETRY);
 
 		/* connect */
 		if (context->connect(r, context) != APR_SUCCESS) {

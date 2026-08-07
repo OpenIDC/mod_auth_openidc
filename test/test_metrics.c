@@ -81,6 +81,18 @@ START_TEST(test_metrics_is_valid_classname_unknown) {
 }
 END_TEST
 
+/* the timings enum and the metrics.c info table are maintained by hand: pin the
+ * index correspondence for the entries added for the provider JWKs/PAR calls */
+START_TEST(test_metrics_timing_table_order) {
+	ck_assert_str_eq(_oidc_metrics_timings_info[OM_PROVIDER_METADATA].metric_name, "metadata");
+	ck_assert_str_eq(_oidc_metrics_timings_info[OM_PROVIDER_USERINFO].metric_name, "userinfo");
+	ck_assert_str_eq(_oidc_metrics_timings_info[OM_PROVIDER_JWKS].metric_name, "jwks");
+	ck_assert_str_eq(_oidc_metrics_timings_info[OM_PROVIDER_PAR].metric_name, "par");
+	ck_assert_str_eq(_oidc_metrics_timings_info[OM_CACHE_READ].metric_name, "read");
+	ck_assert_str_eq(_oidc_metrics_timings_info[OM_CACHE_WRITE].metric_name, "write");
+}
+END_TEST
+
 START_TEST(test_metrics_counter_names_unique) {
 	/* the exported class.metric name must be unique per counter or two series collide in the output */
 	int i, j;
@@ -422,6 +434,51 @@ START_TEST(test_metrics_flushed_twice_updates_entries) {
 }
 END_TEST
 
+/* the counters and timers added for the instrumentation gaps flush and render */
+START_TEST(test_metrics_flushed_gap_counters) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCMetricsData");
+	ck_assert_ptr_null(oidc_cmd_metrics_hook_data_set(cmd, NULL, "logout"));
+	cmd = oidc_test_cmd_get("OIDCMetricsData");
+	ck_assert_ptr_null(oidc_cmd_metrics_hook_data_set(cmd, NULL, "cache"));
+
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_JWKS_ERROR);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_PAR_ERROR);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REGISTRATION_ERROR);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REVOCATION_ERROR);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_DPOP_RETRY);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_SESSION_FALLBACK_COOKIE);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_CACHE_RETRY);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_LOGOUT_BACKCHANNEL);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_LOGOUT_BACKCHANNEL_ERROR);
+	oidc_metrics_timing_add(r, OM_PROVIDER_JWKS, apr_time_from_msec(2));
+	oidc_metrics_timing_add(r, OM_PROVIDER_PAR, apr_time_from_msec(2));
+
+	const char *body = metrics_json_wait_for(r, "backchannel", 5000);
+	ck_assert_ptr_nonnull(body);
+
+	r->args = "format=prometheus&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_error") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_error") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_registration_error") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_revocation_error") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_dpop_retry") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_session_fallback_cookie") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_retry") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_logout_backchannel") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_bucket") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_bucket") != NULL, "BODY=[%s]", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 /* an out-of-bounds OIDC_METRICS_CACHE_JSON_MAX falls back to the default shm size */
 START_TEST(test_metrics_shm_size_env_out_of_bounds) {
 	request_rec *r = oidc_test_request_get();
@@ -511,6 +568,7 @@ int main(void) {
 	tcase_add_test(classname, test_metrics_is_valid_classname_known);
 	tcase_add_test(classname, test_metrics_is_valid_classname_claim_wildcard);
 	tcase_add_test(classname, test_metrics_is_valid_classname_unknown);
+	tcase_add_test(classname, test_metrics_timing_table_order);
 	tcase_add_test(classname, test_metrics_counter_names_unique);
 
 	TCase *lifecycle = tcase_create("lifecycle");
@@ -535,6 +593,7 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
+	tcase_add_test(flushed, test_metrics_flushed_gap_counters);
 	tcase_add_test(flushed, test_metrics_shm_size_env_out_of_bounds);
 	tcase_add_test(flushed, test_metrics_timing_negative_and_overflow);
 	tcase_add_test(flushed, test_metrics_flushed_staggered_families);

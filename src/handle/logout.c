@@ -42,6 +42,7 @@
 
 #include "cfg/dir.h"
 #include "handle/handle.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -71,8 +72,10 @@ static void oidc_logout_revoke_one_token(request_rec *r, oidc_cfg_t *c, const oi
 				oidc_cfg_dir_pass_cookies_get(r),
 				oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider),
 				oidc_cfg_provider_token_endpoint_tls_client_key_get(provider),
-				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE)
+				oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider)) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REVOCATION_ERROR);
 		oidc_warn(r, "revoking %s failed", token_type_hint);
+	}
 
 	apr_table_unset(params, OIDC_PROTO_TOKEN_TYPE_HINT);
 	apr_table_unset(params, OIDC_PROTO_TOKEN);
@@ -505,6 +508,12 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 	rc = OK;
 
 out:
+
+	if (rc == OK) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_LOGOUT_BACKCHANNEL);
+	} else {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_LOGOUT_BACKCHANNEL_ERROR);
+	}
 
 	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);

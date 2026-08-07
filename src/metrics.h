@@ -67,6 +67,8 @@ typedef enum {
 	OM_PROVIDER_TOKEN,
 	OM_PROVIDER_REFRESH,
 	OM_PROVIDER_USERINFO,
+	OM_PROVIDER_JWKS,
+	OM_PROVIDER_PAR,
 
 	OM_CACHE_READ,
 	OM_CACHE_WRITE,
@@ -155,12 +157,21 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	X(OM_PROVIDER_USERINFO_ERROR,              OM_CLASS_PROVIDER,      "userinfo.error",                "errors calling a provider userinfo endpoint") \
 	X(OM_PROVIDER_CONNECT_ERROR,               OM_CLASS_PROVIDER,      "http.connect.error",            "(libcurl) provider/network connectivity errors") \
 	X(OM_PROVIDER_HTTP_RESPONSE_CODE,          OM_CLASS_PROVIDER,      "http.response.code",            "HTTP response code calling a provider endpoint") \
+	X(OM_PROVIDER_JWKS_ERROR,                  OM_CLASS_PROVIDER,      "jwks.error",                    "errors retrieving a provider JWKs document") \
+	X(OM_PROVIDER_PAR_ERROR,                   OM_CLASS_PROVIDER,      "par.error",                     "errors making a pushed authorization request to a provider") \
+	X(OM_PROVIDER_REGISTRATION_ERROR,          OM_CLASS_PROVIDER,      "registration.error",            "errors registering a client dynamically at a provider") \
+	X(OM_PROVIDER_REVOCATION_ERROR,            OM_CLASS_PROVIDER,      "revocation.error",              "errors revoking a token at a provider revocation endpoint") \
+	X(OM_PROVIDER_DPOP_RETRY,                  OM_CLASS_PROVIDER,      "dpop.retry",                    "provider calls retried with a fresh DPoP nonce") \
 	X(OM_SESSION_ERROR_COOKIE_DOMAIN,          OM_CLASS_SESSION,       "error.cookie-domain",           "cookie domain validation errors for existing sessions") \
 	X(OM_SESSION_ERROR_EXPIRED,                OM_CLASS_SESSION,       "error.expired",                 "sessions that exceeded the maximum duration") \
 	X(OM_SESSION_ERROR_REFRESH_ACCESS_TOKEN,   OM_CLASS_SESSION,       "error.refresh-access-token",    "errors refreshing the access token before expiry in existing sessions") \
 	X(OM_SESSION_ERROR_REFRESH_USERINFO,       OM_CLASS_SESSION,       "error.refresh-user-info",       "errors refreshing claims from the userinfo endpoint in existing sessions") \
 	X(OM_SESSION_ERROR_GENERAL,                OM_CLASS_SESSION,       "error.general",                 "existing sessions that failed validation") \
+	X(OM_SESSION_FALLBACK_COOKIE,              OM_CLASS_SESSION,       "fallback-cookie",               "sessions stored in a browser cookie after a session cache write failure") \
 	X(OM_CACHE_ERROR,                          OM_CLASS_CACHE,         "cache.error",                   "cache read/write errors") \
+	X(OM_CACHE_RETRY,                          OM_CLASS_CACHE,         "cache.retry",                   "cache operations retried after a backend failure") \
+	X(OM_LOGOUT_BACKCHANNEL,                   OM_CLASS_LOGOUT,        "backchannel",                   "back-channel logout requests processed successfully") \
+	X(OM_LOGOUT_BACKCHANNEL_ERROR,             OM_CLASS_LOGOUT,        "backchannel.error",             "back-channel logout requests rejected") \
 	X(OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT, OM_CLASS_REDIRECT_URI,  "authn.response.redirect",       "authentication responses received in a redirect") \
 	X(OM_REDIRECT_URI_AUTHN_RESPONSE_POST,     OM_CLASS_REDIRECT_URI,  "authn.response.post",           "authentication responses received in a HTTP POST") \
 	X(OM_REDIRECT_URI_AUTHN_RESPONSE_IMPLICIT, OM_CLASS_REDIRECT_URI,  "authn.response.implicit",       "(presumed) implicit authentication responses to the redirect URI") \

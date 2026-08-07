@@ -65,6 +65,7 @@
 #define OM_CLASS_PROVIDER      "provider"       // Requests to the provider [token, userinfo, metadata] endpoints.
 #define OM_CLASS_SESSION       "session"        // Existing session processing.
 #define OM_CLASS_CACHE         "cache"          // Cache read/write timings and errors.
+#define OM_CLASS_LOGOUT        "logout"         // Front- and back-channel logout processing.
 #define OM_CLASS_REDIRECT_URI  "redirect_uri"   // Requests to the Redirect URI, per type.
 #define OM_CLASS_CONTENT       "content"        // Requests to the content handler, per type of request: info, metrics, jwks, etc.
 
@@ -87,6 +88,8 @@ const oidc_metrics_timing_info_t _oidc_metrics_timings_info[] = {
   { OM_CLASS_PROVIDER, "token",    "provider token requests" },
   { OM_CLASS_PROVIDER, "refresh",  "provider refresh token requests" },
   { OM_CLASS_PROVIDER, "userinfo", "provider userinfo requests" },
+  { OM_CLASS_PROVIDER, "jwks",     "provider JWKs document requests" },
+  { OM_CLASS_PROVIDER, "par",      "provider pushed authorization requests" },
 
   { OM_CLASS_CACHE,    "read",     "cache read requests" },
   { OM_CLASS_CACHE,    "write",    "cache write requests" },

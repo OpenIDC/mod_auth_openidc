@@ -31,6 +31,7 @@
 
 #include "cache/cache.h"
 #include "http.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -153,11 +154,17 @@ static apr_byte_t oidc_metadata_jwks_retrieve_and_cache(request_rec *r, oidc_cfg
 	char *response = NULL;
 	const char *url = (jwks_uri->signed_uri != NULL) ? jwks_uri->signed_uri : jwks_uri->uri;
 
+	OIDC_METRICS_TIMING_START(r, cfg);
+
 	/* get the JWKs from the specified URL with the specified parameters */
 	if (oidc_http_get(r, url, NULL, NULL, NULL, NULL, ssl_validate_server, &response, NULL, NULL,
 			  oidc_cfg_http_timeout_long_get(cfg), oidc_cfg_outgoing_proxy_get(cfg),
-			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE)
+			  oidc_cfg_dir_pass_cookies_get(r), NULL, NULL, NULL) == FALSE) {
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_JWKS_ERROR);
 		return FALSE;
+	}
+
+	OIDC_METRICS_TIMING_ADD(r, cfg, OM_PROVIDER_JWKS);
 
 	if ((jwks_uri->signed_uri != NULL) && (jwks_uri->jwk_list != NULL)) {
 

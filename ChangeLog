@@ -1,4 +1,8 @@
 08/07/2026
+- metrics: add counters and timers for the remaining outbound provider calls and
+  operational events: JWKs retrieval, pushed authorization requests, dynamic client
+  registration, token revocation, DPoP nonce retries, back-channel logout outcomes,
+  session-cache-to-cookie fallbacks and cache operation retries
 - metadata: avoid a NULL pointer dereference (segfault) when the OP selection/discovery
   page is served while no OIDCMetadataDir is configured, and catch an RP vhost that
   configures OIDCRedirectURI without any provider source at startup

@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -66,6 +67,9 @@ apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, const oidc_cfg_t *cfg, cons
 	}
 
 	rv = oidc_proto_dpop_create(r, cfg, url, method, access_token, dpop_nonce, dpop);
+
+	if (rv == TRUE)
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_PROVIDER_DPOP_RETRY);
 
 end:
 
