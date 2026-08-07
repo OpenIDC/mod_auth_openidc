@@ -10,6 +10,8 @@
   option-matrix tests across the http, jose, session, cache, oauth and handler code
 - test: fail the fuzz seed corpus replay when no target actually ran, instead of
   reporting a pass after skipping all of them
+- jose: test the compression backend macro with "#elif defined(USE_ZLIB)", matching
+  the "#ifdef USE_LIBBROTLI" above it and keeping the file -Wundef clean
 
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read

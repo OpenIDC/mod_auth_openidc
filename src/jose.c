@@ -50,7 +50,7 @@
 #ifdef USE_LIBBROTLI
 #include <brotli/decode.h>
 #include <brotli/encode.h>
-#elif USE_ZLIB
+#elif defined(USE_ZLIB)
 #include <zlib.h>
 #endif
 
@@ -278,7 +278,7 @@ static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *inpu
 	return TRUE;
 }
 
-#elif USE_ZLIB
+#elif defined(USE_ZLIB)
 
 /*
  * deflate using zlib
@@ -405,7 +405,7 @@ apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len
 			      oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
 	return oidc_jose_brotli_compress(pool, input, input_len, output, output_len, err);
-#elif USE_ZLIB
+#elif defined(USE_ZLIB)
 	return oidc_jose_zlib_compress(pool, input, input_len, output, output_len, err);
 #else
 	*output = apr_pmemdup(pool, input, input_len);
@@ -421,7 +421,7 @@ apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_l
 				oidc_jose_error_t *err) {
 #ifdef USE_LIBBROTLI
 	return oidc_jose_brotli_uncompress(pool, input, input_len, output, output_len, err);
-#elif USE_ZLIB
+#elif defined(USE_ZLIB)
 	return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, err);
 #else
 	*output = apr_pmemdup(pool, input, input_len);
