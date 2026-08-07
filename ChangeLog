@@ -1,4 +1,8 @@
 08/07/2026
+- security: HTML-escape the three values still interpolated raw into an attribute on a
+  generated page: the redirect URI in the discovery page's provider links and form action,
+  which a relative OIDCRedirectURI resolves against the request's host, and the provider's
+  authorization endpoint in the auto-POST form
 - security: start a new session on login instead of writing the newly authenticated
   identity into whatever session id the browser presented, which let anyone able to set a
   cookie for the host keep a handle on the session and leave state in it beforehand;

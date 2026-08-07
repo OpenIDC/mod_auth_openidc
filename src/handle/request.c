@@ -172,11 +172,13 @@ static const char *oidc_request_html_post(request_rec *r, const char *url, const
 
 	oidc_debug(r, "enter");
 
+	/* the action is the provider's authorization endpoint, i.e. it comes from provider
+	 * metadata rather than from us; escape it like the parameters added below already are */
 	const char *html_body = apr_psprintf(r->pool,
 					     "    <p>Submitting Authentication Request...</p>\n"
 					     "    <form method=\"post\" action=\"%s\">\n"
 					     "      <p>\n",
-					     url);
+					     oidc_util_html_escape(r->pool, url));
 
 	oidc_request_form_post_ctx_t data = {r, html_body};
 	apr_table_do(oidc_request_form_post_param_add, &data, params, NULL);

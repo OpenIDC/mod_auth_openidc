@@ -151,10 +151,17 @@ static const char *oidc_discovery_page_providers(request_rec *r, const oidc_cfg_
 
 		const char *issuer = APR_ARRAY_IDX(arr, i, const char *);
 
-		char *href = apr_psprintf(
-		    r->pool, "%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s", oidc_util_url_redirect_uri(r, cfg),
-		    OIDC_DISC_OP_PARAM, oidc_http_url_encode(r, issuer), OIDC_DISC_RT_PARAM,
-		    oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM, method, OIDC_CSRF_NAME, csrf);
+		/* NB: the redirect URI is the one part of this href that is not URL-encoded on the
+		 * way in, and a relative OIDCRedirectURI resolves it against the current request's
+		 * host - so HTML-escape it before it lands in an attribute. The remaining values are
+		 * either module-controlled or passed through oidc_http_url_encode(), which
+		 * percent-encodes everything outside the RFC 3986 unreserved set. Escaping the whole
+		 * href instead would double-encode the "&amp;" separators written here deliberately. */
+		char *href = apr_psprintf(r->pool, "%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s",
+					  oidc_util_html_escape(r->pool, oidc_util_url_redirect_uri(r, cfg)),
+					  OIDC_DISC_OP_PARAM, oidc_http_url_encode(r, issuer), OIDC_DISC_RT_PARAM,
+					  oidc_http_url_encode(r, current_url), OIDC_DISC_RM_PARAM, method,
+					  OIDC_CSRF_NAME, csrf);
 
 		if (path_scopes != NULL)
 			href = apr_psprintf(r->pool, "%s&amp;%s=%s", href, OIDC_DISC_SC_PARAM,
@@ -186,7 +193,10 @@ static const char *oidc_discovery_page_form(request_rec *r, const oidc_cfg_t *cf
 	const char *path_scopes = oidc_cfg_dir_path_scope_get(r);
 	const char *path_auth_request_params = oidc_cfg_dir_path_auth_request_params_get(r);
 
-	s = apr_psprintf(r->pool, "%s<form method=\"get\" action=\"%s\">\n", s, oidc_util_url_redirect_uri(r, cfg));
+	/* same as the provider links above: the redirect URI is the only value here that does not
+	 * arrive escaped, and a relative OIDCRedirectURI resolves it against the request's host */
+	s = apr_psprintf(r->pool, "%s<form method=\"get\" action=\"%s\">\n", s,
+			 oidc_util_html_escape(r->pool, oidc_util_url_redirect_uri(r, cfg)));
 	s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s, OIDC_DISC_RT_PARAM,
 			 oidc_util_html_escape(r->pool, current_url));
 	s = apr_psprintf(r->pool, "%s<p><input type=\"hidden\" name=\"%s\" value=\"%s\"><p>\n", s, OIDC_DISC_RM_PARAM,
