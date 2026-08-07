@@ -1,4 +1,7 @@
 08/07/2026
+- security: require the "iat" and "jti" claims in a back-channel logout token, both of
+  which OpenID Connect Back-Channel Logout 1.0 makes REQUIRED; without them a captured
+  logout token stayed valid indefinitely and its replay was undetectable
 - security: redact the credentials that were written verbatim to the log: the provider's
   response body, the authorization code and tokens parsed out of a front-channel response
   or back-channel logout request, the unhashed cache key (which is the session id or a

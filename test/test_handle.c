@@ -4556,9 +4556,12 @@ END_TEST
 /* build a backchannel-logout JWT with the spec-required events claim, HS256-signed
  * with the given symmetric secret (default: NULL events claim is omitted, default:
  * NULL nonce claim is omitted) */
-static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, const char *aud, const char *sub,
-					     const char *jti, apr_byte_t with_events, apr_byte_t with_nonce,
-					     const char *secret) {
+/* the _ex form additionally allows omitting the spec-required "jti" (pass NULL) and "iat"
+ * (pass with_iat = FALSE), so the validation of those can be tested; the plain form below
+ * keeps the signature its ten callers use */
+static char *e2e_sign_backchannel_logout_jwt_ex(request_rec *r, const char *iss, const char *aud, const char *sub,
+						const char *jti, apr_byte_t with_events, apr_byte_t with_nonce,
+						apr_byte_t with_iat, const char *secret) {
 	apr_pool_t *pool = r->pool;
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
@@ -4570,9 +4573,11 @@ static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, co
 	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string(iss));
 	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string(aud));
 	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string(sub));
-	oidc_json_object_set_new(jwt->payload.value.json, "jti", oidc_json_string(jti));
+	if (jti != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "jti", oidc_json_string(jti));
 	apr_time_t now = apr_time_sec(apr_time_now());
-	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	if (with_iat)
+		oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
 	if (with_events) {
 		oidc_json_t *events = oidc_json_object();
 		oidc_json_object_set_new(events, "http://schemas.openid.net/event/backchannel-logout",
@@ -4583,7 +4588,8 @@ static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, co
 		oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string("n1"));
 	jwt->payload.iss = apr_pstrdup(pool, iss);
 	jwt->payload.sub = apr_pstrdup(pool, sub);
-	jwt->payload.iat = now;
+	if (with_iat)
+		jwt->payload.iat = now;
 
 	ck_assert_int_eq(oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), TRUE);
 	char *cser = oidc_jose_jwt_serialize(pool, jwt, &err);
@@ -4591,6 +4597,12 @@ static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, co
 	oidc_jwk_destroy(jwk);
 	oidc_jwt_destroy(jwt);
 	return cser;
+}
+
+static char *e2e_sign_backchannel_logout_jwt(request_rec *r, const char *iss, const char *aud, const char *sub,
+					     const char *jti, apr_byte_t with_events, apr_byte_t with_nonce,
+					     const char *secret) {
+	return e2e_sign_backchannel_logout_jwt_ex(r, iss, aud, sub, jti, with_events, with_nonce, TRUE, secret);
 }
 
 /* wrap a compact JWT string in a symmetric JWE (A256KW/A256GCM) using a key derived from the secret the
@@ -4648,6 +4660,42 @@ START_TEST(test_handle_logout_backchannel_happy_path) {
 	ck_assert_ptr_nonnull(cc);
 
 	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a logout token missing a claim that OpenID Connect Back-Channel Logout 1.0 section 2.4
+ * makes REQUIRED must be rejected: "iat" is what bounds replay, and "jti" is what makes a
+ * replay detectable at all */
+static void e2e_backchannel_logout_missing_claim(const char *jti, apr_byte_t with_iat) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt_ex(r, "https://idp.example.com", "client_id", "alice", jti,
+							      TRUE, FALSE, with_iat, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	ck_assert_int_eq(oidc_logout(r, c, session), HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+
+START_TEST(test_handle_logout_backchannel_missing_iat) {
+	e2e_backchannel_logout_missing_claim("jti-no-iat", FALSE);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_missing_jti) {
+	e2e_backchannel_logout_missing_claim(NULL, TRUE);
 }
 END_TEST
 
@@ -6588,6 +6636,8 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_request_frontchannel_img);
 	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
 	tcase_add_test(logout, test_handle_logout_backchannel_happy_path);
+	tcase_add_test(logout, test_handle_logout_backchannel_missing_iat);
+	tcase_add_test(logout, test_handle_logout_backchannel_missing_jti);
 	tcase_add_test(logout, test_handle_logout_backchannel_encrypted);
 	tcase_add_test(logout, test_handle_logout_backchannel_by_sub);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_events_claim);

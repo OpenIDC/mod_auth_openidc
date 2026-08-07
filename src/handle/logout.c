@@ -386,9 +386,12 @@ static int oidc_logout_backchannel_verify_jwt(request_rec *r, oidc_cfg_t *cfg, o
 		oidc_error(r, "id_token signature could not be validated, aborting");
 		return HTTP_BAD_REQUEST;
 	}
+	/* NB: "iat" is REQUIRED in a logout token (OpenID Connect Back-Channel Logout 1.0, 2.4),
+	 * and it is what bounds replay: without it a captured token stays valid indefinitely once
+	 * the jti cache entry expires. "exp" is not required by that spec, so it stays optional. */
 	if (oidc_proto_jwt_validate(
 		r, jwt, oidc_cfg_provider_validate_issuer_get(provider) ? oidc_cfg_provider_issuer_get(provider) : NULL,
-		FALSE, FALSE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
+		FALSE, TRUE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
 		return HTTP_BAD_REQUEST;
 	/* verify the "aud" and "azp" values */
 	if (oidc_proto_idtoken_validate_aud_and_azp(r, cfg, provider, &jwt->payload) == FALSE)
@@ -403,15 +406,22 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 	apr_time_t jti_cache_duration;
 
 	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
-	if (jti != NULL) {
-		oidc_cache_get_jti(r, jti, &replay);
-		if (replay != NULL) {
-			oidc_error(r,
-				   "the \"%s\" value (%s) passed in logout token was found in the cache already; "
-				   "possible replay attack!?",
-				   OIDC_CLAIM_JTI, jti);
-			return HTTP_BAD_REQUEST;
-		}
+
+	/* "jti" is REQUIRED in a logout token (OpenID Connect Back-Channel Logout 1.0, 2.4) and is
+	 * what makes replay detectable at all; a token without one used to skip the check entirely
+	 * and then write a cache entry under a NULL key that no lookup ever reads */
+	if (jti == NULL) {
+		oidc_error(r, "logout token does not contain the required \"%s\" claim", OIDC_CLAIM_JTI);
+		return HTTP_BAD_REQUEST;
+	}
+
+	oidc_cache_get_jti(r, jti, &replay);
+	if (replay != NULL) {
+		oidc_error(r,
+			   "the \"%s\" value (%s) passed in logout token was found in the cache already; "
+			   "possible replay attack!?",
+			   OIDC_CLAIM_JTI, jti);
+		return HTTP_BAD_REQUEST;
 	}
 
 	/* jti cache duration is the configured replay prevention window for token issuance plus 10 seconds for safety
