@@ -333,7 +333,7 @@ START_TEST(test_util_expr_exec) {
 	// NB: stub only
 	result = oidc_util_apr_expr_exec(r, expr, OIDC_APR_EXPR_RESULT_STRING);
 	ck_assert_ptr_nonnull(result);
-	ck_assert_str_eq(result, "stub.c");
+	ck_assert_str_eq(result, "true");
 	// NB: stub only
 	result = oidc_util_apr_expr_exec(r, expr, OIDC_APR_EXPR_RESULT_BOOLEAN);
 	ck_assert_ptr_null(result);

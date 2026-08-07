@@ -186,6 +186,163 @@ START_TEST(test_handle_userinfo_retrieve_non_401_no_refresh) {
 }
 END_TEST
 
+/* a connectivity error (no HTTP response at all) must not trigger a token refresh */
+START_TEST(test_handle_userinfo_retrieve_connectivity_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-CONN-ERR");
+
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider,
+						    apr_psprintf(r->pool, "http://127.0.0.1:%d/userinfo", free_port));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	oidc_json_t *claims = NULL;
+	char *userinfo_jwt = NULL;
+	const char *result =
+	    oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", session, NULL, &claims, &userinfo_jwt);
+	ck_assert_ptr_null(result);
+	/* the refresh grant was never entered */
+	char *cached = NULL;
+	oidc_cache_get_refresh_token(r, "RT-CONN-ERR", &cached);
+	ck_assert_ptr_null(cached);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a 401 from the userinfo endpoint triggers a token refresh and a successful retry;
+ * the id_token "sub" for the retry is taken from the session's id_token claims */
+START_TEST(test_handle_userinfo_retrieve_refresh_and_retry) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-RETRY-OK");
+	oidc_json_t *idt_claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_idtoken_claims(r, session, idt_claims);
+
+	/* userinfo: first a 401, then success */
+	oidc_test_http_response_t ui_responses[2] = {
+	    {.status_code = 401, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"},
+	    {.status_code = 200, .content_type = "application/json", .body = "{\"sub\":\"alice\",\"tier\":\"gold\"}"},
+	};
+	oidc_test_http_server_t *ui_srv = oidc_test_http_server_start_seq(r->pool, ui_responses, 2);
+	ck_assert_ptr_nonnull(ui_srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(ui_srv, r->pool));
+
+	/* token endpoint: hands out a fresh access token for the refresh grant */
+	oidc_test_http_response_t tok_resp = {.status_code = 200,
+					      .content_type = "application/json",
+					      .body = "{\"access_token\":\"AT-FRESHER\",\"token_type\":\"Bearer\","
+						      "\"expires_in\":3600}"};
+	oidc_test_http_server_t *tok_srv = oidc_test_http_server_start(r->pool, &tok_resp);
+	ck_assert_ptr_nonnull(tok_srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(tok_srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+
+	oidc_json_t *claims = NULL;
+	char *userinfo_jwt = NULL;
+	const char *result =
+	    oidc_userinfo_retrieve_claims(r, c, provider, "AT-STALE", "Bearer", session, NULL, &claims, &userinfo_jwt);
+	ck_assert_ptr_nonnull(result);
+	ck_assert_ptr_nonnull(claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(claims, "tier")), "gold");
+	ck_assert_int_eq(oidc_test_http_server_request_count(ui_srv), 2);
+	/* the retry presented the refreshed access token */
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_captured(ui_srv, 1);
+	ck_assert_ptr_nonnull(cap);
+	const char *auth = apr_table_get(cap->headers, "Authorization");
+	ck_assert_ptr_nonnull(auth);
+	ck_assert_ptr_nonnull(_oidc_strstr(auth, "AT-FRESHER"));
+
+	oidc_test_http_server_stop(ui_srv);
+	oidc_test_http_server_stop(tok_srv);
+	oidc_json_decref(idt_claims);
+	oidc_json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a 401 whose follow-up token refresh fails yields no claims */
+START_TEST(test_handle_userinfo_retrieve_refresh_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-REFRESH-FAILS");
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 401, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider,
+						 apr_psprintf(r->pool, "http://127.0.0.1:%d/token", free_port));
+
+	oidc_json_t *claims = NULL;
+	char *userinfo_jwt = NULL;
+	const char *result =
+	    oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", session, NULL, &claims, &userinfo_jwt);
+	ck_assert_ptr_null(result);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a 401 followed by a successful refresh but a still-failing retry yields no claims */
+START_TEST(test_handle_userinfo_retrieve_retry_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-RETRY-FAILS");
+
+	oidc_test_http_response_t ui_responses[2] = {
+	    {.status_code = 401, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"},
+	    {.status_code = 401, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"},
+	};
+	oidc_test_http_server_t *ui_srv = oidc_test_http_server_start_seq(r->pool, ui_responses, 2);
+	ck_assert_ptr_nonnull(ui_srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(ui_srv, r->pool));
+
+	oidc_test_http_response_t tok_resp = {.status_code = 200,
+					      .content_type = "application/json",
+					      .body = "{\"access_token\":\"AT-STILL-BAD\",\"token_type\":\"Bearer\","
+						      "\"expires_in\":3600}"};
+	oidc_test_http_server_t *tok_srv = oidc_test_http_server_start(r->pool, &tok_resp);
+	ck_assert_ptr_nonnull(tok_srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(tok_srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+
+	oidc_json_t *claims = NULL;
+	char *userinfo_jwt = NULL;
+	const char *result =
+	    oidc_userinfo_retrieve_claims(r, c, provider, "AT", "Bearer", session, NULL, &claims, &userinfo_jwt);
+	ck_assert_ptr_null(result);
+	ck_assert_int_eq(oidc_test_http_server_request_count(ui_srv), 2);
+
+	oidc_test_http_server_stop(ui_srv);
+	oidc_test_http_server_stop(tok_srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_userinfo_store_and_clear_claims) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -222,6 +379,181 @@ START_TEST(test_handle_userinfo_refresh_no_interval) {
 	ck_assert_int_eq(oidc_userinfo_refresh_claims(r, c, session, &needs_save), TRUE);
 	ck_assert_int_eq(needs_save, FALSE);
 
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* refresh-claims short-circuits: no provider in the session, no userinfo endpoint,
+ * and a last-refresh timestamp that is still fresh */
+START_TEST(test_handle_userinfo_refresh_claims_short_circuits) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	apr_byte_t needs_save = FALSE;
+
+	/* 1: interval set but no issuer in the session => provider resolution fails */
+	oidc_session_load(r, &session);
+	oidc_session_set_userinfo_refresh_interval(r, session, 1);
+	ck_assert_int_eq(oidc_userinfo_refresh_claims(r, c, session, &needs_save), FALSE);
+	ck_assert_int_eq(needs_save, TRUE);
+	oidc_session_free(r, session);
+
+	/* 2: provider resolves but has no userinfo endpoint */
+	needs_save = FALSE;
+	oidc_session_load(r, &session);
+	oidc_session_set_userinfo_refresh_interval(r, session, 1);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	ck_assert_int_eq(oidc_userinfo_refresh_claims(r, c, session, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, FALSE);
+	oidc_session_free(r, session);
+
+	/* 3: endpoint set but the last refresh is inside the interval */
+	needs_save = FALSE;
+	oidc_session_load(r, &session);
+	oidc_session_set_userinfo_refresh_interval(r, session, 3600);
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, "https://idp.example.com/userinfo");
+	oidc_session_reset_userinfo_last_refresh(r, session);
+	ck_assert_int_eq(oidc_userinfo_refresh_claims(r, c, session, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, FALSE);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* the client-cookie session type refuses to pass the userinfo JWT, and a
+ * server-cache session without a stored JWT is a silent no-op */
+START_TEST(test_handle_userinfo_pass_as_jwt_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+	oidc_session_set_userinfo_jwt(r, session, "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.sig-bytes");
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "jwt")));
+
+	/* 1: client-cookie sessions cannot store a userinfo JWT */
+	c->session_type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_table_unset(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_USERINFO_JWT);
+	c->session_type = OIDC_SESSION_TYPE_SERVER_CACHE;
+
+	/* 2: no JWT stored in the session */
+	oidc_session_set_userinfo_jwt(r, session, NULL);
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_table_unset(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_USERINFO_JWT);
+
+	oidc_json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* "claims" is dispatched to oidc_set_app_claims and lands as individual claim headers */
+START_TEST(test_handle_userinfo_pass_as_claims) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "tier", "gold");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "claims")));
+
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	const char *hdr = apr_table_get(r->headers_in, "OIDC_CLAIM_tier");
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_str_eq(hdr, "gold");
+
+	oidc_json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+#ifdef USE_LIBJQ
+/* OIDCUserInfoClaimsExpr filters the userinfo claims through JQ before passing them */
+START_TEST(test_handle_userinfo_pass_as_jq_filter) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_json_t *claims = json_pack("{s:s,s:s}", "sub", "alice", "secret", "dont-pass");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "claims")));
+	cmd = oidc_test_cmd_get(OIDCUserInfoClaimsExpr);
+	ck_assert_ptr_null(oidc_cmd_dir_userinfo_claims_expr_set(cmd, dir_cfg, "{sub: .sub}"));
+
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_ptr_nonnull(apr_table_get(r->headers_in, "OIDC_CLAIM_sub"));
+	ck_assert_table_unset(r->headers_in, "OIDC_CLAIM_secret");
+
+	oidc_json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a JQ filter whose result is not a JSON object suppresses claim passing altogether */
+START_TEST(test_handle_userinfo_pass_as_jq_filter_invalid_result) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "claims")));
+	cmd = oidc_test_cmd_get(OIDCUserInfoClaimsExpr);
+	ck_assert_ptr_null(oidc_cmd_dir_userinfo_claims_expr_set(cmd, dir_cfg, ".sub"));
+
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	ck_assert_table_unset(r->headers_in, "OIDC_CLAIM_sub");
+
+	oidc_json_decref(claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+#endif
+
+/* a positive OIDC_USERINFO_SIGNED_JWT_CACHE_TTL caches the signed JWT for that many seconds */
+START_TEST(test_handle_userinfo_pass_as_signed_jwt_fixed_ttl) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *key_cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(
+	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir))));
+
+	oidc_json_t *claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_userinfo_claims(r, session, claims);
+
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, apr_pstrdup(r->pool, "signed_jwt")));
+
+	apr_table_set(r->subprocess_env, "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL", "60");
+	oidc_userinfo_pass_as(r, c, session, OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	apr_table_unset(r->subprocess_env, "OIDC_USERINFO_SIGNED_JWT_CACHE_TTL");
+
+	ck_assert_ptr_nonnull(apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_SIGNED_JWT));
+
+	oidc_json_decref(claims);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -1307,7 +1639,8 @@ START_TEST(test_handle_response_hybrid_code_token_no_idtoken) {
 }
 END_TEST
 
-/* implicit flow "id_token token": no code, no token endpoint call */
+/* implicit flow "id_token token": no code, no token endpoint call; the access token
+ * is presented at the userinfo endpoint and the claims land in the session */
 START_TEST(test_handle_response_implicit_idtoken_token) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1318,6 +1651,13 @@ START_TEST(test_handle_response_implicit_idtoken_token) {
 	const char *secret = "implicit-flow-shared-secret-long-enough";
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
 	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	oidc_test_http_response_t ui_resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"sub\":\"alice\",\"tier\":\"gold\"}"};
+	oidc_test_http_server_t *ui_srv = oidc_test_http_server_start(r->pool, &ui_resp);
+	ck_assert_ptr_nonnull(ui_srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(ui_srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
 	char *state = e2e_implicit_state_cookie_mode(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN,
 						     OIDC_PROTO_RESPONSE_MODE_FRAGMENT, "nonce-imp1", NULL, NULL, NULL);
@@ -1330,7 +1670,13 @@ START_TEST(test_handle_response_implicit_idtoken_token) {
 	int rc = oidc_response_authorization_post(r, c, session);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+	/* the userinfo claims were resolved and stored */
+	oidc_json_t *stored = oidc_session_get_userinfo_claims(r, session);
+	ck_assert_ptr_nonnull(stored);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(stored, "tier")), "gold");
 
+	(void)oidc_test_http_server_wait(ui_srv);
+	oidc_test_http_server_stop(ui_srv);
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -5740,6 +6086,18 @@ int main(void) {
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_with_private_keys);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_cached);
 	tcase_add_test(userinfo, test_handle_userinfo_pass_as_json);
+	tcase_add_test(userinfo, test_handle_userinfo_retrieve_connectivity_error);
+	tcase_add_test(userinfo, test_handle_userinfo_retrieve_refresh_and_retry);
+	tcase_add_test(userinfo, test_handle_userinfo_retrieve_refresh_fails);
+	tcase_add_test(userinfo, test_handle_userinfo_retrieve_retry_fails);
+	tcase_add_test(userinfo, test_handle_userinfo_refresh_claims_short_circuits);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_jwt_negatives);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_claims);
+#ifdef USE_LIBJQ
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_jq_filter);
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_jq_filter_invalid_result);
+#endif
+	tcase_add_test(userinfo, test_handle_userinfo_pass_as_signed_jwt_fixed_ttl);
 
 	TCase *refresh = tcase_create("refresh");
 	tcase_add_checked_fixture(refresh, oidc_test_setup, oidc_test_teardown);

@@ -269,7 +269,9 @@ ap_expr_parse_cmd_mi(const cmd_parms *cmd, const char *expr, unsigned int flags,
 		return NULL;
 	}
 	ap_expr_info_t *rv = apr_pcalloc(cmd->pool, sizeof(ap_expr_info_t));
-	rv->filename = "stub.c";
+	/* echo the expression through ap_expr_str_exec below so string-valued
+	 * expression directives behave like literal strings in the tests */
+	rv->filename = apr_pstrdup(cmd->pool, expr);
 	rv->root_node = NULL;
 	return rv;
 }

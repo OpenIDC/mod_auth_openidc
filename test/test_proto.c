@@ -2604,6 +2604,469 @@ START_TEST(test_proto_userinfo_request_composite_names_without_sources) {
 }
 END_TEST
 
+/* sign a {"sub":"alice"} userinfo payload as an HS256 compact JWT with the given secret */
+static char *e2e_sign_userinfo_jwt(request_rec *r, const char *secret) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+/* a userinfo response that is neither JSON nor a JWT is rejected */
+START_TEST(test_proto_userinfo_response_garbage) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "text/plain", .body = "certainly &not* a JWT"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a JWT userinfo response without a configured signed response alg is refused */
+START_TEST(test_proto_userinfo_response_jwt_no_alg_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "userinfo-jwt-response-secret-32-bytes!";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/jwt", .body = e2e_sign_userinfo_jwt(r, secret)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a signed JWT userinfo response verified with the client secret round-trips */
+START_TEST(test_proto_userinfo_response_signed_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "userinfo-jwt-response-secret-32-bytes!";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/jwt", .body = e2e_sign_userinfo_jwt(r, secret)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_jwt);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(userinfo_claims, "sub")), "alice");
+
+	oidc_json_decref(userinfo_claims);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a signed JWT userinfo response with a wrong signature is refused */
+START_TEST(test_proto_userinfo_response_signed_jwt_bad_signature) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "userinfo-jwt-response-secret-32-bytes!");
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/jwt",
+					  .body = e2e_sign_userinfo_jwt(r, "another-userinfo-secret-32-bytes!!!")};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* an encrypted (JWE) userinfo response is decrypted with the client-secret-derived
+ * key before the inner signed JWT is verified */
+START_TEST(test_proto_userinfo_response_encrypted_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "userinfo-jwt-response-secret-32-bytes!";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_encrypted_response_alg_set(r->pool, provider, "A256KW"));
+
+	/* wrap the signed JWT in a symmetric JWE the same way the module derives its key */
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(
+	    oidc_util_key_symmetric_create(r, secret, oidc_alg2keysize("A256KW"), OIDC_JOSE_ALG_SHA256, TRUE, &jwk),
+	    TRUE);
+	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwe->header.alg = apr_pstrdup(r->pool, "A256KW");
+	jwe->header.enc = apr_pstrdup(r->pool, "A256GCM");
+	char *plaintext = e2e_sign_userinfo_jwt(r, secret);
+	char *cser = NULL;
+	ck_assert_int_eq(oidc_jwt_encrypt(r->pool, jwe, jwk, plaintext, (int)_oidc_strlen(plaintext), &cser, &err),
+			 TRUE);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwe);
+
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/jwt", .body = cser};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(userinfo_claims, "sub")), "alice");
+
+	oidc_json_decref(userinfo_claims);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* an expected-encrypted userinfo response that is not actually a JWE fails to decrypt */
+START_TEST(test_proto_userinfo_response_encrypted_jwt_decrypt_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "userinfo-jwt-response-secret-32-bytes!";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_encrypted_response_alg_set(r->pool, provider, "A256KW"));
+
+	/* a plain signed JWT where a JWE was expected */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/jwt", .body = e2e_sign_userinfo_jwt(r, secret)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* composite-claim negatives: an unparsable source JWT, a non-string name value
+ * and a name that points at a missing source */
+START_TEST(test_proto_userinfo_request_composite_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = "{\"sub\":\"alice\","
+		    "\"_claim_names\":{\"shoe_size\":\"src1\",\"age\":42,\"height\":\"missing_src\"},"
+		    "\"_claim_sources\":{\"src1\":{\"JWT\":\"not-a-parsable-jwt\"}}}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	/* the composite decoding failures are logged, the request itself succeeds */
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+
+	oidc_json_decref(userinfo_claims);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a DPoP userinfo request that is answered with use_dpop_nonce is retried with the
+ * nonce from the response header */
+START_TEST(test_proto_userinfo_request_dpop_nonce_retry) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
+
+	apr_table_t *nonce_hdrs = apr_table_make(r->pool, 1);
+	apr_table_set(nonce_hdrs, "DPoP-Nonce", "server-nonce-1");
+	oidc_test_http_response_t responses[2] = {
+	    {.status_code = 400,
+	     .content_type = "application/json",
+	     .body = "{\"error\":\"use_dpop_nonce\"}",
+	     .extra_headers = nonce_hdrs},
+	    {.status_code = 200, .content_type = "application/json", .body = "{\"sub\":\"alice\"}"},
+	};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, responses, 2);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT-DPOP", "DPoP", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 TRUE);
+	ck_assert_ptr_nonnull(userinfo_claims);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(userinfo_claims, "sub")), "alice");
+
+	/* two requests were made */
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+
+	oidc_json_decref(userinfo_claims);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a DPoP retry that still yields an error response is a hard failure */
+START_TEST(test_proto_userinfo_request_dpop_nonce_retry_still_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
+
+	apr_table_t *nonce_hdrs = apr_table_make(r->pool, 1);
+	apr_table_set(nonce_hdrs, "DPoP-Nonce", "server-nonce-2");
+	oidc_test_http_response_t responses[2] = {
+	    {.status_code = 400,
+	     .content_type = "application/json",
+	     .body = "{\"error\":\"use_dpop_nonce\"}",
+	     .extra_headers = nonce_hdrs},
+	    {.status_code = 400, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"},
+	};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, responses, 2);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT-DPOP", "DPoP", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a response with a decodable JWT header but an unparsable body */
+START_TEST(test_proto_userinfo_response_jwt_body_unparsable) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "userinfo-jwt-response-secret-32-bytes!");
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/jwt", .body = "eyJhbGciOiJIUzI1NiJ9.!not-base64!.c2ln"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a JWT response cannot be processed when no client secret is configured to derive keys from */
+START_TEST(test_proto_userinfo_response_jwt_no_client_secret) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	ck_assert_ptr_null(oidc_cfg_provider_userinfo_signed_response_alg_set(r->pool, provider, "HS256"));
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/jwt",
+					  .body = e2e_sign_userinfo_jwt(r, "some-random-secret-32-bytes-long!!")};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* POST-method connectivity error and an unsupported token presentation method */
+START_TEST(test_proto_userinfo_endpoint_call_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider,
+						    apr_psprintf(r->pool, "http://127.0.0.1:%d/userinfo", free_port));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+
+	oidc_cfg_provider_userinfo_token_method_int_set(provider, OIDC_USER_INFO_TOKEN_METHOD_POST);
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+
+	oidc_cfg_provider_userinfo_token_method_int_set(provider, (oidc_userinfo_token_method_t)99);
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT", "Bearer", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+}
+END_TEST
+
+/* a DPoP request answered with a non-nonce error is not retried */
+START_TEST(test_proto_userinfo_request_dpop_plain_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 400, .content_type = "application/json", .body = "{\"error\":\"invalid_token\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT-DPOP", "DPoP", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 1);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a DPoP nonce retry whose second response cannot be decoded at all */
+START_TEST(test_proto_userinfo_request_dpop_retry_garbage) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
+
+	apr_table_t *nonce_hdrs = apr_table_make(r->pool, 1);
+	apr_table_set(nonce_hdrs, "DPoP-Nonce", "server-nonce-3");
+	oidc_test_http_response_t responses[2] = {
+	    {.status_code = 400,
+	     .content_type = "application/json",
+	     .body = "{\"error\":\"use_dpop_nonce\"}",
+	     .extra_headers = nonce_hdrs},
+	    {.status_code = 200, .content_type = "text/plain", .body = "&garbage& that is neither JSON nor JWT"},
+	};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, responses, 2);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *s_userinfo = NULL, *userinfo_jwt = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	long response_code = 0;
+	ck_assert_int_eq(oidc_proto_userinfo_request(r, c, provider, "alice", "AT-DPOP", "DPoP", &s_userinfo,
+						     &userinfo_jwt, &userinfo_claims, &response_code),
+			 FALSE);
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 START_TEST(test_proto_request_auth_par_redirect) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3517,6 +3980,20 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_userinfo_request_missing_sub_skipped_via_env);
 	tcase_add_test(e2e, test_proto_userinfo_request_composite_embedded_jwt);
 	tcase_add_test(e2e, test_proto_userinfo_request_composite_names_without_sources);
+	tcase_add_test(e2e, test_proto_userinfo_response_garbage);
+	tcase_add_test(e2e, test_proto_userinfo_response_jwt_no_alg_configured);
+	tcase_add_test(e2e, test_proto_userinfo_response_signed_jwt);
+	tcase_add_test(e2e, test_proto_userinfo_response_signed_jwt_bad_signature);
+	tcase_add_test(e2e, test_proto_userinfo_response_encrypted_jwt);
+	tcase_add_test(e2e, test_proto_userinfo_response_encrypted_jwt_decrypt_fails);
+	tcase_add_test(e2e, test_proto_userinfo_request_composite_negatives);
+	tcase_add_test(e2e, test_proto_userinfo_request_dpop_nonce_retry);
+	tcase_add_test(e2e, test_proto_userinfo_request_dpop_nonce_retry_still_error);
+	tcase_add_test(e2e, test_proto_userinfo_response_jwt_body_unparsable);
+	tcase_add_test(e2e, test_proto_userinfo_response_jwt_no_client_secret);
+	tcase_add_test(e2e, test_proto_userinfo_endpoint_call_negatives);
+	tcase_add_test(e2e, test_proto_userinfo_request_dpop_plain_error);
+	tcase_add_test(e2e, test_proto_userinfo_request_dpop_retry_garbage);
 	tcase_add_test(e2e, test_proto_request_auth_par_redirect);
 	tcase_add_test(e2e, test_proto_private_keys_load_from_pem);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
