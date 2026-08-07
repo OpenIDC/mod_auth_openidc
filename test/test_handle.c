@@ -3770,6 +3770,94 @@ START_TEST(test_handle_mod_check_user_id_unauth_action_407) {
 }
 END_TEST
 
+/* the authentication hook declines without an AuthType and dispatches oauth20 */
+START_TEST(test_handle_mod_check_user_id_authtype_variants) {
+	request_rec *r = oidc_test_request_get();
+
+	/* an AuthType this module does not own is declined */
+	oidc_test_set_auth_type("Basic");
+	ck_assert_int_eq(oidc_check_user_id(r), DECLINED);
+
+	/* oauth20 without any bearer token: the OAuth flow rejects the request */
+	oidc_test_set_auth_type("oauth20");
+	apr_table_unset(r->headers_in, "Authorization");
+	ck_assert_int_eq(oidc_check_user_id(r), HTTP_UNAUTHORIZED);
+	oidc_test_set_auth_type(NULL);
+}
+END_TEST
+
+/* an empty OIDCClaimPrefix without a claim whitelist is flagged as insecure */
+START_TEST(test_handle_mod_scrub_headers_insecure) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->claim_prefix = apr_pstrdup(r->pool, "");
+	apr_table_set(r->headers_in, "X-Innocent", "value");
+	oidc_scrub_headers(r);
+	ck_assert_ptr_nonnull(apr_table_get(r->headers_in, "X-Innocent"));
+}
+END_TEST
+
+/* OIDCProviderMetadataURL: metadata that decodes but is invalid, and metadata that
+ * is valid but cannot be parsed into the provider configuration */
+START_TEST(test_handle_mod_static_provider_metadata_url_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = NULL;
+
+	/* 1: decodes as JSON but fails metadata validation (no issuer) */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"unrelated\":true}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	ck_assert_ptr_null(oidc_cfg_provider_metadata_url_set(r->pool, oidc_cfg_provider_get(c),
+							      oidc_test_http_server_url(srv, r->pool)));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, oidc_cfg_provider_get(c), 0);
+	ck_assert_int_eq(oidc_provider_static_config(r, c, &provider), FALSE);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a session that names an issuer no provider is configured for is corrupted */
+START_TEST(test_handle_mod_get_provider_from_session_unknown_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	c->metadata_dir = apr_pstrdup(r->pool, "/no-such-metadata-dir");
+	oidc_session_set_issuer(r, session, "https://unknown.example.org");
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_get_provider_from_session(r, c, session, &provider), FALSE);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* the original request method is restored from the discovery response parameter */
+START_TEST(test_handle_mod_original_request_method_discovery_response) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* make the current request hit the redirect URI and carry discovery-response params */
+	apr_uri_parse(r->pool, oidc_util_url_redirect_uri(r, c), &r->parsed_uri);
+	r->args = "iss=https%3A%2F%2Fidp.example.com&method=form_post";
+	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_FORM_POST);
+}
+END_TEST
+
+/* a redirect URL that has no hostname but starts with slash-backslash is refused */
+START_TEST(test_handle_mod_validate_redirect_url_slash_backslash) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	char *err_str = NULL;
+	char *err_desc = NULL;
+	ck_assert_int_eq(
+	    oidc_validate_redirect_url(r, c, "/\\evil.example.org/", OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+	    FALSE);
+}
+END_TEST
+
 /*
  * Tests for handle/revoke.c — oidc_revoke_session and oidc_revoke_at_cache_remove.
  */
@@ -5352,6 +5440,43 @@ static void existing_session_seed(request_rec *r, oidc_session_t *session, apr_b
 	oidc_session_set_session_expires(r, session, apr_time_now() + apr_time_from_sec(3600));
 }
 
+/* a healthy session copies its id_token claims, userinfo claims and scope into the
+ * request state and passes the id_token payload/serialized forms as app info */
+START_TEST(test_handle_dispatch_existing_session_passes_tokens) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+	cmd_parms *it_cmd = oidc_test_cmd_get(OIDCPassIDTokenAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_idtoken_as_set(it_cmd, dir_cfg, "claims"));
+	ck_assert_ptr_null(oidc_cmd_dir_pass_idtoken_as_set(it_cmd, dir_cfg, "payload"));
+	ck_assert_ptr_null(oidc_cmd_dir_pass_idtoken_as_set(it_cmd, dir_cfg, "serialized"));
+	existing_session_seed(r, session, TRUE);
+	oidc_json_t *idt_claims = json_pack("{s:s}", "sub", "alice");
+	oidc_session_set_idtoken_claims(r, session, idt_claims);
+	oidc_json_t *ui_claims = json_pack("{s:s}", "tier", "gold");
+	oidc_session_set_userinfo_claims(r, session, ui_claims);
+	oidc_session_set_scope(r, session, "openid profile");
+	oidc_session_set_idtoken(r, session, "serialized-id-token");
+
+	r->args = "info=json";
+	r->method_number = M_GET;
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+	/* the id_token payload and its serialized form were passed to the app */
+	ck_assert_ptr_nonnull(apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_ID_TOKEN_PAYLOAD));
+	const char *hdr = apr_table_get(r->headers_in, OIDC_DEFAULT_HEADER_PREFIX OIDC_APP_INFO_ID_TOKEN);
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_str_eq(hdr, "serialized-id-token");
+
+	oidc_json_decref(idt_claims);
+	oidc_json_decref(ui_claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_dispatch_info_happy_sets_authn_header) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -6391,6 +6516,12 @@ int main(void) {
 	tcase_add_test(mod_main, test_handle_mod_session_pass_tokens_full);
 	tcase_add_test(mod_main, test_handle_mod_original_request_method_post_form);
 	tcase_add_test(mod_main, test_handle_mod_check_user_id_unauth_action_407);
+	tcase_add_test(mod_main, test_handle_mod_check_user_id_authtype_variants);
+	tcase_add_test(mod_main, test_handle_mod_scrub_headers_insecure);
+	tcase_add_test(mod_main, test_handle_mod_static_provider_metadata_url_negatives);
+	tcase_add_test(mod_main, test_handle_mod_get_provider_from_session_unknown_issuer);
+	tcase_add_test(mod_main, test_handle_mod_original_request_method_discovery_response);
+	tcase_add_test(mod_main, test_handle_mod_validate_redirect_url_slash_backslash);
 
 	TCase *logout = tcase_create("logout");
 	tcase_add_checked_fixture(logout, oidc_test_setup, oidc_test_teardown);
@@ -6511,6 +6642,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);
 	tcase_add_test(dispatch, test_handle_dispatch_empty_args_routes_to_implicit_flow);
 	tcase_add_test(dispatch, test_handle_dispatch_logout_takes_precedence_over_post_authn);
+	tcase_add_test(dispatch, test_handle_dispatch_existing_session_passes_tokens);
 	tcase_add_test(dispatch, test_handle_dispatch_info_happy_sets_authn_header);
 	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_error_actions);
