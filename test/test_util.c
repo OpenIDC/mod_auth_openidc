@@ -65,14 +65,14 @@ START_TEST(test_util_base64url_encode) {
 	ck_assert_int_eq(len, -1);
 
 	src = "test";
-	len = oidc_util_base64url_encode(oidc_test_request_get(), &dst, src, _oidc_strlen(src), 1);
+	len = oidc_util_base64url_encode(oidc_test_request_get(), &dst, src, (int)_oidc_strlen(src), 1);
 	ck_assert_msg(dst != NULL, "dst value is NULL");
 	ck_assert_int_eq(len, 6);
 	ck_assert_str_eq(dst, "dGVzdA");
 
 	len = -1;
 	dst = NULL;
-	len = oidc_util_base64url_encode(oidc_test_request_get(), &dst, src, _oidc_strlen(src), 0);
+	len = oidc_util_base64url_encode(oidc_test_request_get(), &dst, src, (int)_oidc_strlen(src), 0);
 	ck_assert_msg(dst != NULL, "dst value is NULL");
 	ck_assert_int_eq(len, 9);
 	ck_assert_str_eq(dst, "dGVzdA,,");
@@ -1316,7 +1316,7 @@ START_TEST(test_util_set_trace_parent_flags) {
 
 	const char *tp = apr_table_get(r->headers_in, OIDC_HTTP_HDR_TRACE_PARENT);
 	ck_assert_ptr_nonnull(tp);
-	int len = _oidc_strlen(tp);
+	int len = (int)_oidc_strlen(tp);
 	ck_assert_msg(len >= 2, "traceparent header too short");
 	ck_assert_msg(_oidc_strncmp(&tp[len - 2], "01", 2) == 0,
 		      "traceparent flags byte is not 01 when metrics hook is set");

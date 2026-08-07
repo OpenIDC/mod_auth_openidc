@@ -379,6 +379,13 @@ jobs:
         sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g' src/Makefile test/Makefile
     - name: Make (clang, type checks promoted to errors)
       run: make
+      # build the suite under the same flags: -Wimplicit-int-conversion pulls in
+      # -Wshorten-64-to-32, which gcc has no equivalent for, so this leg is the only
+      # place an implicitly narrowed size_t in the tests is caught. Running the tests
+      # rather than just compiling them costs little and keeps this leg comparable to
+      # the gcc build job.
+    - name: Test
+      run: make check || (cat test/test-suite.log && exit -1)
 
   gcc-analyzer:
     # gcc's path-sensitive analyzer: leaks, double frees, use-after-free, null

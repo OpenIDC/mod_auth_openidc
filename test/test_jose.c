@@ -1198,8 +1198,8 @@ START_TEST(test_jose_legacy_jwt_sign_verify_rsa_and_hmac) {
 
 	/* HMAC roundtrip with the same payload */
 	const char *secret = "mysecretwithmorethan32characters";
-	jwk =
-	    oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret, _oidc_strlen(secret), FALSE, &err);
+	jwk = oidc_jwk_create_symmetric_key(pool, NULL, (const unsigned char *)secret,
+					    (unsigned int)_oidc_strlen(secret), FALSE, &err);
 	ck_assert_ptr_nonnull(jwk);
 	apr_hash_set(keys, "dummy", APR_HASH_KEY_STRING, jwk);
 	jwt->header.alg = apr_pstrdup(pool, "HS256");

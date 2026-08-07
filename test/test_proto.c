@@ -240,11 +240,11 @@ START_TEST(test_proto_validate_jwt) {
 	s_jwt_payload = apr_psprintf(r->pool, s_jwt_payload, now, s_issuer, now + 600);
 
 	char *s_jwt_header_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, _oidc_strlen(s_jwt_header),
+	oidc_util_base64url_encode(r, &s_jwt_header_encoded, s_jwt_header, (int)_oidc_strlen(s_jwt_header),
 				   OIDC_BASE64URL_PADDING_STRIP);
 
 	char *s_jwt_payload_encoded = NULL;
-	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, _oidc_strlen(s_jwt_payload),
+	oidc_util_base64url_encode(r, &s_jwt_payload_encoded, s_jwt_payload, (int)_oidc_strlen(s_jwt_payload),
 				   OIDC_BASE64URL_PADDING_STRIP);
 
 	char *s_jwt_message = apr_psprintf(r->pool, "%s.%s", s_jwt_header_encoded, s_jwt_payload_encoded);
@@ -253,7 +253,7 @@ START_TEST(test_proto_validate_jwt) {
 	unsigned char md[EVP_MAX_MD_SIZE];
 	const EVP_MD *digest = EVP_get_digestbyname("sha256");
 
-	ck_assert_ptr_nonnull(HMAC(digest, (const unsigned char *)s_secret, _oidc_strlen(s_secret),
+	ck_assert_ptr_nonnull(HMAC(digest, (const unsigned char *)s_secret, (int)_oidc_strlen(s_secret),
 				   (const unsigned char *)s_jwt_message, _oidc_strlen(s_jwt_message), md, &md_len));
 
 	char *s_jwt_signature_encoded = NULL;
