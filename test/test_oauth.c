@@ -1025,6 +1025,302 @@ START_TEST(test_oauth_check_userid_jwt_no_keys_configured) {
 }
 END_TEST
 
+/* an unreachable OIDCOAuthServerMetadataURL and one serving unusable metadata both
+ * fall back to the shared configuration */
+START_TEST(test_oauth_check_userid_metadata_url_failures) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	/* 1: unreachable metadata URL; no shared introspection endpoint or keys => 401 */
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthServerMetadataURL);
+	ck_assert_ptr_null(oidc_cmd_oauth_metadata_url_set(
+	    cmd, NULL, apr_psprintf(r->pool, "http://127.0.0.1:%d/metadata", free_port)));
+	cmd = oidc_test_cmd_get(OIDCOAuthSSLValidateServer);
+	ck_assert_ptr_null(oidc_cmd_oauth_ssl_validate_server_set(cmd, NULL, "Off"));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-META-DEAD"), HTTP_UNAUTHORIZED);
+
+	/* 2: metadata that fetches but does not parse as AS metadata */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"unrelated\":true}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	cmd = oidc_test_cmd_get(OIDCOAuthServerMetadataURL);
+	ck_assert_ptr_null(oidc_cmd_oauth_metadata_url_set(cmd, NULL, oidc_test_http_server_url(srv, r->pool)));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-META-BAD"), HTTP_UNAUTHORIZED);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* the GET introspection method with bearer-token client authentication (an empty
+ * OIDCOAuthIntrospectionClientAuthBearerToken re-uses the token being introspected) */
+START_TEST(test_oauth_check_userid_introspection_get_bearer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	/* extra spaces after the Bearer scheme are skipped */
+	apr_table_set(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION, "Bearer   AT-GET-BEARER");
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"active\":true,\"sub\":\"alice\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointMethod);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_method_set(cmd, NULL, "GET"));
+	cmd = oidc_test_cmd_get(OIDCOAuthClientID);
+	ck_assert_ptr_null(oidc_cmd_oauth_client_id_set(cmd, NULL, "rp-1"));
+	cmd = oidc_test_cmd_get(OIDCOAuthClientSecret);
+	ck_assert_ptr_null(oidc_cmd_oauth_client_secret_set(cmd, NULL, "rp-secret"));
+	cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointAuth);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_auth_set(cmd, NULL, "bearer_access_token"));
+	cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionClientAuthBearerToken);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_client_auth_bearer_token_set(cmd, NULL, ""));
+
+	int rc = oidc_oauth_check_userid(r, c, NULL);
+	ck_assert_int_eq(rc, OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_str_eq(cap->method, "GET");
+	ck_assert_msg(_oidc_strstr(cap->path, "token=AT-GET-BEARER") != NULL, "token sent as query parameter");
+	const char *auth = apr_table_get(cap->headers, OIDC_HTTP_HDR_AUTHORIZATION);
+	ck_assert_ptr_nonnull(auth);
+	ck_assert_str_eq(auth, "Bearer AT-GET-BEARER");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* OIDCOAuthAcceptTokenAs cookie without the cookie present */
+START_TEST(test_oauth_bearer_from_cookie_missing) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	apr_table_unset(r->headers_in, "Cookie");
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "cookie"));
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), FALSE);
+}
+END_TEST
+
+/* the OIDCOAuthTokenExpiryClaim matrix: mandatory-and-missing, mandatory-and-malformed,
+ * optional-and-malformed, non-positive and relative expiry values */
+START_TEST(test_oauth_expiry_claim_variants) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	oidc_test_http_server_t *srv = NULL;
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json"};
+
+	/* 1: mandatory expiry claim missing */
+	ck_assert_ptr_null(oidc_cmd_oauth_token_expiry_claim_set(oidc_test_cmd_get(OIDCOAuthTokenExpiryClaim), NULL,
+								 OIDC_CLAIM_EXP, "absolute", "mandatory"));
+	resp.body = "{\"sub\":\"alice\"}";
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-EXP-1"), HTTP_UNAUTHORIZED);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* 2: mandatory expiry claim that is not a number */
+	resp.body = "{\"sub\":\"alice\",\"exp\":\"tomorrow\"}";
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-EXP-2"), HTTP_UNAUTHORIZED);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* 3: optional expiry claim that is not a number: default caching applies */
+	ck_assert_ptr_null(oidc_cmd_oauth_token_expiry_claim_set(oidc_test_cmd_get(OIDCOAuthTokenExpiryClaim), NULL,
+								 OIDC_CLAIM_EXP, "absolute", "optional"));
+	r->user = NULL;
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-EXP-3"), OK);
+	ck_assert_str_eq(r->user, "alice");
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* 4: a non-positive expiry value: default caching applies */
+	resp.body = "{\"sub\":\"alice\",\"exp\":0}";
+	r->user = NULL;
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-EXP-4"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* 5: a relative expiry claim is added to the current time */
+	ck_assert_ptr_null(oidc_cmd_oauth_token_expiry_claim_set(oidc_test_cmd_get(OIDCOAuthTokenExpiryClaim), NULL,
+								 "expires_in", "relative", "optional"));
+	resp.body = "{\"sub\":\"alice\",\"expires_in\":300}";
+	r->user = NULL;
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-EXP-5"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* introspection-cache negatives: an unparsable cache entry, a stale entry that fails
+ * the freshness requirement, and the no-cache mode */
+START_TEST(test_oauth_introspection_cache_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"active\":true,\"sub\":\"alice\"}"};
+	oidc_test_http_server_t *srv = NULL;
+	apr_time_t future = apr_time_now() + apr_time_from_sec(300);
+
+	/* 1: a cached entry that does not decode falls through to a live introspection */
+	ck_assert_int_eq(oidc_cache_set_access_token(r, "AT-CACHE-GARBAGE", "not-json-at-all", future), TRUE);
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-CACHE-GARBAGE"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* 2: a cached entry older than the freshness interval is refreshed */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthTokenIntrospectionInterval);
+	ck_assert_ptr_null(oidc_cmd_dir_token_introspection_interval_set(cmd, dir_cfg, "60"));
+	char *stale = apr_psprintf(r->pool, "{\"r\":{\"active\":true,\"sub\":\"alice\"},\"t\":%d}",
+				   (int)apr_time_sec(apr_time_now()) - 3600);
+	ck_assert_int_eq(oidc_cache_set_access_token(r, "AT-CACHE-STALE", stale, future), TRUE);
+	r->user = NULL;
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-CACHE-STALE"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* 3: interval -1 disables the cache in both directions */
+	ck_assert_ptr_null(oidc_cmd_dir_token_introspection_interval_set(cmd, dir_cfg, "-1"));
+	r->user = NULL;
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-NO-CACHE"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* the "active" claim as a string and as an unusable type */
+START_TEST(test_oauth_introspection_active_claim_variants) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json"};
+	oidc_test_http_server_t *srv = NULL;
+
+	/* a string "true" is accepted */
+	resp.body = "{\"active\":\"true\",\"sub\":\"alice\"}";
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-ACT-1"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* any other string is rejected */
+	resp.body = "{\"active\":\"maybe\",\"sub\":\"alice\"}";
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-ACT-2"), HTTP_UNAUTHORIZED);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* a number is neither boolean nor string */
+	resp.body = "{\"active\":42,\"sub\":\"alice\"}";
+	srv = oidc_test_http_server_start(r->pool, &resp);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-ACT-3"), HTTP_UNAUTHORIZED);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* an unreachable introspection endpoint yields a 401 */
+START_TEST(test_oauth_introspection_endpoint_unreachable) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	e2e_set_introspection_endpoint(c, apr_psprintf(r->pool, "http://127.0.0.1:%d/introspect", free_port));
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-DEAD-EP"), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* a PingFederate-style response nests the claims in an "access_token" object which is
+ * enriched with client_id/scope; the authenticated user is set through OIDCAuthNHeader */
+START_TEST(test_oauth_introspection_pingfederate_shape) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCAuthNHeader);
+	ck_assert_ptr_null(oidc_cmd_dir_authn_header_set(cmd, dir_cfg, "X-Remote-User"));
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"active\":true,\"client_id\":\"rp-1\",\"scope\":\"openid\","
+						  "\"access_token\":{\"sub\":\"alice\"}}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-PF"), OK);
+	ck_assert_str_eq(r->user, "alice");
+	const char *hdr = apr_table_get(r->headers_in, "X-Remote-User");
+	ck_assert_ptr_nonnull(hdr);
+	ck_assert_str_eq(hdr, "alice");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* a JWT access token whose aud claim is neither a string nor an array is rejected */
+START_TEST(test_oauth_check_userid_jwt_aud_wrong_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL, "expected-aud"));
+
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, FALSE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 300));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_integer(42));
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 300;
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *access_token = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
 int main(void) {
 	TCase *bearer = tcase_create("bearer");
 	tcase_add_checked_fixture(bearer, oidc_test_setup, oidc_test_teardown);
@@ -1051,6 +1347,15 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_jwks);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_remove_at_cache);
 	tcase_add_test(introspect, test_oauth_check_userid_subrequest);
+	tcase_add_test(introspect, test_oauth_check_userid_metadata_url_failures);
+	tcase_add_test(introspect, test_oauth_check_userid_introspection_get_bearer);
+	tcase_add_test(introspect, test_oauth_bearer_from_cookie_missing);
+	tcase_add_test(introspect, test_oauth_expiry_claim_variants);
+	tcase_add_test(introspect, test_oauth_introspection_cache_negatives);
+	tcase_add_test(introspect, test_oauth_introspection_active_claim_variants);
+	tcase_add_test(introspect, test_oauth_introspection_endpoint_unreachable);
+	tcase_add_test(introspect, test_oauth_introspection_pingfederate_shape);
+	tcase_add_test(introspect, test_oauth_check_userid_jwt_aud_wrong_type);
 
 	TCase *jwt = tcase_create("jwt");
 	tcase_add_checked_fixture(jwt, oidc_test_setup, oidc_test_teardown);
