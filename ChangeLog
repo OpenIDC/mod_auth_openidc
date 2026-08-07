@@ -1,4 +1,7 @@
 08/07/2026
+- doc: correct the OIDCMetricsData class list in auth_openidc.conf, which offered an
+  invalid "requests" class that makes Apache refuse to start, omitted "provider" from
+  the syntax line and omitted the "logout" class entirely
 - metrics: flush on a scratch pool and serve a scrape from the request pool, rather than
   copying and re-serializing the whole document onto the never-cleared process pool
 - metrics: build the per-sample lookup key on the request pool, so only the copy the
