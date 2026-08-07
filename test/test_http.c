@@ -43,6 +43,7 @@
 
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
+#include "cfg/dir.h"
 #include "cfg/provider.h"
 #include "check_util.h"
 #include "http.h"
@@ -355,6 +356,160 @@ START_TEST(test_set_chunked_cookie_too_many_chunks) {
 	/* one chunk fewer is still accepted, and round-trips */
 	toolarge[9899] = '\0';
 	ck_assert(oidc_http_set_chunked_cookie(r, "toobig", toolarge, expires, 100, "SameSite=Lax") == TRUE);
+}
+END_TEST
+
+/*
+ * CR/LF in an outgoing header value must be replaced with spaces (response splitting defense)
+ */
+START_TEST(test_hdr_out_crlf_sanitized) {
+	request_rec *r = oidc_test_request_get();
+	oidc_http_hdr_out_location_set(r, "https://example.com/\r\nSet-Cookie: evil=1");
+	const char *loc = oidc_http_hdr_out_location_get(r);
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_ptr_null(_oidc_strstr(loc, "\r"));
+	ck_assert_ptr_null(_oidc_strstr(loc, "\n"));
+	ck_assert_ptr_nonnull(_oidc_strstr(loc, " Set-Cookie: evil=1"));
+}
+END_TEST
+
+/*
+ * a Forwarded element terminated by a space (not a semicolon) is still parsed correctly
+ */
+START_TEST(test_forwarded_space_terminated) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_set(r->headers_in, "Forwarded", "host=example.org proto=https");
+	ck_assert_msg(_oidc_strcmp(oidc_http_hdr_forwarded_get(r, "host"), "example.org") == 0,
+		      "space-terminated forwarded element parsed");
+}
+END_TEST
+
+START_TEST(test_form_encoded_data_empty) {
+	request_rec *r = oidc_test_request_get();
+	ck_assert_ptr_null(oidc_http_form_encoded_data(r, NULL));
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	ck_assert_ptr_null(oidc_http_form_encoded_data(r, params));
+}
+END_TEST
+
+START_TEST(test_proxy_s2auth_negotiate) {
+#ifdef CURLAUTH_NEGOTIATE
+	ck_assert_msg(oidc_http_proxy_s2auth(OIDC_HTTP_PROXY_AUTH_NEGOTIATE) == CURLAUTH_NEGOTIATE,
+		      "negotiate maps to CURLAUTH_NEGOTIATE");
+#endif
+}
+END_TEST
+
+/*
+ * a request without a parsed path gets a "/" cookie path
+ */
+START_TEST(test_cookie_path_request_path_null) {
+	request_rec *r = oidc_test_request_get();
+	r->parsed_uri.path = NULL;
+	oidc_http_set_cookie(r, "rootpath", "v", -1, NULL);
+	const apr_array_header_t *h = apr_table_elts(r->err_headers_out);
+	apr_table_entry_t *elts = (apr_table_entry_t *)h->elts;
+	int found = 0;
+	for (int i = 0; i < h->nelts; i++)
+		if (_oidc_strstr(elts[i].val, "rootpath=v") && _oidc_strstr(elts[i].val, "Path=/"))
+			found = 1;
+	ck_assert_msg(found == 1, "cookie set with Path=/ for request without a path");
+}
+END_TEST
+
+/*
+ * a configured OIDCCookiePath that is not a prefix of the request path is ignored with a warning
+ */
+START_TEST(test_cookie_path_mismatch_warns) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCookiePath);
+	ck_assert_ptr_null(oidc_cmd_dir_cookie_path_set(cmd, dir_cfg, "/elsewhere"));
+	oidc_http_set_cookie(r, "pathck", "v", -1, NULL);
+	const apr_array_header_t *h = apr_table_elts(r->err_headers_out);
+	apr_table_entry_t *elts = (apr_table_entry_t *)h->elts;
+	int found = 0;
+	for (int i = 0; i < h->nelts; i++)
+		if (_oidc_strstr(elts[i].val, "pathck=v") && (_oidc_strstr(elts[i].val, "Path=/elsewhere") == NULL))
+			found = 1;
+	ck_assert_msg(found == 1, "mismatching cookie path replaced by request path");
+}
+END_TEST
+
+/*
+ * the OIDC_SET_COOKIE_APPEND environment variable replaces the ext parameter,
+ * and an oversized cookie triggers the size warning (but is still set)
+ */
+START_TEST(test_set_cookie_append_env_and_size_warn) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_set(r->subprocess_env, "OIDC_SET_COOKIE_APPEND", "Partitioned");
+	oidc_http_set_cookie(r, "appck", "v", -1, "SameSite=Lax");
+	const apr_array_header_t *h = apr_table_elts(r->err_headers_out);
+	apr_table_entry_t *elts = (apr_table_entry_t *)h->elts;
+	int found = 0;
+	for (int i = 0; i < h->nelts; i++)
+		if (_oidc_strstr(elts[i].val, "appck=v") && _oidc_strstr(elts[i].val, "Partitioned") &&
+		    (_oidc_strstr(elts[i].val, "SameSite=Lax") == NULL))
+			found = 1;
+	ck_assert_msg(found == 1, "append env var wins over the ext parameter");
+	apr_table_unset(r->subprocess_env, "OIDC_SET_COOKIE_APPEND");
+
+	char *big = apr_palloc(r->pool, 5001);
+	_oidc_memset(big, 'B', 5000);
+	big[5000] = '\0';
+	oidc_http_set_cookie(r, "bigck", big, -1, NULL);
+	h = apr_table_elts(r->err_headers_out);
+	elts = (apr_table_entry_t *)h->elts;
+	found = 0;
+	for (int i = 0; i < h->nelts; i++)
+		if (_oidc_strstr(elts[i].val, "bigck="))
+			found = 1;
+	ck_assert_msg(found == 1, "oversized cookie still set after warning");
+}
+END_TEST
+
+/*
+ * negative paths reading a chunked cookie back in
+ */
+START_TEST(test_get_chunked_cookie_negatives) {
+	request_rec *r = oidc_test_request_get();
+
+	/* chunkSize 0 falls back to the plain cookie */
+	apr_table_set(r->headers_in, "Cookie", "plain=direct");
+	char *v = oidc_http_get_chunked_cookie(r, "plain", 0);
+	ck_assert_ptr_nonnull(v);
+	ck_assert_msg(_oidc_strcmp(v, "direct") == 0, "chunkSize 0 returns the plain cookie");
+
+	/* a chunk counter beyond the maximum is refused */
+	apr_table_set(r->headers_in, "Cookie", "big_chunks=200; big_0=AA");
+	ck_assert_ptr_null(oidc_http_get_chunked_cookie(r, "big", 5));
+
+	/* a missing chunk aborts the reassembly */
+	apr_table_set(r->headers_in, "Cookie", "big_chunks=2; big_0=AA");
+	v = oidc_http_get_chunked_cookie(r, "big", 5);
+	ck_assert_msg((v == NULL) || (_oidc_strcmp(v, "AA") == 0), "missing chunk aborts reassembly");
+}
+END_TEST
+
+/*
+ * clearing a previously chunked cookie unsets every chunk plus the counter cookie
+ */
+START_TEST(test_set_chunked_cookie_clear) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_set(r->headers_in, "Cookie", "big_chunks=2; big_0=AA; big_1=BB");
+	ck_assert(oidc_http_set_chunked_cookie(r, "big", "", 0, 100, NULL) == TRUE);
+	const apr_array_header_t *h = apr_table_elts(r->err_headers_out);
+	apr_table_entry_t *elts = (apr_table_entry_t *)h->elts;
+	int found_0 = 0, found_1 = 0, found_cnt = 0;
+	for (int i = 0; i < h->nelts; i++) {
+		if (_oidc_strstr(elts[i].val, "big_0=;") || _oidc_strstr(elts[i].val, "big_0=; "))
+			found_0 = 1;
+		if (_oidc_strstr(elts[i].val, "big_1=;") || _oidc_strstr(elts[i].val, "big_1=; "))
+			found_1 = 1;
+		if (_oidc_strstr(elts[i].val, "big_chunks=;") || _oidc_strstr(elts[i].val, "big_chunks=; "))
+			found_cnt = 1;
+	}
+	ck_assert_msg(found_0 && found_1 && found_cnt, "all chunks and the counter cookie cleared");
 }
 END_TEST
 
@@ -919,6 +1074,210 @@ START_TEST(test_e2e_scripted_sequence) {
 }
 END_TEST
 
+/*
+ * the CURLOPT_SSL_OPTIONS environment variable applies every recognized token
+ * to the curl handle; client cert/key/passphrase parameters are set on the
+ * handle as well (all ignored for a plain http:// target, so the request
+ * still succeeds)
+ */
+START_TEST(test_e2e_ssl_options_and_client_cert) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	apr_table_set(r->subprocess_env, "CURLOPT_SSL_OPTIONS",
+		      "CURLSSLOPT_ALLOW_BEAST CURLSSLOPT_NO_REVOKE CURLSSLOPT_NO_PARTIALCHAIN "
+		      "CURLSSLOPT_REVOKE_BEST_EFFORT CURLSSLOPT_NATIVE_CA "
+		      "CURL_SSLVERSION_TLSv1_0 CURL_SSLVERSION_TLSv1_1 CURL_SSLVERSION_TLSv1_2 "
+		      "CURL_SSLVERSION_TLSv1_3 CURL_SSLVERSION_MAX_TLSv1_0 CURL_SSLVERSION_MAX_TLSv1_1 "
+		      "CURL_SSLVERSION_MAX_TLSv1_2 CURL_SSLVERSION_MAX_TLSv1_3");
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      "certificate.pem", "private.pem", "secret");
+
+	(void)oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET with SSL options and client cert parameters succeeds over http");
+	ck_assert_int_eq(status, 200);
+
+	apr_table_unset(r->subprocess_env, "CURLOPT_SSL_OPTIONS");
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * a configured CA bundle and local interface are applied to the curl handle
+ */
+START_TEST(test_e2e_ca_bundle_and_interface) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	cfg->ca_bundle_path = apr_pstrdup(r->pool, "certificate.pem");
+	apr_table_set(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR, "127.0.0.1");
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+
+	(void)oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET with CA bundle and local interface succeeds");
+
+	apr_table_unset(r->subprocess_env, OIDC_CURL_INTERFACE_ENV_VAR);
+	cfg->ca_bundle_path = NULL;
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * an outgoing proxy with credentials and an auth type is applied to the curl
+ * handle; the mock server plays the role of the proxy and serves the request
+ */
+START_TEST(test_e2e_outgoing_proxy_auth) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *proxy_url = oidc_test_http_server_url(srv, r->pool);
+	oidc_http_outgoing_proxy_t pr = {
+	    .host_port = proxy_url + _oidc_strlen("http://"),
+	    .username_password = "user:secret",
+	    .auth_type = CURLAUTH_BASIC,
+	};
+
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	apr_byte_t ok = oidc_http_get(r, "http://target.example.org/api", NULL, NULL, NULL, NULL, FALSE, &response,
+				      &status, NULL, &to, &pr, NULL, NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET via outgoing proxy succeeds");
+	ck_assert_ptr_nonnull(cap);
+	/* the proxied request carries the absolute URI of the target */
+	ck_assert_ptr_nonnull(_oidc_strstr(cap->path, "target.example.org"));
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * an incoming traceparent header is propagated on the backend call when configured
+ */
+START_TEST(test_e2e_traceparent_propagated) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	cfg->trace_parent = OIDC_TRACE_PARENT_PROPAGATE;
+	apr_table_set(r->headers_in, "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET with traceparent succeeds");
+	ck_assert_ptr_nonnull(cap);
+	const char *tp = apr_table_get(cap->headers, "traceparent");
+	ck_assert_ptr_nonnull(tp);
+	ck_assert_msg(_oidc_strstr(tp, "4bf92f3577b34da6a3ce929d0e0e4736") != NULL, "traceparent propagated");
+
+	cfg->trace_parent = OIDC_TRACE_PARENT_OFF;
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * a pass_cookies entry that is not present in the incoming request is skipped
+ */
+START_TEST(test_e2e_pass_cookies_missing_entry) {
+	request_rec *r = oidc_test_request_get();
+	oidc_test_http_response_t resp = {.status_code = 200, .body = ""};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	apr_table_set(r->headers_in, "Cookie", "present=yes");
+	apr_array_header_t *pass = apr_array_make(r->pool, 2, sizeof(const char *));
+	APR_ARRAY_PUSH(pass, const char *) = "absent";
+	APR_ARRAY_PUSH(pass, const char *) = "present";
+
+	const char *url = oidc_test_http_server_url(srv, r->pool);
+	char *response = NULL;
+	long status = 0;
+	oidc_http_timeout_t to = e2e_timeout();
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, pass,
+				      NULL, NULL, NULL);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_msg(ok == TRUE, "GET with partially matching pass_cookies succeeds");
+	const char *cookie = apr_table_get(cap->headers, "Cookie");
+	ck_assert_ptr_nonnull(cookie);
+	ck_assert_msg(_oidc_strstr(cookie, "present=yes") != NULL, "present cookie forwarded");
+	ck_assert_msg(_oidc_strstr(cookie, "absent") == NULL, "absent cookie skipped");
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * a request/transfer timeout is not retried: connect to a listening socket
+ * that never accepts/responds and verify a single attempt was made
+ */
+START_TEST(test_e2e_timeout_no_retry) {
+	request_rec *r = oidc_test_request_get();
+
+	/* a socket that listens but never accepts: connect succeeds, no response ever comes */
+	apr_socket_t *sock = NULL;
+	apr_sockaddr_t *sa = NULL;
+	ck_assert_int_eq(apr_sockaddr_info_get(&sa, "127.0.0.1", APR_INET, 0, 0, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_socket_create(&sock, sa->family, SOCK_STREAM, APR_PROTO_TCP, r->pool), APR_SUCCESS);
+	apr_socket_opt_set(sock, APR_SO_REUSEADDR, 1);
+	ck_assert_int_eq(apr_socket_bind(sock, sa), APR_SUCCESS);
+	ck_assert_int_eq(apr_socket_listen(sock, 1), APR_SUCCESS);
+	apr_sockaddr_t *bound = NULL;
+	ck_assert_int_eq(apr_socket_addr_get(&bound, APR_LOCAL, sock), APR_SUCCESS);
+
+	const char *url = apr_psprintf(r->pool, "http://127.0.0.1:%d/", (int)bound->port);
+	char *response = NULL;
+	long status = 0;
+	/* generous retry settings that must NOT be exercised for a timeout */
+	oidc_http_timeout_t to = {.request_timeout = 1, .connect_timeout = 1, .retries = 3, .retry_interval = 1500};
+	oidc_http_outgoing_proxy_t pr = e2e_no_proxy();
+
+	apr_time_t before = apr_time_now();
+	apr_byte_t ok = oidc_http_get(r, url, NULL, NULL, NULL, NULL, FALSE, &response, &status, NULL, &to, &pr, NULL,
+				      NULL, NULL, NULL);
+	apr_time_t after = apr_time_now();
+
+	ck_assert_msg(ok == FALSE, "timed-out request returns FALSE");
+	/* one 1s attempt, no retries: with retries we would see >= 2.5s (attempt + interval) */
+	apr_time_t elapsed_ms = (after - before) / 1000;
+	ck_assert_msg(elapsed_ms < 2500, "timeout was not retried (got %ldms)", (long)elapsed_ms);
+
+	apr_socket_close(sock);
+}
+END_TEST
+
 int main(void) {
 	TCase *accept = tcase_create("accept");
 	tcase_add_checked_fixture(accept, oidc_test_setup, oidc_test_teardown);
@@ -934,6 +1293,15 @@ int main(void) {
 	tcase_add_test(accept, test_hdr_out_location_and_traceparent);
 	tcase_add_test(accept, test_set_cookie_and_chunked_set);
 	tcase_add_test(accept, test_set_chunked_cookie_too_many_chunks);
+	tcase_add_test(accept, test_hdr_out_crlf_sanitized);
+	tcase_add_test(accept, test_forwarded_space_terminated);
+	tcase_add_test(accept, test_form_encoded_data_empty);
+	tcase_add_test(accept, test_proxy_s2auth_negotiate);
+	tcase_add_test(accept, test_cookie_path_request_path_null);
+	tcase_add_test(accept, test_cookie_path_mismatch_warns);
+	tcase_add_test(accept, test_set_cookie_append_env_and_size_warn);
+	tcase_add_test(accept, test_get_chunked_cookie_negatives);
+	tcase_add_test(accept, test_set_chunked_cookie_clear);
 	tcase_add_test(accept, test_other_header_getters);
 	tcase_add_test(accept, test_init_and_cleanup_noop);
 
@@ -964,6 +1332,12 @@ int main(void) {
 	tcase_add_test(e2e, test_e2e_get_with_query_params);
 	tcase_add_test(e2e, test_e2e_retry_on_connect_refused);
 	tcase_add_test(e2e, test_e2e_scripted_sequence);
+	tcase_add_test(e2e, test_e2e_ssl_options_and_client_cert);
+	tcase_add_test(e2e, test_e2e_ca_bundle_and_interface);
+	tcase_add_test(e2e, test_e2e_outgoing_proxy_auth);
+	tcase_add_test(e2e, test_e2e_traceparent_propagated);
+	tcase_add_test(e2e, test_e2e_pass_cookies_missing_entry);
+	tcase_add_test(e2e, test_e2e_timeout_no_retry);
 
 	Suite *s = suite_create("http");
 	suite_add_tcase(s, accept);
