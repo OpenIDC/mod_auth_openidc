@@ -1,4 +1,7 @@
 08/07/2026
+- test: fail the build when auth_openidc.conf has drifted from the code: every directive
+  must be documented, every documented directive must exist, and the OIDCMetricsData
+  class list must match the metrics classes the parser accepts
 - doc: correct 17 directive descriptions shown by "httpd -L", most importantly the three
   OIDCUserInfo*ResponseAlg entries, which claimed to apply only to dynamic client
   registration although they are required to verify and decrypt a UserInfo JWT
