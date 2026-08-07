@@ -119,6 +119,9 @@ typedef struct oidc_http_outgoing_proxy_t {
 
 char *oidc_http_url_encode(const request_rec *r, const char *str);
 char *oidc_http_url_decode(const request_rec *r, const char *str);
+/* TRUE when a protocol parameter of this name carries a secret or token and its value
+ * must be redacted before it is written to the debug log */
+apr_byte_t oidc_http_param_is_sensitive(const char *key);
 
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value);
 void oidc_http_set_no_cache_headers(const request_rec *r);

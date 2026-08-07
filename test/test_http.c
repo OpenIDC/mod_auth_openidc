@@ -181,6 +181,51 @@ START_TEST(test_redact_body_for_log) {
 }
 END_TEST
 
+START_TEST(test_redact_json_for_log) {
+	request_rec *r = oidc_test_request_get();
+
+	// NULL body passes through as NULL
+	ck_assert_ptr_null(oidc_http_redact_json_for_log(r->pool, NULL));
+
+	// a response without credentials is left untouched
+	const char *plain = "{\"active\":true,\"sub\":\"joe\",\"scope\":\"openid\"}";
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, plain), plain);
+
+	// a token endpoint response: every credential masked, everything else kept verbatim
+	ck_assert_str_eq(oidc_http_redact_json_for_log(
+			     r->pool, "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+				      "\"refresh_token\":\"RT-1\",\"id_token\":\"eyJ.a.b\"}"),
+			 "{\"access_token\":\"***\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+			 "\"refresh_token\":\"***\",\"id_token\":\"***\"}");
+
+	// a dynamic client registration response
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"client_id\":\"c1\",\"client_secret\":\"s3cr3t\","
+								"\"registration_access_token\":\"RAT-1\"}"),
+			 "{\"client_id\":\"c1\",\"client_secret\":\"***\","
+			 "\"registration_access_token\":\"***\"}");
+
+	// whitespace between the member name, the colon and the value is tolerated
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{ \"access_token\" : \"AT-1\" }"),
+			 "{ \"access_token\" : \"***\" }");
+
+	// a non-string value is left alone rather than guessed at
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"access_token\":null}"), "{\"access_token\":null}");
+
+	// a member whose name merely ends in a sensitive one keeps its value
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"my_access_token\":\"keepme\"}"),
+			 "{\"my_access_token\":\"keepme\"}");
+
+	// a body that is not JSON at all must pass through unchanged
+	const char *html = "<html><body>Internal Server Error</body></html>";
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, html), html);
+
+	// more than one occurrence is masked, not just the first
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"a\":{\"access_token\":\"1\"},"
+								"\"b\":{\"access_token\":\"2\"}}"),
+			 "{\"a\":{\"access_token\":\"***\"},\"b\":{\"access_token\":\"***\"}}");
+}
+END_TEST
+
 START_TEST(test_hdr_getters_and_forwarded) {
 	request_rec *r = oidc_test_request_get();
 	apr_table_set(r->headers_in, "User-Agent", "MyAgent/1.0");
@@ -1285,6 +1330,7 @@ int main(void) {
 	tcase_add_test(accept, test_http_accept);
 	tcase_add_test(accept, test_url_encode_decode);
 	tcase_add_test(accept, test_redact_body_for_log);
+	tcase_add_test(accept, test_redact_json_for_log);
 	tcase_add_test(accept, test_hdr_getters_and_forwarded);
 	tcase_add_test(accept, test_hdr_normalize_query_form);
 	tcase_add_test(accept, test_cookies_and_chunking);

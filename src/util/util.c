@@ -251,7 +251,9 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table
 		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
 		key = oidc_http_url_decode(r, key);
 		val = oidc_http_url_decode(r, val);
-		oidc_debug(r, "read: %s=%s", key, val);
+		/* this parses the front-channel authorization response and the back-channel logout
+		 * request, so the values include the authorization code and bare tokens */
+		oidc_debug(r, "read: %s=%s", key, oidc_http_param_is_sensitive(key) ? "***" : val);
 		apr_table_set(table, key, val);
 	}
 

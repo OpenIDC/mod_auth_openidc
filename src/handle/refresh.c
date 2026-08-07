@@ -194,7 +194,7 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 	/* check if we have run into an error */
 	if (_oidc_strcmp(s_json, OIDC_REFRESH_FAILED_LOCK_VALUE) == 0) {
 		oidc_debug(r, "refresh token %s failed to refresh before, do not try to refresh it again but fail",
-			   refresh_token);
+			   oidc_util_mask_value(r->pool, refresh_token));
 		rv = OIDC_REFRESH_CACHE_ABORT;
 		goto end;
 	}

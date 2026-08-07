@@ -557,15 +557,14 @@ typedef struct oidc_http_encode_t {
  * before a request URL/body is written to the debug log; the single source of truth
  * for both the per-parameter check and the body redaction below
  */
-static const char *_oidc_http_sensitive_params[] = {OIDC_PROTO_CLIENT_SECRET,
-						    OIDC_PROTO_CLIENT_ASSERTION,
-						    OIDC_PROTO_CODE,
-						    OIDC_PROTO_CODE_VERIFIER,
-						    OIDC_PROTO_REFRESH_TOKEN,
+static const char *_oidc_http_sensitive_params[] = {OIDC_PROTO_CLIENT_SECRET, OIDC_PROTO_CLIENT_ASSERTION,
+						    OIDC_PROTO_CODE, OIDC_PROTO_CODE_VERIFIER, OIDC_PROTO_REFRESH_TOKEN,
 						    OIDC_PROTO_ACCESS_TOKEN,
-						    NULL};
+						    /* inbound: the front-channel authorization response and the
+						     * back-channel logout request carry these */
+						    OIDC_PROTO_ID_TOKEN, OIDC_PROTO_LOGOUT_TOKEN, NULL};
 
-static apr_byte_t oidc_http_param_is_sensitive(const char *key) {
+apr_byte_t oidc_http_param_is_sensitive(const char *key) {
 	for (int i = 0; _oidc_http_sensitive_params[i] != NULL; i++)
 		if (_oidc_strcmp(key, _oidc_http_sensitive_params[i]) == 0)
 			return TRUE;
@@ -608,6 +607,73 @@ const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
 			}
 			const char *value_end = strchr(result + prefix_len, OIDC_CHAR_AMP);
 			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end ? value_end : "");
+			/* resume just after the "***" that replaced the value */
+			offset = prefix_len + 3;
+		}
+	}
+
+	return result;
+}
+
+/*
+ * names of JSON members that carry secrets or tokens in a provider response and must be
+ * redacted before that response is written to the debug log; distinct from the request-side
+ * list above because the sets differ: a response never carries a code_verifier, and a
+ * registration response carries credentials a request never does
+ */
+static const char *_oidc_http_sensitive_json_members[] = {OIDC_PROTO_ACCESS_TOKEN,     OIDC_PROTO_REFRESH_TOKEN,
+							  OIDC_PROTO_ID_TOKEN,	       OIDC_PROTO_CLIENT_SECRET,
+							  "registration_access_token", NULL};
+
+/*
+ * best-effort redaction of the members listed in _oidc_http_sensitive_json_members inside a
+ * JSON response body, for debug-log purposes: the token, introspection and dynamic client
+ * registration responses all carry credentials, and the request side is already redacted.
+ *
+ * Deliberately string surgery rather than a parse-and-re-encode: this must never fail, alter
+ * or reorder what is logged when the body is not JSON at all (an error page, a truncated
+ * response), and it runs off the back of a network round trip so the scan is free by
+ * comparison. Tokens do not contain a quote, so the closing quote ends the value.
+ */
+const char *oidc_http_redact_json_for_log(apr_pool_t *pool, const char *data) {
+	char *result = NULL;
+
+	if (data == NULL)
+		return NULL;
+
+	result = apr_pstrdup(pool, data);
+
+	for (int i = 0; _oidc_http_sensitive_json_members[i] != NULL; i++) {
+		const char *needle = apr_pstrcat(pool, "\"", _oidc_http_sensitive_json_members[i], "\"", NULL);
+		apr_size_t offset = 0;
+		for (;;) {
+			const char *pos = _oidc_strstr(result + offset, needle);
+			if (pos == NULL)
+				break;
+			/* step over the member name and expect ": " then a quoted value; anything
+			 * else (a non-string value, a member name appearing inside a value) is
+			 * skipped rather than guessed at */
+			const char *p = pos + _oidc_strlen(needle);
+			while ((*p == ' ') || (*p == '\t'))
+				p++;
+			if (*p != OIDC_CHAR_COLON) {
+				offset = (pos - result) + _oidc_strlen(needle);
+				continue;
+			}
+			p++;
+			while ((*p == ' ') || (*p == '\t'))
+				p++;
+			if (*p != OIDC_CHAR_DQUOTE) {
+				offset = (pos - result) + _oidc_strlen(needle);
+				continue;
+			}
+			p++;
+			const char *value_end = strchr(p, OIDC_CHAR_DQUOTE);
+			if (value_end == NULL)
+				break;
+			/* keep everything up to and including the opening quote, then "***" */
+			const apr_size_t prefix_len = p - result;
+			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end);
 			/* resume just after the "***" that replaced the value */
 			offset = prefix_len + 3;
 		}
@@ -1067,8 +1133,9 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	if (response_code)
 		*response_code = http_code;
 
-	/* set and log the response */
-	oidc_debug(r, "response=%s", *response ? *response : "");
+	/* set and log the response; the token, introspection and registration responses carry
+	 * credentials, so redact them the way the request body above already is */
+	oidc_debug(r, "response=%s", oidc_http_redact_json_for_log(r->pool, *response ? *response : ""));
 
 end:
 
@@ -1292,7 +1359,9 @@ char *oidc_http_get_cookie(request_rec *r, const char *cookieName) {
 	}
 
 	/* log what we've found */
-	oidc_debug(r, "returning \"%s\" = %s", cookieName, rv ? apr_psprintf(r->pool, "\"%s\"", rv) : "<null>");
+	/* in client-cookie session mode the value is the whole session credential */
+	oidc_debug(r, "returning \"%s\" = %s", cookieName,
+		   rv ? apr_psprintf(r->pool, "\"%s\"", oidc_util_mask_value(r->pool, rv)) : "<null>");
 
 	return rv;
 }

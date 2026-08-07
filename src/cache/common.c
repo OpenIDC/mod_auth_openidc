@@ -361,7 +361,8 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	apr_byte_t use_secondary = FALSE;
 	const char *s_section = oidc_cache_section_get(r, section);
 
-	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", key, s_section, encrypted, cfg->cache.impl->name);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", oidc_util_mask_value(r->pool, key), s_section,
+		   encrypted, cfg->cache.impl->name);
 
 	s_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)
@@ -403,7 +404,7 @@ end:
 
 	/* log the result */
 	msg = apr_psprintf(r->pool, "from %s cache backend for %skey %s", cfg->cache.impl->name,
-			   encrypted ? "encrypted " : "", key);
+			   encrypted ? "encrypted " : "", oidc_util_mask_value(r->pool, key));
 
 	if (rc == TRUE) {
 		if (*value != NULL)
@@ -431,9 +432,9 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 	const char *s_key = NULL;
 	const char *s_section = oidc_cache_section_get(r, section);
 
-	oidc_debug(r, "enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)", key, s_section,
-		   value ? (int)_oidc_strlen(value) : 0, encrypted, apr_time_sec(expiry - apr_time_now()),
-		   cfg->cache.impl->name);
+	oidc_debug(r, "enter: %s (section=%s, len=%d, encrypt=%d, ttl(s)=%" APR_TIME_T_FMT ", type=%s)",
+		   oidc_util_mask_value(r->pool, key), s_section, value ? (int)_oidc_strlen(value) : 0, encrypted,
+		   apr_time_sec(expiry - apr_time_now()), cfg->cache.impl->name);
 
 	if (oidc_cache_get_key(r, key, oidc_cfg_crypto_passphrase_secret1_get(cfg), encrypted, &s_key) == FALSE)
 		goto end;
@@ -457,7 +458,7 @@ end:
 	/* log the result */
 	msg = apr_psprintf(r->pool, "%d bytes in %s cache backend for %skey %s", (value ? (int)_oidc_strlen(value) : 0),
 			   (cfg->cache.impl->name ? cfg->cache.impl->name : ""), (encrypted ? "encrypted " : ""),
-			   (key ? key : ""));
+			   (key ? oidc_util_mask_value(r->pool, key) : ""));
 	if (rc == TRUE) {
 		oidc_debug(r, "successfully stored %s", msg);
 	} else {

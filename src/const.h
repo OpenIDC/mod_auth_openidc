@@ -216,6 +216,7 @@ static inline int _oidc_str_to_int(const char *s, const int default_value) {
 #define OIDC_CHAR_PIPE '|'
 #define OIDC_CHAR_AMP '&'
 #define OIDC_CHAR_SEMI_COLON ';'
+#define OIDC_CHAR_DQUOTE '"'
 
 #define OIDC_STR_SPACE " "
 #define OIDC_STR_EQUAL "="

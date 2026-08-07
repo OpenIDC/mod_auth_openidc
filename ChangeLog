@@ -1,4 +1,8 @@
 08/07/2026
+- security: redact the credentials that were written verbatim to the log: the provider's
+  response body, the authorization code and tokens parsed out of a front-channel response
+  or back-channel logout request, the unhashed cache key (which is the session id or a
+  token, and was logged at warning level), a refresh token and full cookie values
 - security: scrub client-supplied OIDC_* headers on the request paths that are let
   through without authentication - the CORS preflight (OPTIONS) shortcuts and the two
   redirect-URI/JWKS content-handler dispatches - so a forged claim header cannot reach
