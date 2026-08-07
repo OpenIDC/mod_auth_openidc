@@ -2,6 +2,10 @@ name: Build
 
 on: [push, pull_request]
 
+# the build only ever reads the repository; withhold everything else from GITHUB_TOKEN
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

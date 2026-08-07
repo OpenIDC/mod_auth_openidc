@@ -5,6 +5,13 @@ on:
       - master
   pull_request:
     types: [opened, synchronize, reopened]
+
+# the analysis reads the repository, and the scanner reads pull request context from
+# GITHUB_TOKEN to attach the analysis to the right PR; withhold everything else
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   build:
     name: Build and analyze
