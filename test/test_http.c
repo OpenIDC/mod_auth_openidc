@@ -219,6 +219,11 @@ START_TEST(test_redact_json_for_log) {
 	const char *html = "<html><body>Internal Server Error</body></html>";
 	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, html), html);
 
+	// a truncated body whose value never closes is masked to the end, so that the partial
+	// token it starts with does not reach the log
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"access_token\":\"AT-trunc"),
+			 "{\"access_token\":\"***");
+
 	// more than one occurrence is masked, not just the first
 	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"a\":{\"access_token\":\"1\"},"
 								"\"b\":{\"access_token\":\"2\"}}"),

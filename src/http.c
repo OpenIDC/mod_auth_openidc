@@ -668,12 +668,16 @@ const char *oidc_http_redact_json_for_log(apr_pool_t *pool, const char *data) {
 				continue;
 			}
 			p++;
+			/*
+			 * keep everything up to and including the opening quote, then "***". A
+			 * truncated body has no closing quote, in which case everything from here on
+			 * is masked: the alternative is to leave the value alone and log the partial
+			 * token it starts with. Masking to the end also leaves this loop a single
+			 * exit, taken when there is nothing left to find.
+			 */
 			const char *value_end = strchr(p, OIDC_CHAR_DQUOTE);
-			if (value_end == NULL)
-				break;
-			/* keep everything up to and including the opening quote, then "***" */
 			const apr_size_t prefix_len = p - result;
-			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end);
+			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end ? value_end : "");
 			/* resume just after the "***" that replaced the value */
 			offset = prefix_len + 3;
 		}
