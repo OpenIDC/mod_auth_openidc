@@ -105,6 +105,47 @@ START_TEST(test_session_cache_roundtrip) {
 }
 END_TEST
 
+START_TEST(test_session_reset_starts_a_new_session) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* stand in for the session the browser's cookie pointed at: a known id, with contents
+	 * and the back-channel logout indexes belonging to whoever created it */
+	oidc_session_t *z = NULL;
+	oidc_session_load(r, &z);
+	const char *planted = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+	z->uuid = apr_pstrdup(r->pool, planted);
+	z->sid = apr_pstrdup(r->pool, "sid-of-previous-occupant");
+	z->sub = apr_pstrdup(r->pool, "sub-of-previous-occupant");
+	z->remote_user = apr_pstrdup(r->pool, "mallory@idp.example.com");
+	z->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_refresh_token(r, z, "RT-planted");
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
+
+	/* the cache entry exists under the planted id */
+	char *s_json = NULL;
+	ck_assert_int_eq(oidc_cache_get_session(r, planted, &s_json), TRUE);
+	ck_assert_ptr_nonnull(s_json);
+
+	oidc_session_reset(r, c, z);
+
+	/* a login must not adopt the presented id, nor anything it was carrying */
+	ck_assert_ptr_nonnull(z->uuid);
+	ck_assert_msg(_oidc_strcmp(z->uuid, planted) != 0, "the session must be re-keyed on login");
+	ck_assert_ptr_null(z->sid);
+	ck_assert_ptr_null(z->sub);
+	ck_assert_ptr_null(z->remote_user);
+	ck_assert_ptr_null(oidc_session_get_refresh_token(r, z));
+
+	/* and the entry the presented id pointed at is gone, so it is no longer a live handle */
+	s_json = NULL;
+	oidc_cache_get_session(r, planted, &s_json);
+	ck_assert_ptr_null(s_json);
+
+	oidc_session_free(r, z);
+}
+END_TEST
+
 START_TEST(test_session_cookie_roundtrip) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -545,6 +586,7 @@ int main(void) {
 	TCase *c = tcase_create("session");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_session_cache_roundtrip);
+	tcase_add_test(c, test_session_reset_starts_a_new_session);
 	tcase_add_test(c, test_session_cookie_roundtrip);
 	tcase_add_test(c, test_session_cookie_not_shared_across_vhosts);
 	tcase_add_test(c, test_session_last_refresh_timestamps);

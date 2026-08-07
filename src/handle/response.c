@@ -689,6 +689,16 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	}
 
 	/*
+	 * this is a new login, so start a new session rather than writing the new identity into
+	 * whatever session id the browser presented; see oidc_session_reset().
+	 *
+	 * NB: placement. Everything above still needs the previous session - the prompt=none check
+	 * just above compares its remote_user - and everything below stores values belonging to
+	 * this authentication, so the reset goes exactly here.
+	 */
+	oidc_session_reset(r, c, session);
+
+	/*
 	 * only when session management is enabled (a check_session_iframe is configured) can a silent "check"
 	 * re-authentication be issued from the redirect URI; only then persist the per-path auth_request_params
 	 * and scope used for this authentication, so that re-authentication can reuse them instead of the

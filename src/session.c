@@ -41,9 +41,9 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "session.h"
 #include "cfg/dir.h"
 #include "metrics.h"
-#include "session.h"
 #include "util/util.h"
 
 #include "util/cache_local.h"
@@ -249,6 +249,32 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 		z->state = NULL;
 	}
 	z->state_shared = FALSE;
+}
+
+/*
+ * start a brand new session for a newly authenticated user
+ *
+ * A login stores the new identity into whatever session the browser presented, keeping its
+ * id: oidc_session_load() mints a fresh uuid but oidc_session_load_cache_by_uuid() replaces
+ * it with the one from the cookie whenever that cache entry exists. So an attacker who can
+ * set a cookie for this host - the related-domain attacker an OIDCCookieDomain deployment
+ * creates - can authenticate first to make a live entry, plant its id on the victim, and
+ * still hold that id after the victim has logged in. Whatever they left in the entry (a
+ * refresh token, say) would also survive into the victim's session, and be handed to the
+ * application by OIDCPassRefreshToken.
+ *
+ * Drop the old entry, discard its contents and issue a new id. Client-cookie sessions are
+ * self-contained and were never exposed to this, but are re-keyed too so both types behave
+ * the same.
+ */
+void oidc_session_reset(request_rec *r, const oidc_cfg_t *c, oidc_session_t *z) {
+	if ((oidc_cfg_session_type_get(c) == OIDC_SESSION_TYPE_SERVER_CACHE) && (z->uuid != NULL))
+		oidc_cache_set_session(r, z->uuid, NULL, 0);
+	oidc_session_clear(r, z);
+	/* these two index the session for back-channel logout and belong to the previous occupant */
+	z->sid = NULL;
+	z->sub = NULL;
+	oidc_session_id_new(r, z);
 }
 
 /*

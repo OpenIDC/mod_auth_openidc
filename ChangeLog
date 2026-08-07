@@ -1,4 +1,8 @@
 08/07/2026
+- security: start a new session on login instead of writing the newly authenticated
+  identity into whatever session id the browser presented, which let anyone able to set a
+  cookie for the host keep a handle on the session and leave state in it beforehand;
+  server-cache sessions only, but client-cookie sessions are re-keyed too
 - security: ignore the "scopes" and "auth_request_params" query parameters unless the
   Discovery response passes CSRF validation; they shape the authorization request and are
   documented as values returned from the Discovery page, but were honoured on 3rd-party
