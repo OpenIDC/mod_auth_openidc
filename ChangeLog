@@ -1,4 +1,10 @@
 08/07/2026
+- security: ignore the "scopes" and "auth_request_params" query parameters unless the
+  Discovery response passes CSRF validation; they shape the authorization request and are
+  documented as values returned from the Discovery page, but were honoured on 3rd-party
+  initiated SSO too, so any cross-site link could choose the scopes a session ends up with.
+  NB a deployment that passes either of these on a 3rd-party initiated login URL will now
+  see them ignored, with a warning logged
 - security: require the "iat" and "jti" claims in a back-channel logout token, both of
   which OpenID Connect Back-Channel Logout 1.0 makes REQUIRED; without them a captured
   logout token stayed valid indefinitely and its replay was undetectable

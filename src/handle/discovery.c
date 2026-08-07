@@ -606,6 +606,24 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	/* do CSRF protection if not 3rd party initiated SSO */
 	apr_byte_t csrf_valid = oidc_discovery_response_csrf_check(r, c);
 
+	/*
+	 * "scopes" and "auth_request_params" shape the authorization request, and they are ours:
+	 * they are documented as values that come back from the Discovery page we rendered, which
+	 * is what a valid CSRF token proves. csrf_valid is FALSE both for 3rd-party initiated SSO
+	 * (no cookie) and for a failed check, and in neither case did these values come from us -
+	 * honouring them would let any cross-site link pick the scopes, or add authorization
+	 * request parameters, for a session the victim ends up with.
+	 */
+	if (csrf_valid == FALSE) {
+		if ((path_scopes != NULL) || (auth_request_params != NULL))
+			oidc_warn(r,
+				  "ignoring the \"%s\" and/or \"%s\" parameter(s): they are only honoured on a "
+				  "Discovery response that passes CSRF validation, not on 3rd-party initiated SSO",
+				  OIDC_DISC_SC_PARAM, OIDC_DISC_AR_PARAM);
+		path_scopes = NULL;
+		auth_request_params = NULL;
+	}
+
 	/* the issuer/account-name values may have been typed/pasted by the user on the discovery page */
 	issuer = oidc_discovery_response_input_trim(issuer);
 	user = oidc_discovery_response_input_trim(user);

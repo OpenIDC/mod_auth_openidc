@@ -2225,6 +2225,28 @@ START_TEST(test_handle_discovery_response_static_provider_redirects) {
 }
 END_TEST
 
+START_TEST(test_handle_discovery_response_3rd_party_ignores_scopes_and_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* no CSRF cookie, so this is 3rd-party initiated SSO: "scopes" and "auth_request_params"
+	 * did not come back from a Discovery page we rendered, and must not shape the
+	 * authorization request - otherwise any cross-site link picks the scopes the victim's
+	 * session ends up with */
+	r->args = "iss=https%3A%2F%2Fidp.example.com"
+		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2Fwhatever"
+		  "&scopes=adminscope"
+		  "&auth_request_params=acr_values%3Dweak";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_msg(_oidc_strstr(loc, "adminscope") == NULL, "attacker-chosen scope must not reach the OP");
+	ck_assert_msg(_oidc_strstr(loc, "acr_values") == NULL,
+		      "attacker-chosen authorization request parameter must not reach the OP");
+}
+END_TEST
+
 START_TEST(test_handle_discovery_response_issuer_input_trimmed) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -6553,6 +6575,7 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_response_no_target_link_uri_no_sso_url);
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_redirects);
 	tcase_add_test(discovery, test_handle_discovery_response_issuer_input_trimmed);
+	tcase_add_test(discovery, test_handle_discovery_response_3rd_party_ignores_scopes_and_params);
 	tcase_add_test(discovery, test_handle_discovery_response_static_provider_iss_mismatch);
 	tcase_add_test(discovery, test_handle_discovery_response_target_link_uri_open_redirect);
 	tcase_add_test(discovery, test_handle_discovery_response_user_discovery_fails);
