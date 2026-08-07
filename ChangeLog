@@ -1,3 +1,10 @@
+08/07/2026
+- metadata: avoid a NULL pointer dereference (segfault) when the OP selection/discovery
+  page is served while no OIDCMetadataDir is configured, and catch an RP vhost that
+  configures OIDCRedirectURI without any provider source at startup
+- test: increase unit test line coverage from 91% to over 94% with negative-path and
+  option-matrix tests across the http, jose, session, cache, oauth and handler code
+
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read
   "authz+authz" instead of "authn+authz". The string is published verbatim in

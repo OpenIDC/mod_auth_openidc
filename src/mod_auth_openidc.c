@@ -1717,19 +1717,25 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s, apr_h
 	if (oidc_config_ensure_crypto_passphrase(s, cfg, TRUE, kdf_cache) != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	if (((oidc_cfg_metadata_dir_get(cfg) != NULL) ||
-	     (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
-	     (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(cfg)) != NULL)) &&
+	const int openidc_configured = (oidc_cfg_metadata_dir_get(cfg) != NULL) ||
+				       (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL) ||
+				       (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(cfg)) != NULL);
+
+	const int oauth_configured =
+	    (oidc_cfg_oauth_metadata_url_get(cfg) != NULL) || (oidc_cfg_oauth_client_id_get(cfg) != NULL) ||
+	    (oidc_cfg_oauth_client_secret_get(cfg) != NULL) ||
+	    (oidc_cfg_oauth_introspection_endpoint_url_get(cfg) != NULL) ||
+	    (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) || (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
+	    (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL);
+
+	/* a vhost that sets OIDCRedirectURI without any OAuth 2.0 RS settings intends to act as an
+	 * OpenID Connect RP: run the RP check even when no provider source is configured, so that
+	 * omission is a startup error instead of a request-time authentication/discovery failure */
+	if ((openidc_configured || ((oidc_cfg_redirect_uri_get(cfg) != NULL) && (!oauth_configured))) &&
 	    (oidc_check_config_openid_openidc(pool, s, cfg) != OK))
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	if (((oidc_cfg_oauth_metadata_url_get(cfg) != NULL) || (oidc_cfg_oauth_client_id_get(cfg) != NULL) ||
-	     (oidc_cfg_oauth_client_secret_get(cfg) != NULL) ||
-	     (oidc_cfg_oauth_introspection_endpoint_url_get(cfg) != NULL) ||
-	     (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) ||
-	     (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
-	     (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL)) &&
-	    (oidc_check_config_oauth(pool, s, cfg) != OK))
+	if (oauth_configured && (oidc_check_config_oauth(pool, s, cfg) != OK))
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	return OK;

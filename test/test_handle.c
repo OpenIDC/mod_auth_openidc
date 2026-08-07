@@ -2429,13 +2429,17 @@ static void e2e_write_metadata_dir(request_rec *r, const char *jwks_uri) {
 	apr_file_close(f);
 }
 
-/* a discovery request whose OIDCMetadataDir cannot be listed has no providers to offer */
+/* a discovery request without an OIDCMetadataDir (used to segfault in apr_dir_open)
+ * or with one that cannot be listed has no providers to offer */
 START_TEST(test_handle_discovery_request_no_providers) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	c->metadata_dir = NULL;
+	ck_assert_int_eq(oidc_discovery_request(r, c), HTTP_UNAUTHORIZED);
+
 	c->metadata_dir = apr_pstrdup(r->pool, "/no-such-metadata-dir");
-	int rc = oidc_discovery_request(r, c);
-	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+	ck_assert_int_eq(oidc_discovery_request(r, c), HTTP_UNAUTHORIZED);
 }
 END_TEST
 

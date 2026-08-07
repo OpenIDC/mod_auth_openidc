@@ -102,6 +102,15 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg_t *cfg, apr_array_header_
 
 	oidc_debug(r, "enter");
 
+	/* no metadata directory means no providers to list; this is reachable at request time
+	 * (despite the post-config checks) e.g. when resolving the statically configured provider
+	 * from " OIDCProviderMetadataURL " fails and authentication falls through to discovery,
+	 * and apr_dir_open must not be handed a NULL path */
+	if (oidc_cfg_metadata_dir_get(cfg) == NULL) {
+		oidc_error(r, "" OIDCMetadataDir " is not set: no providers can be listed");
+		return FALSE;
+	}
+
 	/* open the metadata directory */
 	if ((rc = apr_dir_open(&dir, oidc_cfg_metadata_dir_get(cfg), r->pool)) != APR_SUCCESS) {
 		oidc_error(r, "error opening metadata directory '%s' (%s)", oidc_cfg_metadata_dir_get(cfg),
