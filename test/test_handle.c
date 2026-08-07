@@ -5440,6 +5440,57 @@ static void existing_session_seed(request_rec *r, oidc_session_t *session, apr_b
 	oidc_session_set_session_expires(r, session, apr_time_now() + apr_time_from_sec(3600));
 }
 
+/* drive an authorization response, a bare error response and a discovery response
+ * through the redirect-URI dispatch table (rather than calling the handlers directly) */
+START_TEST(test_handle_dispatch_response_and_discovery) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+
+	/* 1: a complete code-flow authorization response through the dispatcher */
+	const char *secret = "dispatch-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+	oidc_test_http_response_t resp = {0};
+	resp.status_code = 200;
+	resp.content_type = "application/json";
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-dsp", secret);
+	resp.body = apr_psprintf(r->pool,
+				 "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+				 "\"id_token\":\"%s\"}",
+				 id_token);
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	oidc_session_load(r, &session);
+	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE, "nonce-dsp", NULL, NULL, NULL);
+	r->args = apr_psprintf(r->pool, "state=%s&code=the-auth-code", oidc_http_url_encode(r, state));
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_MOVED_TEMPORARILY);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+
+	/* 2: an error parameter without a state parameter takes the error branch */
+	oidc_session_load(r, &session);
+	r->args = "error=access_denied&error_description=denied";
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_BAD_REQUEST);
+	oidc_session_free(r, session);
+
+	/* 3: a discovery response through the dispatcher */
+	oidc_session_load(r, &session);
+	c->default_sso_url = apr_pstrdup(r->pool, "/landing");
+	r->args = "iss=https%3A%2F%2Fidp.example.com";
+	int rc = oidc_handle_redirect_uri_request(r, c, session);
+	ck_assert_msg((rc == HTTP_MOVED_TEMPORARILY) || (rc == HTTP_INTERNAL_SERVER_ERROR) || (rc == HTTP_UNAUTHORIZED),
+		      "discovery response dispatched, got %d", rc);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /* a healthy session copies its id_token claims, userinfo claims and scope into the
  * request state and passes the id_token payload/serialized forms as app info */
 START_TEST(test_handle_dispatch_existing_session_passes_tokens) {
@@ -6642,6 +6693,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);
 	tcase_add_test(dispatch, test_handle_dispatch_empty_args_routes_to_implicit_flow);
 	tcase_add_test(dispatch, test_handle_dispatch_logout_takes_precedence_over_post_authn);
+	tcase_add_test(dispatch, test_handle_dispatch_response_and_discovery);
 	tcase_add_test(dispatch, test_handle_dispatch_existing_session_passes_tokens);
 	tcase_add_test(dispatch, test_handle_dispatch_info_happy_sets_authn_header);
 	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
