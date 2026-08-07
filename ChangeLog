@@ -20,8 +20,8 @@
   building a module with the claims-expression directives compiled out
 - proto: pass the server config in explicitly rather than looking it up from the global
   module config, so no protocol code depends on a live Apache server record
-- ci: promote -Wformat-security, -Wimplicit-fallthrough, -Wpointer-arith and
-  -Wstrict-prototypes to errors on the gcc and clang legs, which the tree already passes
+- ci: promote -Wformat-security, -Wimplicit-fallthrough and -Wpointer-arith to errors
+  on the gcc and clang legs, which the tree already passes
 - test: cast the seven size_t lengths that were narrowed implicitly to int/unsigned,
   so the suite also builds clean under the clang leg's -Wshorten-64-to-32
 - ci: run "make check" on the clang static-analysis leg too, so those type checks

@@ -29,16 +29,22 @@ jobs:
       # distro matrix. NB: several of these only fire in an optimized build (gcc
       # reports -Wmaybe-uninitialized from LTO), so a syntax-only check is not enough.
       #
-      # The four -W flags after the exclusions are ones the tree is already clean on,
-      # added purely so a regression fails the build. -Wwrite-strings is deliberately
-      # not among them: it retypes string literals as const char[], which cascades
-      # into -Wdiscarded-qualifiers across the config and metrics tables and would
-      # mean const-correcting a large part of the tree for no defect found.
+      # The three -W flags after the exclusions are ones the tree is already clean on,
+      # added purely so a regression fails the build. Two are deliberately excluded:
+      # -Wwrite-strings retypes string literals as const char[], which cascades into
+      # -Wdiscarded-qualifiers across the config and metrics tables; and
+      # -Wstrict-prototypes cannot go in the CFLAGS handed to ./configure at all,
+      # because autoconf's own AC_CHECK_LIB probe declares the symbol K&R-style as
+      # "char jq_init ();". Under -Werror that is fatal on a compiler defaulting to
+      # gnu17 (the runner's gcc 13), so every library probe silently reports "not
+      # found" - which is how it first surfaced, as --with-jq failing to find libjq.
+      # It is NOT visible on a gcc that defaults to gnu23, where () already means
+      # (void). The () -> (void) source fixes it prompted are kept regardless.
       run: |
         ./autogen.sh
         ./configure --with-jq \
           CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
-                  -Wformat-security -Wimplicit-fallthrough -Wpointer-arith -Wstrict-prototypes -Werror"
+                  -Wformat-security -Wimplicit-fallthrough -Wpointer-arith -Werror"
     - name: Make
       run: make
     - name: Test
@@ -372,7 +378,7 @@ jobs:
           CFLAGS="-g -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
                   -Wno-unknown-warning-option -Wno-null-pointer-subtraction \
                   -Wimplicit-int-conversion -Wcast-function-type-mismatch \
-                  -Wformat-security -Wimplicit-fallthrough -Wpointer-arith -Wstrict-prototypes -Werror"
+                  -Wformat-security -Wimplicit-fallthrough -Wpointer-arith -Werror"
         # the apxs-derived CFLAGS carry gcc-only LTO flags (-flto=auto /
         # -ffat-lto-objects); strip them on the clang leg so an older runner
         # clang cannot choke on them (LTO is irrelevant for an analysis build)
