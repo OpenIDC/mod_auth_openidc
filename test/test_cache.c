@@ -1139,6 +1139,254 @@ START_TEST(test_cache_redis_live_connection_helpers) {
 }
 END_TEST
 
+/* all the optional OIDCRedisCache* settings propagated into the connection: username +
+ * password (the default redis user is "nopass" so any password authenticates), database
+ * selection, connect/request timeouts and the keepalive interval */
+START_TEST(test_cache_redis_live_config_options) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, getenv("OIDC_TEST_REDIS_SERVER"));
+	cfg->cache.redis_username = apr_pstrdup(r->pool, "default");
+	cfg->cache.redis_password = apr_pstrdup(r->pool, "any-password-works-for-nopass");
+	cfg->cache.redis_database = 2;
+	cfg->cache.redis_connect_timeout = 3;
+	cfg->cache.redis_timeout = 3;
+	cfg->cache.redis_keepalive = 30;
+	cfg->cache.impl = &oidc_cache_redis;
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+
+	char *key = apr_psprintf(r->pool, "live-opts-%" APR_TIME_T_FMT, apr_time_now());
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, "opts-v1", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "opts-v1");
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0), TRUE);
+
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.redis_username = NULL;
+	cfg->cache.redis_password = NULL;
+	cfg->cache.redis_database = OIDC_CONFIG_POS_INT_UNSET;
+	cfg->cache.redis_connect_timeout = OIDC_CONFIG_POS_INT_UNSET;
+	cfg->cache.redis_timeout = OIDC_CONFIG_POS_INT_UNSET;
+	cfg->cache.redis_keepalive = OIDC_CONFIG_POS_INT_UNSET;
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+/* OIDCRedisCacheServer values that fail to parse, and one without a port */
+START_TEST(test_cache_redis_live_server_spec) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+	cfg->cache.impl = &oidc_cache_redis;
+
+	/* an unparsable address (port out of range) */
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, "127.0.0.1:77777");
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server),
+			 HTTP_INTERNAL_SERVER_ERROR);
+
+	/* a port without a hostname */
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, ":6379");
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server),
+			 HTTP_INTERNAL_SERVER_ERROR);
+
+	/* an empty server value parses but yields no hostname */
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, "");
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server),
+			 HTTP_INTERNAL_SERVER_ERROR);
+
+	/* a database that cannot be selected fails the connection setup */
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, getenv("OIDC_TEST_REDIS_SERVER"));
+	cfg->cache.redis_database = 999999;
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+	apr_table_set(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL", "10");
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "no-such-db-key", &value), FALSE);
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.redis_database = OIDC_CONFIG_POS_INT_UNSET;
+
+	/* a password without a username fails to authenticate against a no-auth server */
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_password = apr_pstrdup(r->pool, "password-on-a-passwordless-server");
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "no-auth-key", &value), FALSE);
+	apr_table_unset(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL");
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.redis_password = NULL;
+
+	/* a bare hostname gets the default port 6379 (which is where the live server is) */
+	const char *env_server = getenv("OIDC_TEST_REDIS_SERVER");
+	if (_oidc_strstr(env_server, "localhost:6379") == env_server) {
+		cfg->cache.cfg = NULL;
+		cfg->cache.redis_server = apr_pstrdup(r->pool, "localhost");
+		ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+		ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+		char *key = apr_psprintf(r->pool, "live-dflt-%" APR_TIME_T_FMT, apr_time_now());
+		ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, "dflt-v1",
+						      apr_time_now() + apr_time_from_sec(60)),
+				 TRUE);
+		oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	}
+
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+/* the legacy shared-connection model: one connection under the process mutex,
+ * reused across calls and torn down via the disconnect hook */
+START_TEST(test_cache_redis_live_legacy_shared_connection) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, getenv("OIDC_TEST_REDIS_SERVER"));
+	cfg->cache.impl = &oidc_cache_redis;
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
+	context->request_scoped = FALSE;
+
+	char *key = apr_psprintf(r->pool, "live-legacy-%" APR_TIME_T_FMT, apr_time_now());
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	char *value = NULL;
+	/* the first call connects, the second reuses the shared connection */
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, "legacy-v1", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_str_eq(value, "legacy-v1");
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0), TRUE);
+	ck_assert_ptr_nonnull(context->rctx);
+
+	/* destroy tears the shared connection down through the disconnect hook */
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+/* the request-scoped idle pool: a connection returned at request-pool teardown is
+ * picked up by the next request, and destroy releases any connections still idle */
+START_TEST(test_cache_redis_live_idle_pool) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_pstrdup(r->pool, getenv("OIDC_TEST_REDIS_SERVER"));
+	cfg->cache.impl = &oidc_cache_redis;
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+
+	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
+	char *key = apr_psprintf(r->pool, "live-pool-%" APR_TIME_T_FMT, apr_time_now());
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+
+	/* "request" 1: a shallow request copy with its own pool checks a connection out;
+	 * destroying the pool returns the healthy connection to the idle pool */
+	apr_pool_t *subpool = NULL;
+	ck_assert_int_eq(apr_pool_create(&subpool, r->pool), APR_SUCCESS);
+	request_rec *r2 = apr_pmemdup(subpool, r, sizeof(request_rec));
+	r2->pool = subpool;
+	ck_assert_int_eq(oidc_cache_redis_set(r2, OIDC_CACHE_SECTION_SESSION, key, "pool-v1", expiry), TRUE);
+	apr_pool_destroy(subpool);
+	ck_assert_int_eq(context->idle_num, 1);
+
+	/* "request" 2: the pooled connection is reused rather than a fresh connect */
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+	ck_assert_str_eq(value, "pool-v1");
+	ck_assert_int_eq(context->idle_num, 0);
+	ck_assert_int_eq(oidc_cache_redis_set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, 0), TRUE);
+
+	/* leave a connection in the idle pool for destroy to release */
+	ck_assert_int_eq(apr_pool_create(&subpool, r->pool), APR_SUCCESS);
+	request_rec *r3 = apr_pmemdup(subpool, r, sizeof(request_rec));
+	r3->pool = subpool;
+	char *v3 = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r3, OIDC_CACHE_SECTION_SESSION, key, &v3), TRUE);
+	apr_pool_destroy(subpool);
+	ck_assert_int_eq(context->idle_num, 1);
+
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
+/* a server that accepts connections but never answers: the command times out and the
+ * connection is torn down; once the listener is gone the reconnect itself fails */
+START_TEST(test_cache_redis_live_half_dead_server) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev_impl = (oidc_cache_t *)cfg->cache.impl;
+	void *prev_cfg = cfg->cache.cfg;
+	char *prev_server = cfg->cache.redis_server;
+
+	/* a socket that listens but never accepts/answers */
+	apr_socket_t *sock = NULL;
+	apr_sockaddr_t *sa = NULL;
+	ck_assert_int_eq(apr_sockaddr_info_get(&sa, "127.0.0.1", APR_INET, 0, 0, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_socket_create(&sock, sa->family, SOCK_STREAM, APR_PROTO_TCP, r->pool), APR_SUCCESS);
+	apr_socket_opt_set(sock, APR_SO_REUSEADDR, 1);
+	ck_assert_int_eq(apr_socket_bind(sock, sa), APR_SUCCESS);
+	ck_assert_int_eq(apr_socket_listen(sock, 2), APR_SUCCESS);
+	apr_sockaddr_t *bound = NULL;
+	ck_assert_int_eq(apr_socket_addr_get(&bound, APR_LOCAL, sock), APR_SUCCESS);
+
+	cfg->cache.cfg = NULL;
+	cfg->cache.redis_server = apr_psprintf(r->pool, "127.0.0.1:%d", (int)bound->port);
+	cfg->cache.redis_timeout = 1;
+	cfg->cache.redis_connect_timeout = 1;
+	cfg->cache.impl = &oidc_cache_redis;
+	ck_assert_int_eq(oidc_cache_redis.post_config(r->server->process->pconf, r->server), OK);
+	ck_assert_int_eq(oidc_cache_redis_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+
+	/* the command times out on the accepted-but-mute connection (with an internal retry) */
+	apr_table_set(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL", "10");
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "half-dead-key", &value), FALSE);
+
+	/* with the listener gone even the (re)connect fails */
+	apr_socket_close(sock);
+	ck_assert_int_eq(oidc_cache_redis_get(r, OIDC_CACHE_SECTION_SESSION, "half-dead-key", &value), FALSE);
+	apr_table_unset(r->subprocess_env, "OIDC_REDIS_RETRY_INTERVAL");
+
+	oidc_cache_redis.destroy(r->server->process->pconf, r->server);
+	cfg->cache.redis_timeout = OIDC_CONFIG_POS_INT_UNSET;
+	cfg->cache.redis_connect_timeout = OIDC_CONFIG_POS_INT_UNSET;
+	cfg->cache.impl = prev_impl;
+	cfg->cache.cfg = prev_cfg;
+	cfg->cache.redis_server = prev_server;
+}
+END_TEST
+
 /*
  * reset the redis mock as part of the per-test fixture. Under CK_FORK=no
  * (make valgrind) all tests share one process, so a test that does not call
@@ -1630,6 +1878,12 @@ int main(void) {
 		tcase_add_checked_fixture(redis_live, oidc_test_setup, oidc_test_teardown);
 		tcase_add_test(redis_live, test_cache_redis_live_roundtrip);
 		tcase_add_test(redis_live, test_cache_redis_live_connection_helpers);
+		tcase_add_test(redis_live, test_cache_redis_live_config_options);
+		tcase_add_test(redis_live, test_cache_redis_live_server_spec);
+		tcase_add_test(redis_live, test_cache_redis_live_legacy_shared_connection);
+		tcase_add_test(redis_live, test_cache_redis_live_idle_pool);
+		tcase_add_test(redis_live, test_cache_redis_live_half_dead_server);
+		tcase_set_timeout(redis_live, 30);
 		suite_add_tcase(s, redis_live);
 	}
 #endif
