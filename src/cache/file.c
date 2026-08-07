@@ -421,27 +421,38 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	info.expire = expiry;
 	info.len = _oidc_strlen(value) + 1;
 
-	/* write the header */
+	/* write the header, then the value; both returns must be checked, since a short
+	 * write (a full disk, a quota) would otherwise be reported as a stored entry and
+	 * only surface later as an unreadable one */
 	if (oidc_cache_file_write(r, path, fd, &info, sizeof(oidc_cache_file_info_t)) != APR_SUCCESS)
-		return FALSE;
+		goto error;
 
-	/* next write the value */
-	oidc_cache_file_write(r, path, fd, (const void *)value, info.len);
+	if (oidc_cache_file_write(r, path, fd, (const void *)value, info.len) != APR_SUCCESS)
+		goto error;
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
 	if ((rc = apr_file_rename(path, target, r->pool)) != APR_SUCCESS) {
-		oidc_error(r, "cache file: %s could not be renamed to: %s", path, target);
+		oidc_error(r, "cache file: %s could not be renamed to: %s (%s)", path, target,
+			   apr_strerror(rc, s_err, sizeof(s_err)));
+		apr_file_remove(path, r->pool);
 		return FALSE;
 	}
 
-	/* log our success/failure */
-	oidc_debug(r, "%s entry for key \"%s\" in file of %" APR_SIZE_T_FMT " bytes",
-		   (rc == APR_SUCCESS) ? "successfully stored" : "could not store", key, info.len);
+	oidc_debug(r, "successfully stored entry for key \"%s\" in file of %" APR_SIZE_T_FMT " bytes", key, info.len);
 
-	return (rc == APR_SUCCESS);
+	return TRUE;
+
+error:
+
+	/* drop the partially written temporary file rather than leaving it behind */
+	apr_file_unlock(fd);
+	apr_file_close(fd);
+	apr_file_remove(path, r->pool);
+
+	return FALSE;
 }
 
 // clang-format off

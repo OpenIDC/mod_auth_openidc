@@ -1,4 +1,7 @@
 08/07/2026
+- cache: fail a file cache write when the value could not be fully written, instead of
+  reporting success and leaving a truncated entry that only fails on the next read;
+  also drop the partially written temporary file rather than leaking a locked fd
 - metrics: add counters and timers for the remaining outbound provider calls and
   operational events: JWKs retrieval, pushed authorization requests, dynamic client
   registration, token revocation, DPoP nonce retries, back-channel logout outcomes,
