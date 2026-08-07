@@ -1108,6 +1108,498 @@ START_TEST(test_handle_response_authorization_redirect_unknown_response_type) {
 }
 END_TEST
 
+/* defined further down alongside the logout tests */
+static void e2e_post_body(request_rec *r, const char *body);
+
+/* build a state cookie for an implicit/hybrid flow; the extra knobs (prompt,
+ * original_method, issuer) parameterize the negative-path variants */
+static char *e2e_implicit_state_cookie_mode(request_rec *r, oidc_cfg_t *c, const char *response_type,
+					    const char *response_mode, const char *nonce, const char *prompt,
+					    const char *original_method, const char *issuer) {
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, nonce);
+	oidc_proto_state_set_state(ps, "s1");
+	oidc_proto_state_set_issuer(ps, issuer ? issuer : "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/index.html");
+	oidc_proto_state_set_original_method(ps, original_method ? original_method : OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, response_type);
+	oidc_proto_state_set_response_mode(ps, response_mode);
+	if (prompt)
+		oidc_proto_state_set_prompt(ps, prompt);
+	oidc_proto_state_set_auth_request_params(ps, "custom=param");
+	oidc_proto_state_set_path_scope(ps, "openid profile");
+	oidc_proto_state_set_timestamp_now(ps);
+
+	char *fingerprint = oidc_state_browser_fingerprint(r, c, nonce);
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	const char *cookie_name = oidc_state_cookie_name(r, fingerprint);
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "foo=bar; %s=%s; baz=zot", cookie_name, cookie));
+	oidc_proto_state_destroy(ps);
+	return fingerprint;
+}
+
+static char *e2e_implicit_state_cookie(request_rec *r, oidc_cfg_t *c, const char *response_type, const char *nonce,
+				       const char *prompt, const char *original_method, const char *issuer) {
+	return e2e_implicit_state_cookie_mode(r, c, response_type, OIDC_PROTO_RESPONSE_MODE_QUERY, nonce, prompt,
+					      original_method, issuer);
+}
+
+/* SHA-256 half hash, base64url-encoded, as used by the c_hash/at_hash claims */
+static const char *e2e_half_hash_b64url(request_rec *r, const char *value) {
+	oidc_jose_error_t err;
+	char *calc = NULL;
+	unsigned int calc_len = 0;
+	char *out = NULL;
+	ck_assert_int_eq(oidc_jose_hash_string(r->pool, "HS256", value, &calc, &calc_len, &err), TRUE);
+	ck_assert_int_gt(
+	    oidc_util_base64url_encode(r, &out, calc, oidc_jose_hash_length("HS256") / 2, OIDC_BASE64URL_PADDING_STRIP),
+	    0);
+	return out;
+}
+
+/* build an HS256-signed id_token for the hybrid flows: standard claims plus
+ * nonce and optional c_hash/at_hash values */
+static char *e2e_sign_hybrid_idtoken_handle(request_rec *r, const char *secret, const char *nonce, const char *code,
+					    const char *access_token) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "HS256");
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://idp.example.com"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("client_id"));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "nonce", oidc_json_string(nonce));
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_object_set_new(jwt->payload.value.json, "exp", oidc_json_integer(now + 600));
+	if (code != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "c_hash",
+					 oidc_json_string(e2e_half_hash_b64url(r, code)));
+	if (access_token != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "at_hash",
+					 oidc_json_string(e2e_half_hash_b64url(r, access_token)));
+	jwt->payload.iss = apr_pstrdup(r->pool, "https://idp.example.com");
+	jwt->payload.sub = apr_pstrdup(r->pool, "alice");
+	jwt->payload.iat = now;
+	jwt->payload.exp = now + 600;
+
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+	return cser;
+}
+
+/* hybrid flow "code id_token token": front-channel tokens validated via c_hash/at_hash,
+ * arriving fragment-style through the POST entrypoint */
+START_TEST(test_handle_response_hybrid_code_idtoken_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "hybrid-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+	/* session management on: the per-path params/scope from the proto state are persisted */
+	oidc_cfg_provider_check_session_iframe_set(r->pool, provider, "https://idp.example.com/check");
+
+	/* the code is still exchanged at the token endpoint */
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *state = e2e_implicit_state_cookie_mode(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN_TOKEN,
+						     OIDC_PROTO_RESPONSE_MODE_FRAGMENT, "nonce-hyb1", NULL, NULL, NULL);
+	char *id_token = e2e_sign_hybrid_idtoken_handle(r, secret, "nonce-hyb1", "the-code", "AT-hyb1");
+	char *body = apr_psprintf(
+	    r->pool, "response_mode=fragment&state=%s&code=the-code&id_token=%s&access_token=AT-hyb1&token_type=Bearer",
+	    oidc_http_url_encode(r, state), oidc_http_url_encode(r, id_token));
+	e2e_post_body(r, body);
+
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* hybrid flow "code id_token": the access token comes from the token endpoint */
+START_TEST(test_handle_response_hybrid_code_idtoken) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "hybrid-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-hyb2\",\"token_type\":\"Bearer\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *state = e2e_implicit_state_cookie_mode(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN,
+						     OIDC_PROTO_RESPONSE_MODE_FRAGMENT, "nonce-hyb2", NULL, NULL, NULL);
+	char *id_token = e2e_sign_hybrid_idtoken_handle(r, secret, "nonce-hyb2", "the-code", NULL);
+	char *body = apr_psprintf(r->pool, "response_mode=fragment&state=%s&code=the-code&id_token=%s",
+				  oidc_http_url_encode(r, state), oidc_http_url_encode(r, id_token));
+	e2e_post_body(r, body);
+
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-hyb2");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* hybrid flow "code token" carries no id_token in the front channel: when the token
+ * endpoint does not return one either, the handler must refuse to authenticate */
+START_TEST(test_handle_response_hybrid_code_token_no_idtoken) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "hybrid-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *state = e2e_implicit_state_cookie_mode(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE_TOKEN,
+						     OIDC_PROTO_RESPONSE_MODE_FRAGMENT, "nonce-hyb3", NULL, NULL, NULL);
+	char *body = apr_psprintf(r->pool,
+				  "response_mode=fragment&state=%s&code=the-code&access_token=AT-hyb3"
+				  "&token_type=Bearer",
+				  oidc_http_url_encode(r, state));
+	e2e_post_body(r, body);
+
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_ne(rc, HTTP_MOVED_TEMPORARILY);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* implicit flow "id_token token": no code, no token endpoint call */
+START_TEST(test_handle_response_implicit_idtoken_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "implicit-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	char *state = e2e_implicit_state_cookie_mode(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN_TOKEN,
+						     OIDC_PROTO_RESPONSE_MODE_FRAGMENT, "nonce-imp1", NULL, NULL, NULL);
+	char *id_token = e2e_sign_hybrid_idtoken_handle(r, secret, "nonce-imp1", NULL, "AT-imp1");
+	char *body =
+	    apr_psprintf(r->pool, "response_mode=fragment&state=%s&id_token=%s&access_token=AT-imp1&token_type=Bearer",
+			 oidc_http_url_encode(r, state), oidc_http_url_encode(r, id_token));
+	e2e_post_body(r, body);
+
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* an expired state (OIDCStateTimeout elapsed) yields the timeout error page */
+START_TEST(test_handle_response_state_expired) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	c->state_timeout = 0;
+	char *state = e2e_build_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	r->args = apr_psprintf(r->pool, "state=%s&code=the-code", oidc_http_url_encode(r, state));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* an expired state with a default SSO URL configured but overridden via the env var
+ * still renders the error page and then redirects to the default SSO URL */
+START_TEST(test_handle_response_state_expired_no_default_url_env) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	c->state_timeout = 0;
+	c->default_sso_url = apr_pstrdup(r->pool, "/sso");
+	apr_table_set(r->subprocess_env, "OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT", "1");
+	char *state = e2e_build_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	r->args = apr_psprintf(r->pool, "state=%s&code=the-code", oidc_http_url_encode(r, state));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	apr_table_unset(r->subprocess_env, "OIDC_NO_DEFAULT_URL_ON_STATE_TIMEOUT");
+	/* the state-mismatch handler still sends the user to the default SSO URL */
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a state cookie whose recomputed fingerprint does not match the state parameter */
+START_TEST(test_handle_response_state_fingerprint_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* serialize a legitimate proto state but store it under a forged state value */
+	oidc_proto_state_t *ps = oidc_proto_state_new();
+	oidc_proto_state_set_nonce(ps, "fp-nonce");
+	oidc_proto_state_set_state(ps, "s1");
+	oidc_proto_state_set_issuer(ps, "https://idp.example.com");
+	oidc_proto_state_set_original_url(ps, "https://www.example.com/protected/index.html");
+	oidc_proto_state_set_original_method(ps, OIDC_METHOD_GET);
+	oidc_proto_state_set_response_type(ps, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	oidc_proto_state_set_timestamp_now(ps);
+	char *cookie = oidc_proto_state_to_cookie(r, c, ps);
+	oidc_proto_state_destroy(ps);
+	const char *forged_state = "forged-state-value-1234567890abcdef1234567";
+	apr_table_set(r->headers_in, "Cookie",
+		      apr_psprintf(r->pool, "%s=%s", oidc_state_cookie_name(r, forged_state), cookie));
+	r->args = apr_psprintf(r->pool, "state=%s&code=the-code", oidc_http_url_encode(r, forged_state));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* hybrid "code id_token": the id_token parses but the code exchange fails, so the
+ * already-allocated JWT is destroyed on the failure path */
+START_TEST(test_handle_response_hybrid_token_endpoint_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "hybrid-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	/* the token endpoint refuses the code exchange */
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider,
+						 apr_psprintf(r->pool, "http://127.0.0.1:%d/token", free_port));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *state = e2e_implicit_state_cookie_mode(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE_IDTOKEN,
+						     OIDC_PROTO_RESPONSE_MODE_FRAGMENT, "nonce-hyb4", NULL, NULL, NULL);
+	char *id_token = e2e_sign_hybrid_idtoken_handle(r, secret, "nonce-hyb4", "the-code", NULL);
+	char *body = apr_psprintf(r->pool, "response_mode=fragment&state=%s&code=the-code&id_token=%s",
+				  oidc_http_url_encode(r, state), oidc_http_url_encode(r, id_token));
+	e2e_post_body(r, body);
+
+	int rc = oidc_response_authorization_post(r, c, session);
+	ck_assert_int_ne(rc, HTTP_MOVED_TEMPORARILY);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a plain code flow against a token endpoint that returns no id_token must not authenticate */
+START_TEST(test_handle_response_code_flow_no_idtoken) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "code-flow-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	ck_assert_ptr_null(oidc_cfg_provider_pkce_set(r->pool, provider, "none"));
+
+	char *state = e2e_build_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_CODE);
+	r->args = apr_psprintf(r->pool, "state=%s&code=the-auth-code", oidc_http_url_encode(r, state));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* OIDCRemoteUserClaim names a claim that is not in the id_token */
+START_TEST(test_handle_response_remote_user_claim_missing) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "remote-user-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	c->remote_user_claim.claim_name = "no_such_claim";
+
+	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN, "nonce-ru1", NULL, NULL, NULL);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-ru1", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, state),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a prompt=none re-authentication that comes back as a different user is refused */
+START_TEST(test_handle_response_prompt_none_user_changed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->remote_user = apr_pstrdup(r->pool, "bob@idp.example.com");
+
+	const char *secret = "prompt-none-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN, "nonce-pn1",
+						OIDC_PROTO_PROMPT_NONE, NULL, NULL);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-pn1", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, state),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_ne(rc, HTTP_MOVED_TEMPORARILY);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* an issuer without an https:// prefix is appended verbatim to the remote user */
+START_TEST(test_handle_response_non_https_issuer_postfix) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "plain-issuer-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	oidc_cfg_provider_issuer_set(r->pool, provider, "op.example.org");
+
+	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN, "nonce-iss1", NULL, NULL,
+						"op.example.org");
+	char *id_token = e2e_sign_idtoken_hs256(r, "op.example.org", "client_id", "alice", "nonce-iss1", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, state),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(session->remote_user, "alice@op.example.org");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a preserved form POST is restored through the configured restore template */
+START_TEST(test_handle_response_post_restore_template) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "post-restore-shared-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	c->post_restore_template = apr_psprintf(r->pool, "%s/post_restore.template", dir);
+
+	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN, "nonce-pr1", NULL,
+						OIDC_METHOD_FORM_POST, NULL);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-pr1", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, state),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* POST preservation: a failed POST read and the preserve-template success leg */
+START_TEST(test_handle_response_post_preserve_javascript_legs) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPreservePost);
+	ck_assert_ptr_null(oidc_cmd_dir_preserve_post_set(cmd, dir_cfg, "On"));
+
+	/* an oversized POST body (> 1MB) cannot be read */
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->args = apr_pstrdup(r->pool, "a=b");
+	r->remaining = (apr_size_t)(1024 * 1024 + 1);
+	char *js = NULL;
+	char *jm = NULL;
+	ck_assert_int_eq(oidc_response_post_preserve_javascript(r, NULL, &js, &jm), FALSE);
+
+	/* a proper form POST rendered through the configured preserve template */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	c->post_preserve_template = apr_psprintf(r->pool, "%s/post_preserve.template", dir);
+	e2e_post_body(r, "field1=value1&field2=value2");
+	ck_assert_int_eq(oidc_response_post_preserve_javascript(r, "https://www.example.com/return", &js, &jm), TRUE);
+}
+END_TEST
+
 /* defined further down alongside the logout tests; used here for the form-post entrypoint tests */
 static void e2e_post_body(request_rec *r, const char *body);
 
@@ -5288,6 +5780,20 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_authorization_redirect_error_param);
 	tcase_add_test(response, test_handle_response_authorization_redirect_unknown_response_type);
 	tcase_add_test(response, test_handle_response_authorization_redirect_idtoken_happy_path);
+	tcase_add_test(response, test_handle_response_hybrid_code_idtoken_token);
+	tcase_add_test(response, test_handle_response_hybrid_code_idtoken);
+	tcase_add_test(response, test_handle_response_hybrid_code_token_no_idtoken);
+	tcase_add_test(response, test_handle_response_implicit_idtoken_token);
+	tcase_add_test(response, test_handle_response_state_expired);
+	tcase_add_test(response, test_handle_response_state_expired_no_default_url_env);
+	tcase_add_test(response, test_handle_response_state_fingerprint_mismatch);
+	tcase_add_test(response, test_handle_response_hybrid_token_endpoint_error);
+	tcase_add_test(response, test_handle_response_code_flow_no_idtoken);
+	tcase_add_test(response, test_handle_response_remote_user_claim_missing);
+	tcase_add_test(response, test_handle_response_prompt_none_user_changed);
+	tcase_add_test(response, test_handle_response_non_https_issuer_postfix);
+	tcase_add_test(response, test_handle_response_post_restore_template);
+	tcase_add_test(response, test_handle_response_post_preserve_javascript_legs);
 	tcase_add_test(response, test_handle_response_authorization_redirect_code_flow_happy_path);
 	tcase_add_test(response, test_handle_response_authorization_error_prompt_none);
 	tcase_add_test(response, test_handle_response_browser_back);
