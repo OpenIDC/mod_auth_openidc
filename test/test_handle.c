@@ -3709,6 +3709,391 @@ START_TEST(test_handle_logout_backchannel_no_token) {
 }
 END_TEST
 
+START_TEST(test_handle_logout_backchannel_get_method_rejected) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* a GET to the backchannel endpoint cannot carry POST parameters => BAD_REQUEST */
+	r->args = "logout=backchannel";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_unsigned_rejected) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* an alg "none" logout token parses but must be rejected as unsigned */
+	const char *logout_jwt = "eyJhbGciOiJub25lIn0."
+				 "eyJpc3MiOiJodHRwczovL2lkcC5leGFtcGxlLmNvbSIsInN1YiI6ImFsaWNlIn0.";
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_unknown_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	/* metadata-driven multi-provider setup: an unknown issuer does not fall
+	 * back to the static provider but fails to resolve */
+	c->metadata_dir = apr_pstrdup(r->pool, "/no-such-metadata-dir");
+
+	/* a valid signature but an issuer no provider is configured for */
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://unknown.example.org", "client_id", "alice",
+							   "jti-unknown-iss", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_alg_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	/* the provider is pinned to RS256 id_tokens: an HS256 logout token must be refused */
+	oidc_cfg_provider_id_token_signed_response_alg_set(r->pool, provider, "RS256");
+
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							   "jti-alg-mismatch", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_bad_signature) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "the-real-client-secret-0123456789");
+
+	/* signed with a different secret than the provider's client secret */
+	char *logout_jwt =
+	    e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice", "jti-bad-sig", TRUE,
+					    FALSE, "a-completely-different-secret-0123456789");
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_backchannel_no_sub_no_sid) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* verifies fine but carries neither a "sub" nor a "sid" claim */
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", NULL,
+							   "jti-no-sub-sid", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_frontchannel_no_iss_static_provider) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* an Entra-ID-style front-channel logout carrying a sid but no iss: the
+	 * statically configured provider is used as a fallback */
+	r->args = "logout=get&sid=some-unknown-sid";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+START_TEST(test_handle_logout_frontchannel_accept_png_pixel) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	/* "get" style logout with an Accept header preferring image/png yields the
+	 * transparent pixel (prepped into request state for the content handler) */
+	apr_table_set(r->headers_in, "Accept", "image/png");
+	r->args = "logout=get";
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a front-channel logout by sid for a session present in the cache revokes its tokens */
+START_TEST(test_handle_logout_frontchannel_by_sid_revokes) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *iss = oidc_cfg_provider_issuer_get(provider);
+
+	/* create and persist a session indexed by sid */
+	const char *uuid = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+	oidc_session_t *stored = NULL;
+	oidc_session_load(r, &stored);
+	stored->uuid = apr_pstrdup(r->pool, uuid);
+	stored->remote_user = apr_pstrdup(r->pool, "alice");
+	stored->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, stored, iss);
+	oidc_session_set_session_expires(r, stored, stored->expiry);
+	stored->sid = oidc_response_make_sid_iss_unique(r, "fc-sid", iss);
+	ck_assert_int_eq(oidc_session_save(r, stored, OIDC_SESSION_SAVE_NEW), TRUE);
+
+	/* the incoming front-channel request itself carries no session */
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	r->args = apr_psprintf(r->pool, "logout=get&sid=fc-sid&iss=%s", oidc_http_url_encode(r, iss));
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	/* the stored session is gone */
+	char *v = NULL;
+	oidc_cache_get_session(r, uuid, &v);
+	ck_assert_ptr_null(v);
+
+	oidc_session_free(r, session);
+	oidc_session_free(r, stored);
+}
+END_TEST
+
+/* seed a fresh session that qualifies for the revoke-on-logout branch */
+static oidc_session_t *e2e_revocable_session(request_rec *r, const oidc_provider_t *provider) {
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_session_set_refresh_token(r, session, "RT-neg");
+	return session;
+}
+
+/* token revocation negative paths: no issuer in the session, disabled via env
+ * var, a failing token endpoint auth setup and an unreachable endpoint */
+START_TEST(test_handle_logout_revoke_tokens_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+
+	/* 1: no issuer in the session so no provider can be resolved */
+	oidc_session_load(r, &session);
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_refresh_token(r, session, "RT-neg");
+	ck_assert_int_eq(oidc_logout_request(r, c, session, NULL, TRUE), OK);
+	oidc_session_free(r, session);
+
+	/* 2: revocation disabled through the environment variable */
+	session = e2e_revocable_session(r, provider);
+	oidc_cfg_provider_revocation_endpoint_url_set(r->pool, provider, "https://idp.example.com/revoke");
+	apr_table_set(r->subprocess_env, "OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT", "1");
+	ck_assert_int_eq(oidc_logout_request(r, c, session, NULL, TRUE), OK);
+	apr_table_unset(r->subprocess_env, "OIDC_DONT_REVOKE_TOKENS_BEFORE_LOGOUT");
+	oidc_session_free(r, session);
+
+	/* 3: a token endpoint auth method that cannot be satisfied (no client keys) */
+	session = e2e_revocable_session(r, provider);
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_set(r->pool, c, provider, "private_key_jwt"));
+	ck_assert_int_eq(oidc_logout_request(r, c, session, NULL, TRUE), OK);
+	oidc_cfg_provider_token_endpoint_auth_set(r->pool, c, provider, "client_secret_basic");
+	oidc_session_free(r, session);
+
+	/* 4: an unreachable revocation endpoint makes the revocation call fail with a warning */
+	session = e2e_revocable_session(r, provider);
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	oidc_cfg_provider_revocation_endpoint_url_set(r->pool, provider,
+						      apr_psprintf(r->pool, "http://127.0.0.1:%d/revoke", free_port));
+	ck_assert_int_eq(oidc_logout_request(r, c, session, NULL, TRUE), OK);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* an unparsable logout token is rejected outright */
+START_TEST(test_handle_logout_backchannel_garbage_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	char *body = "logout_token=this-is-not-a-jwt";
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* replaying the same jti is caught by the replay cache */
+START_TEST(test_handle_logout_backchannel_jti_replay) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							   "jti-replayed", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+
+	oidc_session_load(r, &session);
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+	ck_assert_int_eq(oidc_logout(r, c, session), OK);
+	oidc_session_free(r, session);
+
+	/* the exact same token again: the jti is in the replay cache now */
+	oidc_session_load(r, &session);
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+	ck_assert_int_eq(oidc_logout(r, c, session), HTTP_BAD_REQUEST);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* an events claim without the back-channel logout member object is rejected */
+START_TEST(test_handle_logout_backchannel_events_wrong_member) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* like e2e_sign_backchannel_logout_jwt but with an events object lacking the blogout key */
+	apr_pool_t *pool = r->pool;
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, 0, NULL, TRUE, &jwk), TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(pool, "HS256");
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("https://idp.example.com"));
+	oidc_json_object_set_new(jwt->payload.value.json, "aud", oidc_json_string("client_id"));
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	oidc_json_object_set_new(jwt->payload.value.json, "jti", oidc_json_string("jti-wrong-events"));
+	apr_time_t now = apr_time_sec(apr_time_now());
+	oidc_json_object_set_new(jwt->payload.value.json, "iat", oidc_json_integer(now));
+	oidc_json_t *events = oidc_json_object();
+	oidc_json_object_set_new(events, "http://schemas.openid.net/event/some-other-event", oidc_json_object());
+	oidc_json_object_set_new(jwt->payload.value.json, "events", events);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.sub = apr_pstrdup(pool, "alice");
+	jwt->payload.iat = now;
+	ck_assert_int_eq(oidc_jwt_sign(pool, jwt, jwk, FALSE, &err), TRUE);
+	char *logout_jwt = oidc_jose_jwt_serialize(pool, jwt, &err);
+	ck_assert_ptr_nonnull(logout_jwt);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* refreshing the id_token_hint before logout fails soft when the token endpoint is unusable */
+START_TEST(test_handle_logout_op_request_refresh_hint_fails) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	oidc_session_set_issuer(r, session, oidc_cfg_provider_issuer_get(provider));
+	oidc_session_set_idtoken(r, session, "stored-id-token-jwt-here");
+	oidc_cfg_provider_end_session_endpoint_set(r->pool, provider, "https://idp.example.com/endsession");
+	apr_table_set(r->subprocess_env, "OIDC_REFRESH_TOKENS_BEFORE_LOGOUT", "1");
+
+	r->args = "logout=https%3A%2F%2Fwww.example.com%2Floggedout";
+	int rc = oidc_logout(r, c, session);
+	apr_table_unset(r->subprocess_env, "OIDC_REFRESH_TOKENS_BEFORE_LOGOUT");
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	/* the refresh failed (no refresh token, no token endpoint) so no id_token_hint is sent */
+	ck_assert_msg(_oidc_strstr(loc, "id_token_hint=") == NULL, "no id_token_hint after failed refresh: got %s",
+		      loc);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /*
  * Tests for handle/request_uri.c — the request-object-by-reference
  * endpoint that the OP fetches when the RP advertises a request_uri
@@ -5000,6 +5385,20 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_op_request_no_session_no_extra_params);
 	tcase_add_test(logout, test_handle_logout_revoke_tokens);
 	tcase_add_test(logout, test_handle_logout_revoke_tokens_no_endpoint);
+	tcase_add_test(logout, test_handle_logout_backchannel_get_method_rejected);
+	tcase_add_test(logout, test_handle_logout_backchannel_unsigned_rejected);
+	tcase_add_test(logout, test_handle_logout_backchannel_unknown_issuer);
+	tcase_add_test(logout, test_handle_logout_backchannel_alg_mismatch);
+	tcase_add_test(logout, test_handle_logout_backchannel_bad_signature);
+	tcase_add_test(logout, test_handle_logout_backchannel_no_sub_no_sid);
+	tcase_add_test(logout, test_handle_logout_frontchannel_no_iss_static_provider);
+	tcase_add_test(logout, test_handle_logout_frontchannel_accept_png_pixel);
+	tcase_add_test(logout, test_handle_logout_frontchannel_by_sid_revokes);
+	tcase_add_test(logout, test_handle_logout_revoke_tokens_negatives);
+	tcase_add_test(logout, test_handle_logout_op_request_refresh_hint_fails);
+	tcase_add_test(logout, test_handle_logout_backchannel_garbage_token);
+	tcase_add_test(logout, test_handle_logout_backchannel_jti_replay);
+	tcase_add_test(logout, test_handle_logout_backchannel_events_wrong_member);
 
 	TCase *content = tcase_create("content");
 	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);
