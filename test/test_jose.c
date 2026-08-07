@@ -1251,6 +1251,201 @@ START_TEST(test_jose_json_facade_scalars) {
 }
 END_TEST
 
+/*
+ * JWK JSON values that neither cjose nor the x5c fallback can make sense of
+ */
+START_TEST(test_jwk_parse_json_negatives) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	oidc_jwk_t *jwk = NULL;
+	json_error_t je;
+
+	/* an x5c JWK without a kty */
+	oidc_json_t *j = json_loads("{\"x5c\":[\"AAAA\"]}", 0, &je);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_int_eq(oidc_jwk_parse_json(pool, j, &jwk, &err), FALSE);
+	oidc_json_decref(j);
+
+	/* an x5c JWK with a kty that is neither RSA nor EC */
+	j = json_loads("{\"kty\":\"foo\",\"x5c\":[\"AAAA\"]}", 0, &je);
+	ck_assert_ptr_nonnull(j);
+	jwk = NULL;
+	ck_assert_int_eq(oidc_jwk_parse_json(pool, j, &jwk, &err), FALSE);
+	oidc_json_decref(j);
+}
+END_TEST
+
+/*
+ * JWKS documents without a "keys" array, or with an unparsable element in it
+ */
+START_TEST(test_jwks_parse_json_negatives) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	apr_array_header_t *jwk_list = NULL;
+	json_error_t je;
+
+	oidc_json_t *j = json_loads("{\"nokeys\":true}", 0, &je);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_int_eq(oidc_is_jwks(j), FALSE);
+	ck_assert_int_eq(oidc_jwks_parse_json(pool, j, &jwk_list, &err), FALSE);
+	oidc_json_decref(j);
+
+	j = json_loads("{\"keys\":[{\"kty\":\"nope\"}]}", 0, &je);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_int_eq(oidc_is_jwks(j), TRUE);
+	ck_assert_int_eq(oidc_jwks_parse_json(pool, j, &jwk_list, &err), FALSE);
+	oidc_json_decref(j);
+}
+END_TEST
+
+/*
+ * serializing a NULL JWK or one without backend key material must fail cleanly
+ */
+START_TEST(test_jwk_to_json_negatives) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	char *s_json = NULL;
+
+	ck_assert_int_eq(oidc_jwk_to_json(pool, NULL, &s_json, &err), FALSE);
+	ck_assert_int_eq(oidc_jwk_to_public_json(pool, NULL, &s_json, &err), FALSE);
+
+	/* a JWK struct without an underlying cjose key */
+	oidc_jwk_t *empty = apr_pcalloc(pool, sizeof(oidc_jwk_t));
+	ck_assert_int_eq(oidc_jwk_to_json(pool, empty, &s_json, &err), FALSE);
+	ck_assert_int_eq(oidc_jwk_to_public_json(pool, empty, &s_json, &err), FALSE);
+}
+END_TEST
+
+/*
+ * copying a JWK parsed from a certificate preserves the x5c chain
+ */
+START_TEST(test_jwk_copy_preserves_x5c) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	oidc_jwk_t *jwk = NULL;
+
+	char certificateFile[512];
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	snprintf(certificateFile, 512, "%s/%s", dir, "/certificate.pem");
+
+	ck_assert_int_eq(oidc_jwk_parse_pem_public_key(pool, NULL, certificateFile, &jwk, &err), TRUE);
+	ck_assert_ptr_nonnull(jwk->x5c);
+	ck_assert_int_gt(jwk->x5c->nelts, 0);
+
+	oidc_jwk_t *copy = oidc_jwk_copy(pool, jwk);
+	ck_assert_ptr_nonnull(copy->x5c);
+	ck_assert_int_eq(copy->x5c->nelts, jwk->x5c->nelts);
+	ck_assert_str_eq(APR_ARRAY_IDX(copy->x5c, 0, const char *), APR_ARRAY_IDX(jwk->x5c, 0, const char *));
+
+	oidc_jwk_destroy(copy);
+	oidc_jwk_destroy(jwk);
+}
+END_TEST
+
+/*
+ * a PEM file with a certificate chain yields an x5c array with every chain entry
+ */
+START_TEST(test_jwk_pem_certificate_chain) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	oidc_jwk_t *jwk = NULL;
+
+	char certificateFile[512];
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	snprintf(certificateFile, 512, "%s/%s", dir, "/certificate.pem");
+
+	/* build a two-entry "chain" by concatenating the same certificate twice */
+	FILE *in = fopen(certificateFile, "rb");
+	ck_assert_ptr_nonnull(in);
+	char buf[8192];
+	size_t len = fread(buf, 1, sizeof(buf), in);
+	fclose(in);
+	ck_assert_int_gt((int)len, 0);
+	const char *chainFile = "chain-test.pem";
+	FILE *out = fopen(chainFile, "wb");
+	ck_assert_ptr_nonnull(out);
+	fwrite(buf, 1, len, out);
+	fwrite(buf, 1, len, out);
+	fclose(out);
+
+	ck_assert_int_eq(oidc_jwk_parse_pem_public_key(pool, NULL, chainFile, &jwk, &err), TRUE);
+	ck_assert_ptr_nonnull(jwk->x5c);
+	ck_assert_int_eq(jwk->x5c->nelts, 2);
+
+	oidc_jwk_destroy(jwk);
+	remove(chainFile);
+}
+END_TEST
+
+/*
+ * PEM parse failures: missing file, non-PEM content, and an unsupported key type
+ */
+START_TEST(test_jwk_pem_parse_negatives) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	oidc_jwk_t *jwk = NULL;
+
+	/* nonexistent file */
+	ck_assert_int_eq(oidc_jwk_parse_pem_private_key(pool, NULL, "/nonexistent/no-such-key.pem", &jwk, &err), FALSE);
+
+	/* garbage content */
+	const char *garbageFile = "garbage-test.pem";
+	FILE *out = fopen(garbageFile, "wb");
+	ck_assert_ptr_nonnull(out);
+	fputs("this is not a PEM file at all", out);
+	fclose(out);
+	jwk = NULL;
+	ck_assert_int_eq(oidc_jwk_parse_pem_private_key(pool, NULL, garbageFile, &jwk, &err), FALSE);
+	remove(garbageFile);
+
+	/* an Ed25519 public key: parses as PEM but is not an RSA/EC key */
+	const char *ed25519File = "ed25519-test.pem";
+	out = fopen(ed25519File, "wb");
+	ck_assert_ptr_nonnull(out);
+	fputs("-----BEGIN PUBLIC KEY-----\n"
+	      "MCowBQYDK2VwAyEAWSqZvR20f8KxEdgHX1VR4YDWaN2H+DjJ1wcRdAyNOto=\n"
+	      "-----END PUBLIC KEY-----\n",
+	      out);
+	fclose(out);
+	jwk = NULL;
+	ck_assert_int_eq(oidc_jwk_parse_pem_public_key(pool, NULL, ed25519File, &jwk, &err), FALSE);
+	remove(ed25519File);
+}
+END_TEST
+
+/*
+ * the default JWS algorithm follows the EC curve (and is NULL for unknown types)
+ */
+START_TEST(test_jwk_default_jws_alg_curves) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
+	oidc_jwk_t *jwk = NULL;
+	json_error_t je;
+
+	ck_assert_ptr_null(oidc_jwk_default_jws_alg(NULL));
+
+	/* P-521: the checked-in EC private key */
+	char ecPrivateKeyFile[512];
+	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	snprintf(ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
+	ck_assert_int_eq(oidc_jwk_parse_pem_private_key(pool, NULL, ecPrivateKeyFile, &jwk, &err), TRUE);
+	ck_assert_str_eq(oidc_jwk_default_jws_alg(jwk), "ES512");
+	oidc_jwk_destroy(jwk);
+
+	/* P-384: a public EC JWK */
+	oidc_json_t *j = json_loads("{\"kty\":\"EC\",\"crv\":\"P-384\","
+				    "\"x\":\"2N8X_8dcIB0GPw0R_Lm-zFUq49K3QfjN8m7S_pV1-fMowRx8Ay2xngpm6T7tmF8J\","
+				    "\"y\":\"EkaOcyWlhvv9JX8ArZ0NjVXGHehmHb-ZcYkDN5W-QNYAhRoPJUrYtgXLOJLi5S18\"}",
+				    0, &je);
+	ck_assert_ptr_nonnull(j);
+	jwk = NULL;
+	ck_assert_int_eq(oidc_jwk_parse_json(pool, j, &jwk, &err), TRUE);
+	ck_assert_str_eq(oidc_jwk_default_jws_alg(jwk), "ES384");
+	oidc_jwk_destroy(jwk);
+	oidc_json_decref(j);
+}
+END_TEST
+
 int main(void) {
 	TCase *sup = tcase_create("supported");
 	tcase_add_checked_fixture(sup, oidc_test_setup, oidc_test_teardown);
@@ -1282,6 +1477,13 @@ int main(void) {
 	tcase_add_test(core, test_jwk_private_key_parse);
 	tcase_add_test(core, test_jose_version);
 	tcase_add_test(core, test_jose_json_facade_scalars);
+	tcase_add_test(core, test_jwk_parse_json_negatives);
+	tcase_add_test(core, test_jwks_parse_json_negatives);
+	tcase_add_test(core, test_jwk_to_json_negatives);
+	tcase_add_test(core, test_jwk_copy_preserves_x5c);
+	tcase_add_test(core, test_jwk_pem_certificate_chain);
+	tcase_add_test(core, test_jwk_pem_parse_negatives);
+	tcase_add_test(core, test_jwk_default_jws_alg_curves);
 
 	TCase *legacy = tcase_create("legacy");
 	tcase_add_checked_fixture(legacy, oidc_test_setup, oidc_test_teardown);
