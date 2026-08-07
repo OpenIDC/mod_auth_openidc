@@ -1,4 +1,7 @@
 08/07/2026
+- cfg: accept "OIDCSessionCookieChunkSize 0", which auth_openidc.conf and the directive
+  help both document as the way to disable chunking, and which the runtime already
+  honours, but which the parser rejected as below the 256 minimum
 - test: fail the build when auth_openidc.conf has drifted from the code: every directive
   must be documented, every documented directive must exist, and the OIDCMetricsData
   class list must match the metrics classes the parser accepts

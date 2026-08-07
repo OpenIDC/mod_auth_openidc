@@ -197,6 +197,27 @@ const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *i
 }
 
 /*
+ * parse an integer value that must lie in [min_value, max_value], or be exactly 0,
+ * which turns the feature off rather than sizing it; the range would otherwise
+ * reject the very value that documents how to disable it
+ */
+const char *oidc_cfg_parse_int_min_max_or_zero(apr_pool_t *pool, const char *arg, int *int_value, int min_value,
+					       int max_value) {
+	int v = 0;
+	const char *rv = NULL;
+	rv = oidc_cfg_parse_int(pool, arg, &v);
+	if (rv != NULL)
+		return rv;
+	if (v != 0) {
+		rv = oidc_cfg_parse_is_valid_int(pool, v, min_value, max_value);
+		if (rv != NULL)
+			return rv;
+	}
+	*int_value = v;
+	return NULL;
+}
+
+/*
  * parse a timeout string via ap_timeout_parameter_parse into an
  * apr_interval_time_t if it is in a valid min/max range
  */

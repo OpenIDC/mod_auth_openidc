@@ -1415,6 +1415,12 @@ START_TEST(test_cmd_session_cookie_chunk_size) {
 	/* below the 256 minimum / above the 64KiB maximum */
 	ck_assert_ptr_nonnull(oidc_cmd_session_cookie_chunk_size_set(cmd, NULL, "10"));
 	ck_assert_ptr_nonnull(oidc_cmd_session_cookie_chunk_size_set(cmd, NULL, "99999999"));
+	/* 0 is exempt from the range: it is how the documentation says to disable chunking,
+	 * and oidc_http_set_chunked_cookie() honours it */
+	ck_assert_ptr_null(oidc_cmd_session_cookie_chunk_size_set(cmd, NULL, "0"));
+	ck_assert_int_eq(oidc_cfg_session_cookie_chunk_size_get(cfg), 0);
+	/* restore, so a later test in this tcase does not inherit "no chunking" */
+	ck_assert_ptr_null(oidc_cmd_session_cookie_chunk_size_set(cmd, NULL, "2048"));
 }
 END_TEST
 

@@ -73,6 +73,8 @@ const char *oidc_cfg_parse_is_valid_encrypted_response_enc(apr_pool_t *pool, con
 const char *oidc_cfg_parse_boolean(apr_pool_t *pool, const char *arg, int *bool_value);
 const char *oidc_cfg_parse_int(apr_pool_t *pool, const char *arg, int *int_value);
 const char *oidc_cfg_parse_int_min_max(apr_pool_t *pool, const char *arg, int *int_value, int min_value, int max_value);
+const char *oidc_cfg_parse_int_min_max_or_zero(apr_pool_t *pool, const char *arg, int *int_value, int min_value,
+					       int max_value);
 const char *oidc_cfg_parse_timeout_min_max(apr_pool_t *pool, const char *arg, apr_interval_time_t *timeout_value,
 					   apr_interval_time_t min_value, apr_interval_time_t max_value);
 const char *oidc_cfg_parse_dirname(apr_pool_t *pool, const char *arg, char **value);
