@@ -232,15 +232,22 @@ static oidc_provider_t *oidc_logout_request_front_channel_provider(request_rec *
  * session based on sid/iss (when no session was provided), emit the
  * recommended cache-control headers and return the iframe body or
  * transparent pixel response
+ *
+ * NB: this branch is reached without any proof that the caller owns the session it names: a
+ * front-channel logout carries no signature (unlike a back-channel logout token) and, by the
+ * nature of the third-party iframe it is called from, no session cookie either. It therefore
+ * does *not* revoke the session's tokens at the OP, exactly as the back-channel handler does
+ * not; that is a side effect outside of this server which the user cannot undo by logging in
+ * again. Clearing the local session is what front-channel logout is for and is kept.
  */
-static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, const char *url, apr_byte_t revoke_tokens,
+static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, const char *url,
 					     apr_byte_t no_session_provided) {
 
 	if (no_session_provided) {
 		char *sid = NULL;
 		const oidc_provider_t *provider = oidc_logout_request_front_channel_provider(r, c, &sid);
 		if (provider != NULL)
-			oidc_logout_cleanup_by_sid(r, sid, c, provider, revoke_tokens);
+			oidc_logout_cleanup_by_sid(r, sid, c, provider, FALSE);
 		else if (sid != NULL)
 			oidc_info(r, "No provider for front channel logout found");
 	}
@@ -275,7 +282,10 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 
 	oidc_debug(r, "enter (url=%s)", url);
 
-	/* if there's no remote_user then there's no (stored) session to kill */
+	/*
+	 * if there's no remote_user then there's no (stored) session to kill; note that revoking the
+	 * tokens is tied to having one, i.e. to the caller having proven that the session is theirs
+	 */
 	if (session->remote_user != NULL) {
 		no_session_provided = FALSE;
 		if (revoke_tokens)
@@ -291,7 +301,7 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
 
 	/* see if this is the OP calling us */
 	if (oidc_logout_is_front_channel(url))
-		return oidc_logout_request_front_channel(r, c, url, revoke_tokens, no_session_provided);
+		return oidc_logout_request_front_channel(r, c, url, no_session_provided);
 
 	oidc_http_set_no_cache_headers(r);
 

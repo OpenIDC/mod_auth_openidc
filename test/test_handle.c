@@ -5039,13 +5039,39 @@ START_TEST(test_handle_logout_frontchannel_accept_png_pixel) {
 END_TEST
 
 /* a front-channel logout by sid for a session present in the cache revokes its tokens */
-START_TEST(test_handle_logout_frontchannel_by_sid_revokes) {
+/*
+ * a front-channel logout carries no signature and no session cookie, so the caller has not shown
+ * that the sid it names is theirs: it must clear the local session but must not revoke that
+ * session's tokens at the OP, which is a side effect the user cannot undo by logging in again.
+ *
+ * the second, authenticated logout is the positive control: the mock server serves exactly one
+ * request, so the captured one is the first that arrived. Had the front-channel leg revoked, it
+ * would be that leg's POST carrying RT-victim rather than this one's RT-owner.
+ */
+START_TEST(test_handle_logout_frontchannel_by_sid_does_not_revoke) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 	const char *iss = oidc_cfg_provider_issuer_get(provider);
 
-	/* create and persist a session indexed by sid */
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_revocation_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	/*
+	 * the mock server serves exactly one request and its thread then exits, so a regression that
+	 * makes the front-channel leg revoke would leave the second leg's POST unanswered: bound the
+	 * timeout it uses so that fails fast and the assertions below report the cause, rather than
+	 * the whole test dying on check's timeout with no indication of why
+	 */
+	oidc_http_timeout_t *timeout = oidc_cfg_http_timeout_long_get(c);
+	timeout->request_timeout = 1;
+	timeout->connect_timeout = 1;
+	timeout->retries = 0;
+
+	/* create and persist a session indexed by sid, holding a token that could be revoked */
 	const char *uuid = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
 	oidc_session_t *stored = NULL;
 	oidc_session_load(r, &stored);
@@ -5054,6 +5080,7 @@ START_TEST(test_handle_logout_frontchannel_by_sid_revokes) {
 	stored->expiry = apr_time_now() + apr_time_from_sec(3600);
 	oidc_session_set_issuer(r, stored, iss);
 	oidc_session_set_session_expires(r, stored, stored->expiry);
+	oidc_session_set_refresh_token(r, stored, "RT-victim");
 	stored->sid = oidc_response_make_sid_iss_unique(r, "fc-sid", iss);
 	ck_assert_int_eq(oidc_session_save(r, stored, OIDC_SESSION_SAVE_NEW), TRUE);
 
@@ -5068,8 +5095,28 @@ START_TEST(test_handle_logout_frontchannel_by_sid_revokes) {
 	char *v = NULL;
 	oidc_cache_get_session(r, uuid, &v);
 	ck_assert_ptr_null(v);
-
 	oidc_session_free(r, session);
+
+	/* a logout that does carry the session may revoke, and is what the server captures */
+	oidc_session_t *owner = NULL;
+	oidc_session_load(r, &owner);
+	owner->remote_user = apr_pstrdup(r->pool, "bob");
+	oidc_session_set_issuer(r, owner, iss);
+	oidc_session_set_refresh_token(r, owner, "RT-owner");
+	r->args = NULL;
+	ck_assert_int_eq(oidc_logout_request(r, c, owner, NULL, TRUE), OK);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	ck_assert_ptr_nonnull(cap);
+	ck_assert_str_eq(cap->method, "POST");
+	ck_assert_msg(_oidc_strstr(cap->body, "token=RT-owner") != NULL,
+		      "the authenticated logout must be the one that revokes: got %s", cap->body);
+	ck_assert_msg(_oidc_strstr(cap->body, "RT-victim") == NULL,
+		      "an unauthenticated front-channel logout must not revoke the session's tokens: got %s",
+		      cap->body);
+
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, owner);
 	oidc_session_free(r, stored);
 }
 END_TEST
@@ -6677,7 +6724,7 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_backchannel_no_sub_no_sid);
 	tcase_add_test(logout, test_handle_logout_frontchannel_no_iss_static_provider);
 	tcase_add_test(logout, test_handle_logout_frontchannel_accept_png_pixel);
-	tcase_add_test(logout, test_handle_logout_frontchannel_by_sid_revokes);
+	tcase_add_test(logout, test_handle_logout_frontchannel_by_sid_does_not_revoke);
 	tcase_add_test(logout, test_handle_logout_revoke_tokens_negatives);
 	tcase_add_test(logout, test_handle_logout_op_request_refresh_hint_fails);
 	tcase_add_test(logout, test_handle_logout_backchannel_garbage_token);

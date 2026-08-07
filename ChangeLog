@@ -1,4 +1,6 @@
 08/07/2026
+- security: do not revoke a session's tokens at the OP on an unauthenticated front-channel
+  logout that names it only by sid, matching what the back-channel handler already did
 - security: do not let an extra authorization request parameter duplicate one that the
   module sets itself; a request-supplied one is dropped and a configured one replaces
   ours, rather than both being sent and the provider deciding which wins
