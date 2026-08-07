@@ -27,6 +27,7 @@ dir="${srcdir:-}"
 [ -n "$dir" ] || dir=$(dirname "$0")/..
 
 status=0
+replayed=0
 
 # replay <binary> <args...>  (binary lives in the builddir)
 replay() {
@@ -36,6 +37,7 @@ replay() {
 		echo "SKIP: $bin not built"
 		return
 	fi
+	replayed=$((replayed + 1))
 	echo "fuzz: $bin $*"
 	# the module logs each rejected input to stderr; keep that out of the
 	# normal log and surface it only when a target actually crashes
@@ -55,8 +57,16 @@ replay fuzz_url "$dir"/fuzz/corpus/url/*
 # the curated open-redirect payloads, one input per line
 replay fuzz_url --lines "$dir"/open-redirect-payload-list.txt
 
+# a run in which every target was skipped proves nothing: report it as a failure
+# rather than as a pass, so a build-condition or rename that stops producing the
+# binaries cannot leave this test silently green
+if [ "$replayed" -eq 0 ]; then
+	echo "FAIL: no fuzz target was replayed -- none of the binaries were built"
+	exit 1
+fi
+
 if [ "$status" -eq 0 ]; then
-	echo "PASS: fuzz seed corpora replayed with no crashes"
+	echo "PASS: $replayed fuzz seed corpora replayed with no crashes"
 else
 	echo "FAIL: a fuzz target crashed -- reproduce with ./<target> <file>"
 fi

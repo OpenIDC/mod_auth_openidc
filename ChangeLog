@@ -8,6 +8,8 @@
   configures OIDCRedirectURI without any provider source at startup
 - test: increase unit test line coverage from 91% to over 94% with negative-path and
   option-matrix tests across the http, jose, session, cache, oauth and handler code
+- test: fail the fuzz seed corpus replay when no target actually ran, instead of
+  reporting a pass after skipping all of them
 
 08/03/2026
 - metrics: fix the description of the "authtype.handler" timer, which read
