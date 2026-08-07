@@ -2395,6 +2395,162 @@ START_TEST(test_handle_discovery_response_no_target_link_uri_no_sso_url) {
 }
 END_TEST
 
+/* helper: populate a temp OIDCMetadataDir with provider + client metadata */
+static void e2e_write_metadata_dir(request_rec *r, const char *jwks_uri) {
+	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco2.XXXXXX");
+	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
+	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"jwks_uri\":\"%s\","
+						 "\"response_types_supported\":[\"code\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 jwks_uri);
+	apr_file_t *f = NULL;
+	ck_assert_int_eq(apr_file_open(&f, apr_psprintf(r->pool, "%s/idp.example.com.provider", tmpl),
+				       APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	apr_size_t len = (apr_size_t)_oidc_strlen(provider_json);
+	apr_file_write(f, provider_json, &len);
+	apr_file_close(f);
+
+	const char *client_json = "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}";
+	ck_assert_int_eq(apr_file_open(&f, apr_psprintf(r->pool, "%s/idp.example.com.client", tmpl),
+				       APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	len = (apr_size_t)_oidc_strlen(client_json);
+	apr_file_write(f, client_json, &len);
+	apr_file_close(f);
+}
+
+/* a discovery request whose OIDCMetadataDir cannot be listed has no providers to offer */
+START_TEST(test_handle_discovery_request_no_providers) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->metadata_dir = apr_pstrdup(r->pool, "/no-such-metadata-dir");
+	int rc = oidc_discovery_request(r, c);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* per-path scope/auth-request-params show up in the discovery page form, the provider
+ * links and the external discovery redirect; the CSRF cookie honors SameSite=None */
+START_TEST(test_handle_discovery_request_path_params) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	e2e_write_metadata_dir(r, "https://idp.example.com/jwks");
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPathScope);
+	ck_assert_ptr_null(oidc_cmd_dir_path_scope_set(cmd, dir_cfg, "openid profile"));
+	cmd = oidc_test_cmd_get(OIDCPathAuthRequestParams);
+	ck_assert_ptr_null(oidc_cmd_dir_path_auth_request_params_set(cmd, dir_cfg, "prompt=consent"));
+	c->cookie_same_site_discovery_csrf = OIDC_SAMESITE_COOKIE_NONE;
+
+	/* the internal discovery page with the per-path values in links and form */
+	ck_assert_int_eq(oidc_discovery_request(r, c), OK);
+
+	/* the external discovery page with the per-path values as query parameters */
+	cmd = oidc_test_cmd_get(OIDCDiscoverURL);
+	ck_assert_ptr_null(oidc_cmd_dir_discover_url_set(cmd, dir_cfg, "https://disco.example.com/select"));
+	int rc = oidc_discovery_request(r, c);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_ptr_nonnull(_oidc_strstr(loc, "scopes="));
+	ck_assert_ptr_nonnull(_oidc_strstr(loc, "auth_request_params="));
+}
+END_TEST
+
+/* target_link_uri validation: unparsable URLs, a cookie-domain mismatch and
+ * cookie-path mismatches */
+START_TEST(test_handle_discovery_response_target_link_uri_negatives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	/* 1: a target_link_uri without a hostname */
+	r->args = "iss=https%3A%2F%2Fidp.example.com&target_link_uri=not-a-url";
+	ck_assert_int_eq(oidc_discovery_response(r, c), HTTP_UNAUTHORIZED);
+
+	/* 2: a cookie domain that does not cover the target_link_uri host */
+	c->cookie_domain = apr_pstrdup(r->pool, "other.example.net");
+	r->args = "iss=https%3A%2F%2Fidp.example.com&"
+		  "target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F";
+	ck_assert_int_eq(oidc_discovery_response(r, c), HTTP_UNAUTHORIZED);
+	c->cookie_domain = NULL;
+
+	/* 3: a cookie path that is not a prefix of the target_link_uri path */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCookiePath);
+	ck_assert_ptr_null(oidc_cmd_dir_cookie_path_set(cmd, dir_cfg, "/app"));
+	r->args = "iss=https%3A%2F%2Fidp.example.com&"
+		  "target_link_uri=https%3A%2F%2Fwww.example.com%2Fother%2F";
+	ck_assert_int_eq(oidc_discovery_response(r, c), HTTP_UNAUTHORIZED);
+
+	/* 4: a prefix that does not end on a path-segment boundary */
+	r->args = "iss=https%3A%2F%2Fidp.example.com&"
+		  "target_link_uri=https%3A%2F%2Fwww.example.com%2Fappx";
+	ck_assert_int_eq(oidc_discovery_response(r, c), HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* a user-initiated discovery response with a valid CSRF cookie/parameter pair, a
+ * trailing-slash issuer and a metadata-dir provider proceeds to authentication;
+ * an invalid pair is treated as third-party initiated SSO */
+START_TEST(test_handle_discovery_response_csrf_and_authenticate) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	e2e_write_metadata_dir(r, "https://idp.example.com/jwks");
+	c->default_sso_url = apr_pstrdup(r->pool, "/landing");
+
+	/* a matching CSRF cookie/query pair; the issuer carries a trailing slash and no
+	 * target_link_uri is provided so the default SSO URL applies */
+	apr_table_set(r->headers_in, "Cookie", "x_csrf=csrf-token-123");
+	r->args = "iss=https%3A%2F%2Fidp.example.com%2F&x_csrf=csrf-token-123";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	ck_assert_ptr_nonnull(_oidc_strstr(loc, "https://idp.example.com/authorize"));
+
+	/* a mismatching pair fails the CSRF check (third-party initiated SSO, no dynamic
+	 * registration) but still resolves the (statically registered) provider */
+	apr_table_set(r->headers_in, "Cookie", "x_csrf=csrf-token-123");
+	apr_table_unset(r->headers_out, "Location");
+	r->args = "iss=https%3A%2F%2Fidp.example.com&x_csrf=some-other-value";
+	rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+}
+END_TEST
+
+/* the test-jwks-uri short-circuit fetches the provider JWKs and returns OK */
+START_TEST(test_handle_discovery_response_test_jwks_uri) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"keys\":[]}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_write_metadata_dir(r, oidc_test_http_server_url(srv, r->pool));
+	c->default_sso_url = apr_pstrdup(r->pool, "/landing");
+
+	r->args = "iss=https%3A%2F%2Fidp.example.com&test-jwks-uri=1";
+	int rc = oidc_discovery_response(r, c);
+	ck_assert_int_eq(rc, OK);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 /*
  * Tests for handle/info.c — drive oidc_info_request through the early
  * validation branches and a happy-path JSON response.
@@ -6179,6 +6335,11 @@ int main(void) {
 	tcase_add_test(discovery, test_handle_discovery_response_test_config_short_circuit);
 	tcase_add_test(discovery, test_handle_discovery_response_issuer_not_allowed);
 	tcase_add_test(discovery, test_handle_discovery_response_issuer_allowed);
+	tcase_add_test(discovery, test_handle_discovery_request_no_providers);
+	tcase_add_test(discovery, test_handle_discovery_request_path_params);
+	tcase_add_test(discovery, test_handle_discovery_response_target_link_uri_negatives);
+	tcase_add_test(discovery, test_handle_discovery_response_csrf_and_authenticate);
+	tcase_add_test(discovery, test_handle_discovery_response_test_jwks_uri);
 
 	TCase *info = tcase_create("info");
 	tcase_add_checked_fixture(info, oidc_test_setup, oidc_test_teardown);
