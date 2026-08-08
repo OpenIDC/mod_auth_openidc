@@ -47,6 +47,7 @@
 #include "proto/proto.h"
 #include "state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * redirect the browser to the session logout endpoint

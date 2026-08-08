@@ -41,12 +41,13 @@
  */
 
 #include "handle/handle.h"
-#include "util/request_state.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "state.h"
+#include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 apr_byte_t oidc_request_check_cookie_domain(request_rec *r, const oidc_cfg_t *c, const char *original_url) {
 	/*

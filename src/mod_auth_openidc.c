@@ -60,6 +60,7 @@
 #include "proto/proto.h"
 #include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 #define OPENSSL_THREAD_DEFINES
 #include <openssl/err.h>

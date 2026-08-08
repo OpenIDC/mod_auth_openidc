@@ -42,7 +42,6 @@
  */
 
 #include "cfg/oauth.h"
-#include "util/request_state.h"
 #include "cfg/dir.h"
 #include "cfg/parse.h"
 #include "handle/handle.h"
@@ -50,7 +49,9 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
+#include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 #include <apr_lib.h>
 

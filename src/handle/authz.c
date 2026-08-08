@@ -41,7 +41,6 @@
  */
 
 #include "cfg/dir.h"
-#include "util/request_state.h"
 #include "handle/handle.h"
 #include "http_protocol.h"
 #include "metrics.h"
@@ -49,7 +48,9 @@
 #include "proto/proto.h"
 #include "util/cache_local.h"
 #include "util/pcre_subst.h"
+#include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * process-lifetime cache of compiled Require-claim regular expressions: the patterns come from

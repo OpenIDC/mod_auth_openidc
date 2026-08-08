@@ -58,6 +58,7 @@
 #include "metrics.h"
 #include "proto/proto.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /* the reusable-handle pool lives at the bottom of this file */
 static CURL *oidc_http_curl_acquire(void);

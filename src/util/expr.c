@@ -42,6 +42,7 @@
 
 #include "util/pcre_subst.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * regexp substitute

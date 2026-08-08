@@ -51,6 +51,7 @@
 #include "proto/proto.h"
 #include "session.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 #if OPENSSL_API_COMPAT < 0x10100000L
 #include <openssl/err.h>

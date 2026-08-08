@@ -43,18 +43,11 @@
 #ifndef _MOD_AUTH_OPENIDC_UTIL_H_
 #define _MOD_AUTH_OPENIDC_UTIL_H_
 
-#include "cfg/cfg.h"
-#include "cfg/dir.h"
 #include "jose.h"
 #include "json.h"
 
 // appinfo.c
 void oidc_util_appinfo_cache_init(apr_pool_t *pool, server_rec *s);
-void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_value, const char *claim_prefix,
-			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
-void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char *claim_prefix,
-			       const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
-			       oidc_appinfo_encoding_t encoding, apr_byte_t cacheable);
 
 // base64.c
 char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output, int *output_len);
@@ -76,10 +69,6 @@ typedef enum {
 	OIDC_APR_EXPR_RESULT_BOOLEAN = 0, /* the expression evaluates to true/false */
 	OIDC_APR_EXPR_RESULT_STRING = 1,  /* the expression produces a string value */
 } oidc_apr_expr_result_t;
-
-char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr,
-			       oidc_apr_expr_result_t result_type);
-const char *oidc_util_apr_expr_exec(request_rec *r, const oidc_apr_expr_t *expr, oidc_apr_expr_result_t result_type);
 
 // file.c
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
@@ -108,10 +97,6 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 const char *oidc_util_jq_filter(request_rec *r, const oidc_json_t *json, const char *filter);
 
 // jwt.c
-apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
-				char **compact_encoded_jwt);
-apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
-				const char *compact_encoded_jwt, char **s_payload);
 int oidc_util_jwt_post_config(server_rec *s);
 
 // key.c
@@ -129,13 +114,7 @@ apr_byte_t oidc_util_rand_str(request_rec *r, char **output, int len);
 char *oidc_util_rand_hex_str(request_rec *r, apr_pool_t *pool, int len);
 
 // url.c
-const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-char *oidc_util_url_cur(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);
-apr_byte_t oidc_util_url_cur_is_secure(const request_rec *r, const oidc_cfg_t *c);
 apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url);
-const char *oidc_util_url_abs(request_rec *r, const oidc_cfg_t *cfg, const char *url);
-const char *oidc_util_url_redirect_uri(request_rec *r, const oidc_cfg_t *c);
-apr_byte_t oidc_util_url_matches_redirect_uri(request_rec *r, const oidc_cfg_t *cfg);
 apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
 apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);
 
@@ -157,7 +136,6 @@ void oidc_util_table_add_query_encoded_params(apr_pool_t *pool, apr_table_t *tab
 apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cookie_domain);
 apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix);
 const char *oidc_util_strcasestr(const char *s1, const char *s2);
-void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char *span);
 void oidc_util_apr_hash_clear(apr_hash_t *ht);
 apr_time_t oidc_util_apr_time_from_sec(double seconds);
 apr_time_t oidc_util_apr_time_add(apr_time_t a, apr_time_t b);

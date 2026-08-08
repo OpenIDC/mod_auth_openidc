@@ -26,7 +26,6 @@
  **************************************************************************/
 
 #include "cache/cache.h"
-#include "util/request_state.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
 #include "check_util.h"
@@ -37,7 +36,9 @@
 #include "session.h"
 #include "state.h"
 #include "util.h"
+#include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 /* the top-level dispatch entry for OIDCRedirectURI requests lives in

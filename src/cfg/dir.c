@@ -44,6 +44,7 @@
 #include "cfg/cfg_int.h"
 #include "cfg/parse.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * "unset" sentinel for oauth_token_introspect_interval: the standard OIDC_CONFIG_POS_INT_UNSET (-1)

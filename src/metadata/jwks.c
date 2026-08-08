@@ -27,6 +27,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/dir.h"
 #include "metadata/internal.h"
 
 #include "cache/cache.h"

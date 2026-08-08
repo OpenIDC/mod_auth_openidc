@@ -41,10 +41,11 @@
  */
 
 #include "handle/handle.h"
-#include "util/request_state.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
+#include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * handle a request for session info on the redirect URI

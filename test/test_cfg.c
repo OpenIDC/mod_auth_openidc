@@ -53,6 +53,7 @@
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util.h"
+#include "util/util_cfg.h"
 
 // provider
 

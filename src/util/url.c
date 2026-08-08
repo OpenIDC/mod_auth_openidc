@@ -41,6 +41,7 @@
  */
 
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 #include <http_protocol.h>
 

@@ -43,6 +43,7 @@
 
 #include "util/util.h"
 #include "util/request_state.h"
+#include "util/util_cfg.h"
 
 #include <apr_lib.h>
 

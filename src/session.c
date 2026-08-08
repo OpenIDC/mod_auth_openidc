@@ -45,6 +45,7 @@
 #include "cfg/dir.h"
 #include "metrics.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 #include "util/cache_local.h"
 

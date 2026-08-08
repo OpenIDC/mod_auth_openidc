@@ -47,6 +47,8 @@
 #endif
 
 #include "util/util.h"
+#include "http.h"
+#include "cache/cache.h"
 #include "metrics.h"
 #include <limits.h>
 #include <apr_atomic.h>

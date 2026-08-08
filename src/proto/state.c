@@ -42,6 +42,7 @@
 
 #include "proto/proto.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 #define OIDC_PROTO_STATE_ISSUER "i"
 #define OIDC_PROTO_STATE_ORIGINAL_URL "ou"

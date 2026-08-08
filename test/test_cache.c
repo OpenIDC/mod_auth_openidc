@@ -49,6 +49,7 @@
 #include "mod_auth_openidc.h"
 #include "util.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 #include <stdlib.h>
 #include <string.h>
 

@@ -42,6 +42,7 @@
 
 #include "proto/proto.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * cached serialized header part of an A256GCM "dir" encrypted JWT;

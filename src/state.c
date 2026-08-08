@@ -41,9 +41,11 @@
  */
 
 #include "state.h"
+#include "cfg/dir.h"
 #include "jose.h"
 #include "proto/proto.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * return the name for the state cookie

@@ -42,6 +42,7 @@
 
 #include <limits.h>
 
+#include "cfg/dir.h"
 #include "metrics.h"
 #include "proto/proto.h"
 #include "util/util.h"

@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/cfg.h"
 #include "util/request_state.h"
 #include "util/util.h"
 

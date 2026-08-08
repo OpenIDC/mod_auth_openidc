@@ -29,6 +29,7 @@
  */
 
 #include "metadata/internal.h"
+#include "util/util_cfg.h"
 
 #include "cfg/dir.h"
 #include "http.h"

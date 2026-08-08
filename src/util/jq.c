@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cache/cache.h"
 #include "util/util.h"
 
 #ifdef USE_LIBJQ

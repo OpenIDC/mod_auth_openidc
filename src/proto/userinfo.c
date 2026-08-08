@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "cfg/dir.h"
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"

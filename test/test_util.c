@@ -42,11 +42,12 @@
  **************************************************************************/
 
 #include "check_util.h"
-#include "util/request_state.h"
 #include "mod_auth_openidc.h"
 #include "util.h"
 #include "util/pcre_subst.h"
+#include "util/request_state.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
 #ifdef HAVE_LIBPCRE2
