@@ -125,12 +125,15 @@ noinst_HEADERS = \
 	cfg/oauth.h \
 	cfg/dir.h \
 	cfg/parse.h \
+	cfg/check.h \
 	mod_auth_openidc.h \
 	state.h \
 	handle/handle.h \
 	proto/proto.h \
 	cache/cache.h \
 	util/util.h \
+	util/util_cfg.h \
+	util/request_state.h \
 	util/cache_local.h \
 	util/pcre_subst.h \
 	oauth.h \
