@@ -41,6 +41,7 @@
  */
 
 #include "cfg/dir.h"
+#include "util/request_state.h"
 #include "handle/handle.h"
 #include "http_protocol.h"
 #include "metrics.h"

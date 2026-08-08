@@ -42,6 +42,7 @@
  */
 
 #include "cfg/oauth.h"
+#include "util/request_state.h"
 #include "cfg/dir.h"
 #include "cfg/parse.h"
 #include "handle/handle.h"

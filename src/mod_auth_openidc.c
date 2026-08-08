@@ -49,6 +49,7 @@
  **************************************************************************/
 
 #include "mod_auth_openidc.h"
+#include "util/request_state.h"
 #include "cfg/cache.h"
 #include "cfg/dir.h"
 #include "cfg/oauth.h"
@@ -337,104 +338,6 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 	return method;
 }
 
-/*
- * get the mod_auth_openidc related context from the (userdata in the) request
- * (used for passing state between various Apache request processing stages and hook callbacks)
- */
-static apr_hash_t *oidc_request_state(request_rec *rr) {
-
-	/* our state is always stored in the main request */
-	request_rec *r = (rr->main != NULL) ? rr->main : rr;
-
-	/* our state is a hash table, get it */
-	apr_hash_t *state = NULL;
-	apr_pool_userdata_get((void **)&state, OIDC_USERDATA_KEY, r->pool);
-
-	/* if it does not exist, we'll create a new hash table */
-	if (state == NULL) {
-		state = apr_hash_make(r->pool);
-		apr_pool_userdata_set(state, OIDC_USERDATA_KEY, NULL, r->pool);
-	}
-
-	/* return the resulting table, always non-null now */
-	return state;
-}
-
-/*
- * set a name/value pair in the mod_auth_openidc-specific request context
- * (used for passing state between various Apache request processing stages and hook callbacks)
- */
-void oidc_request_state_set(request_rec *r, const char *key, const char *value) {
-
-	/* get a handle to the global state, which is a hash table */
-	apr_hash_t *state = oidc_request_state(r);
-
-	/* put the name/value pair in that hash table */
-	apr_hash_set(state, key, APR_HASH_KEY_STRING, value);
-}
-
-/*
- * get a name/value pair from the mod_auth_openidc-specific request context
- * (used for passing state between various Apache request processing stages and hook callbacks)
- */
-const char *oidc_request_state_get(request_rec *r, const char *key) {
-
-	/* get a handle to the global state, which is a hash table */
-	apr_hash_t *state = oidc_request_state(r);
-
-	/* return the value from the hash table */
-	return (const char *)apr_hash_get(state, key, APR_HASH_KEY_STRING);
-}
-
-/*
- * get a name/json object pair from the mod_auth_openidc-specific request context
- * (used for passing state between various Apache request processing stages and hook callbacks)
- */
-oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key) {
-
-	/* get a handle to the global state, which is a hash table */
-	apr_hash_t *state = oidc_request_state(r);
-
-	/* return the value from the hash table */
-	return (oidc_json_t *)apr_hash_get(state, key, APR_HASH_KEY_STRING);
-}
-
-/*
- * APR pool cleanup callback that releases a request-state JSON object
- */
-static apr_status_t oidc_request_state_json_cleanup(void *json) {
-	oidc_json_decref((oidc_json_t *)json);
-	return APR_SUCCESS;
-}
-
-/*
- * set a name/json object pair in the mod_auth_openidc-specific request context, taking over
- * ownership of (i.e. "stealing", jansson-style "_new" semantics) the provided reference
- * (used for passing state between various Apache request processing stages and hook callbacks)
- */
-void oidc_request_state_json_set_new(request_rec *r, const char *key, oidc_json_t *value) {
-
-	/* get a handle to the global state, which is a hash table */
-	apr_hash_t *state = oidc_request_state(r);
-
-	/* register a cleanup for the json object on the pool of the (main) request that owns the
-	 * state hash: a subrequest pool would be destroyed while the state may still be in use */
-	request_rec *main_r = (r->main != NULL) ? r->main : r;
-	apr_pool_cleanup_register(main_r->pool, value, oidc_request_state_json_cleanup, apr_pool_cleanup_null);
-
-	/* put the name/value pair in that hash table */
-	apr_hash_set(state, key, APR_HASH_KEY_STRING, value);
-}
-
-/*
- * set a name/json object pair in the mod_auth_openidc-specific request context
- * (used for passing state between various Apache request processing stages and hook callbacks)
- */
-void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value) {
-
-	/* make a copy of the json object because the session object in the caller will be cleared */
-	oidc_request_state_json_set_new(r, key, oidc_json_copy(value));
-}
 
 /*
  * set the claims from a JSON object (c.q. id_token or user_info response) stored

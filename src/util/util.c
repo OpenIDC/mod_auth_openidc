@@ -42,7 +42,7 @@
  */
 
 #include "util/util.h"
-#include "mod_auth_openidc.h"
+#include "util/request_state.h"
 
 #include <apr_lib.h>
 

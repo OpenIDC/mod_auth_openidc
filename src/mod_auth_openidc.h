@@ -52,17 +52,6 @@
 #define OIDC_AUTH_TYPE_OPENID_OAUTH20 "oauth20"
 #define OIDC_AUTH_TYPE_OPENID_BOTH "auth-openidc"
 
-/* keys for storing info in the request state */
-#define OIDC_REQUEST_STATE_KEY_AUTHN_POST "a"
-#define OIDC_REQUEST_STATE_KEY_CLAIMS "c"
-#define OIDC_REQUEST_STATE_KEY_DISCOVERY "d"
-#define OIDC_REQUEST_STATE_KEY_HTTP "hp"
-#define OIDC_REQUEST_STATE_KEY_HTML "hl"
-#define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"
-#define OIDC_REQUEST_STATE_KEY_SCOPE "sc"
-#define OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE "p"
-#define OIDC_REQUEST_STATE_KEY_SAVE "s"
-#define OIDC_REQUEST_STATE_TRACE_ID "t"
 
 /* parameter name of the original method in the discovery response */
 #define OIDC_DISC_RM_PARAM "method"
@@ -71,9 +60,7 @@
 #define OIDC_DEFAULT_HEADER_PREFIX "OIDC_"
 
 /* the (global) key for the mod_auth_openidc related state that is stored in the request userdata context */
-#define OIDC_USERDATA_KEY "mod_auth_openidc_state"
 #define OIDC_USERDATA_SESSION "mod_auth_openidc_session"
-#define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"
 
 typedef enum {
 	OIDC_REDIRECT_URL_ANY_HOST = 0,	 /* allow redirects to other hosts */
@@ -142,12 +129,6 @@ typedef enum {
 int oidc_check_user_id(request_rec *r);
 int oidc_fixups(request_rec *r);
 apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c);
-
-void oidc_request_state_set(request_rec *r, const char *key, const char *value);
-const char *oidc_request_state_get(request_rec *r, const char *key);
-oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key);
-void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value);
-void oidc_request_state_json_set_new(request_rec *r, const char *key, oidc_json_t *value);
 
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);

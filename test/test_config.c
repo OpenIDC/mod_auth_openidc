@@ -40,6 +40,7 @@
  */
 
 #include "cfg/cfg_int.h"
+#include "util/request_state.h"
 #include "cfg/dir.h"
 #include "check_util.h"
 #include "mod_auth_openidc.h"

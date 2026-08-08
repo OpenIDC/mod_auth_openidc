@@ -40,7 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
-#include "mod_auth_openidc.h"
+#include "util/request_state.h"
 #include "util/util.h"
 
 #include "http.h"

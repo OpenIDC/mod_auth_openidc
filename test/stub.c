@@ -1,4 +1,5 @@
 #include <apr_global_mutex.h>
+#include "util/request_state.h"
 #include <apr_lib.h>
 #include <apr_strings.h>
 

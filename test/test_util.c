@@ -42,6 +42,7 @@
  **************************************************************************/
 
 #include "check_util.h"
+#include "util/request_state.h"
 #include "mod_auth_openidc.h"
 #include "util.h"
 #include "util/pcre_subst.h"

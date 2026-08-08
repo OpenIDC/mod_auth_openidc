@@ -44,6 +44,7 @@
 #define _MOD_AUTH_OPENIDC_METRICS_H_
 
 #include "const.h" // for the PACKAGE_* defines
+#include "util/request_state.h"
 #include <apr_hash.h>
 #include <httpd.h>
 

@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "cache/cache.h"
+#include "util/request_state.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
 #include "check_util.h"
