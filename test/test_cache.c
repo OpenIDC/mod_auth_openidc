@@ -403,6 +403,85 @@ START_TEST(test_cache_backend_true_null_miss) {
 }
 END_TEST
 
+/*
+ * with OIDCCacheEncrypt off the value is stored as it is and the key is used as it is, which is a
+ * different pair of paths through oidc_cache_get/oidc_cache_set than the encrypting default; only
+ * the miss was covered, never a hit, and never a key long enough to be hashed anyway
+ */
+START_TEST(test_cache_unencrypted_hit_and_long_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	int old_encrypt = cfg->cache.encrypt;
+	char *value = NULL;
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+
+	cfg->cache.encrypt = 0;
+
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "plain-k", "plain-v", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "plain-k", &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "plain-v");
+
+	/* a key too long to be used as it is gets hashed whether or not encryption is on */
+	size_t long_len = OIDC_CACHE_KEY_SIZE_MAX + 50;
+	char *long_key = apr_pcalloc(r->pool, long_len + 1);
+	memset(long_key, 'k', long_len);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_NONCE, long_key, "long-plain-v", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_NONCE, long_key, &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "long-plain-v");
+
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
+/*
+ * a backend that reports a miss for the current passphrase and then errors on the retry with the
+ * previous one: the read has to report the error rather than pass it off as a cache miss, which
+ * would silently drop a session during a passphrase rotation
+ */
+static int _e2e_flaky_get_calls = 0;
+
+static apr_byte_t e2e_flaky_get(request_rec *r, const char *section, const char *key, char **value) {
+	_e2e_flaky_get_calls++;
+	if (_e2e_flaky_get_calls == 1) {
+		*value = NULL;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static oidc_cache_t e2e_flaky_cache = {"flaky", 1, NULL, NULL, e2e_flaky_get, NULL, NULL};
+
+START_TEST(test_cache_second_passphrase_retry_backend_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
+	const char *old_s2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
+	oidc_cache_t *old_impl = (oidc_cache_t *)cfg->cache.impl;
+	int old_encrypt = cfg->cache.encrypt;
+	char *value = NULL;
+
+	cfg->crypto_passphrase.secret1 = "newsecret01234567890123456789012";
+	cfg->crypto_passphrase.secret2 = "oldsecret012345678901234567890";
+	oidc_test_crypto_passphrase_rederive(cfg);
+	cfg->cache.encrypt = 1;
+	cfg->cache.impl = &e2e_flaky_cache;
+	_e2e_flaky_get_calls = 0;
+
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "rotating", &value), FALSE);
+	ck_assert_int_eq(_e2e_flaky_get_calls, 2);
+	ck_assert_ptr_null(value);
+
+	cfg->cache.impl = old_impl;
+	cfg->cache.encrypt = old_encrypt;
+	cfg->crypto_passphrase.secret1 = (char *)old_s1;
+	cfg->crypto_passphrase.secret2 = (char *)old_s2;
+	oidc_test_crypto_passphrase_rederive(cfg);
+}
+END_TEST
+
 START_TEST(test_cache_compression_enabled_set_get) {
 	request_rec *r = oidc_test_request_get();
 	char *value = NULL;
@@ -2142,6 +2221,8 @@ int main(void) {
 	tcase_add_test(core, test_cache_shm_get_key_bounds_negative);
 	tcase_add_test(core, test_cache_secret1_empty_secret2_fallback);
 	tcase_add_test(core, test_cache_backend_true_null_miss);
+	tcase_add_test(core, test_cache_unencrypted_hit_and_long_key);
+	tcase_add_test(core, test_cache_second_passphrase_retry_backend_error);
 	/* compression-enabled permutations */
 	tcase_add_test(core, test_cache_compression_enabled_set_get);
 	tcase_add_test(core, test_cache_compression_enabled_second_passphrase);

@@ -2807,6 +2807,94 @@ START_TEST(test_handle_dpop_create_fails_without_private_keys) {
 END_TEST
 
 /*
+ * the endpoint hands out proofs bound to this server's key, so it must only ever answer a request
+ * that arrived locally; anything else has to be refused rather than proxied for
+ */
+START_TEST(test_handle_dpop_rejects_non_local_request) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	c->dpop_api_enabled = 1;
+	/* without the escape hatch the fixture's request looks remote (remote_ip and local_ip are
+	 * both NULL, and _oidc_strnatcasecmp(NULL, NULL) deliberately reports "different") */
+	apr_table_unset(r->subprocess_env, "OIDC_DPOP_API_INSECURE");
+	r->args = "dpop=AT-xyz&url=https%3A%2F%2Frs.example.com%2Fapi";
+
+	int rc = oidc_dpop_request(r, c);
+	ck_assert_int_eq(rc, HTTP_UNAUTHORIZED);
+}
+END_TEST
+
+/* the "htm" claim out of the payload of a compact-serialized DPoP proof */
+static const char *e2e_dpop_proof_htm(request_rec *r, const char *proof) {
+	const char *first = _oidc_strstr(proof, ".");
+	ck_assert_ptr_nonnull((void *)first);
+	const char *second = _oidc_strstr(first + 1, ".");
+	ck_assert_ptr_nonnull((void *)second);
+
+	char *payload_b64 = apr_pstrmemdup(r->pool, first + 1, (apr_size_t)(second - (first + 1)));
+	char *payload_json = NULL;
+	ck_assert_int_gt(oidc_util_base64url_decode(r->pool, &payload_json, payload_b64), 0);
+
+	oidc_json_t *payload = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, payload_json, &payload), TRUE);
+	const char *htm = apr_pstrdup(r->pool, oidc_json_string_value(oidc_json_object_get(payload, OIDC_CLAIM_HTM)));
+	oidc_json_decref(payload);
+	return htm;
+}
+
+/* the DPoP proof out of the JSON response body the endpoint sent */
+static const char *e2e_dpop_response_proof(request_rec *r) {
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	oidc_json_t *json = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, body, &json), TRUE);
+	const char *proof = apr_pstrdup(r->pool, oidc_json_string_value(oidc_json_object_get(json, OIDC_HTTP_HDR_DPOP)));
+	oidc_json_decref(json);
+	ck_assert_ptr_nonnull((void *)proof);
+	return proof;
+}
+
+/*
+ * the whole point of the endpoint: with a key to sign with it returns a JSON object carrying the
+ * proof, for each of the HTTP methods it accepts
+ */
+START_TEST(test_handle_dpop_returns_proof) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *kerr =
+	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir));
+	ck_assert_msg(kerr == NULL, "could not load private key: %s", kerr);
+
+	e2e_dpop_enable(r, c);
+
+	/* the method defaults to GET when the parameter is absent */
+	r->args = "dpop=AT-xyz&url=https%3A%2F%2Frs.example.com%2Fapi";
+	ck_assert_int_eq(oidc_dpop_request(r, c), OK);
+	const char *proof = e2e_dpop_response_proof(r);
+	char *alg = NULL;
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, proof, &alg, NULL, NULL));
+	/* PS256 rather than RS256: RFC 9449 prefers the PSS variants for DPoP proofs */
+	ck_assert_str_eq(alg, "PS256");
+	ck_assert_str_eq(e2e_dpop_proof_htm(r, proof), "GET");
+
+	/* an explicit method reaches the proof upper-cased, and a nonce is accepted alongside it */
+	r->args = "dpop=AT-xyz&url=https%3A%2F%2Frs.example.com%2Fapi&method=post&nonce=n-123";
+	ck_assert_int_eq(oidc_dpop_request(r, c), OK);
+	ck_assert_str_eq(e2e_dpop_proof_htm(r, e2e_dpop_response_proof(r)), "POST");
+
+	/* any other method is passed through verbatim rather than defaulted, which is what makes
+	 * "method=PUT" work; note that only GET and POST are matched case-insensitively, so a
+	 * lower-case anything-else reaches the "htm" claim as it was given */
+	r->args = "dpop=AT-xyz&url=https%3A%2F%2Frs.example.com%2Fapi&method=PUT";
+	ck_assert_int_eq(oidc_dpop_request(r, c), OK);
+	ck_assert_str_eq(e2e_dpop_proof_htm(r, e2e_dpop_response_proof(r)), "PUT");
+}
+END_TEST
+
+/*
  * Additional tests for handle/userinfo.c — exercise the
  * oidc_userinfo_refresh_claims happy path (interval > 0, session ready,
  * loopback userinfo endpoint) and the oidc_userinfo_pass_as dispatcher
@@ -6657,6 +6745,8 @@ int main(void) {
 	tcase_add_test(dpop, test_handle_dpop_missing_access_token);
 	tcase_add_test(dpop, test_handle_dpop_missing_url_parameter);
 	tcase_add_test(dpop, test_handle_dpop_create_fails_without_private_keys);
+	tcase_add_test(dpop, test_handle_dpop_rejects_non_local_request);
+	tcase_add_test(dpop, test_handle_dpop_returns_proof);
 
 	TCase *legacy = tcase_create("legacy");
 	tcase_add_checked_fixture(legacy, oidc_test_setup, oidc_test_teardown);
