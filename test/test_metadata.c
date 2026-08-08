@@ -2015,6 +2015,169 @@ END_TEST
  * for client authentication) against an OP that advertises support, the registration request asks
  * for certificate-bound access tokens
  */
+/*
+ * the encryption and userinfo response algorithms are optional in the registration request: each
+ * one is only sent when it is configured, and none of those arms ran
+ */
+/*
+ * a client secret with an expiry still in the future is usable, which is the one arm of the expiry
+ * check that never ran -- the absent, zero and past cases were all covered
+ */
+START_TEST(test_metadata_disk_client_secret_not_yet_expired) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       apr_psprintf(r->pool,
+				    "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\","
+				    "\"client_secret_expires_at\":%" APR_TIME_T_FMT "}",
+				    apr_time_sec(apr_time_now()) + 3600));
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_client_id_get(provider), "rp-test");
+}
+END_TEST
+
+/*
+ * client metadata without a client_id is unusable: without dynamic registration allowed there is
+ * nothing to fall back on, so the provider must not resolve
+ */
+START_TEST(test_metadata_disk_client_without_client_id) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir), "{\"client_secret\":\"sekret\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, FALSE), FALSE);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_dyn_registration_response_algorithms) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"client_id\":\"dyn-rp\",\"client_secret\":\"dyn-secret\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
+		       "{\"client_jwks_uri\":\"https://rp.example.com/jwks\","
+		       "\"id_token_encrypted_response_alg\":\"RSA-OAEP\","
+		       "\"id_token_encrypted_response_enc\":\"A256GCM\","
+		       "\"userinfo_signed_response_alg\":\"RS256\","
+		       "\"userinfo_encrypted_response_alg\":\"RSA-OAEP\","
+		       "\"userinfo_encrypted_response_enc\":\"A256GCM\"}");
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), TRUE);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	oidc_json_t *body = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, cap->body, &body), TRUE);
+
+	/* a configured client_jwks_uri is advertised as-is, instead of this module's own ?jwks= URL */
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(body, "jwks_uri")), "https://rp.example.com/jwks");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(body, "id_token_encrypted_response_alg")),
+			 "RSA-OAEP");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(body, "id_token_encrypted_response_enc")),
+			 "A256GCM");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(body, "userinfo_signed_response_alg")), "RS256");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(body, "userinfo_encrypted_response_alg")),
+			 "RSA-OAEP");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(body, "userinfo_encrypted_response_enc")),
+			 "A256GCM");
+	oidc_json_decref(body);
+
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * a registration attempt that the OP refuses: neither an unreachable endpoint nor an error
+ * response may pass for a registered client
+ */
+START_TEST(test_metadata_disk_dyn_registration_failures) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	/* an OP that answers the registration POST with an OAuth error object */
+	oidc_test_http_response_t resp = {.status_code = 400,
+					  .content_type = "application/json",
+					  .body = "{\"error\":\"invalid_client_metadata\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	const char *provider_json = apr_psprintf(r->pool,
+						 "{\"issuer\":\"https://idp.example.com\","
+						 "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+						 "\"token_endpoint\":\"https://idp.example.com/token\","
+						 "\"registration_endpoint\":\"%s\","
+						 "\"response_types_supported\":[\"code\"],"
+						 "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+						 oidc_test_http_server_url(srv, r->pool));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), provider_json);
+
+	oidc_provider_t *provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), FALSE);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* and one whose registration endpoint has nothing listening on it */
+	const char *dir2 = e2e_make_metadata_dir(r);
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_gt(port, 0);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir2),
+		       apr_psprintf(r->pool,
+				    "{\"issuer\":\"https://idp.example.com\","
+				    "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+				    "\"token_endpoint\":\"https://idp.example.com/token\","
+				    "\"registration_endpoint\":\"http://127.0.0.1:%d/register\","
+				    "\"response_types_supported\":[\"code\"],"
+				    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+				    port));
+
+	provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), FALSE);
+
+	/* and one whose extra registration JSON, which the .conf carries verbatim without being
+	 * parsed, turns out not to be JSON: the request must not be sent with it dropped silently */
+	const char *dir3 = e2e_make_metadata_dir(r);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir3),
+		       apr_psprintf(r->pool,
+				    "{\"issuer\":\"https://idp.example.com\","
+				    "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+				    "\"token_endpoint\":\"https://idp.example.com/token\","
+				    "\"registration_endpoint\":\"http://127.0.0.1:%d/register\","
+				    "\"response_types_supported\":[\"code\"],"
+				    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+				    port));
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir3),
+		       "{\"registration_endpoint_json\":\"this is not JSON\"}");
+
+	provider = NULL;
+	ck_assert_int_eq(oidc_metadata_get(r, c, "https://idp.example.com", &provider, TRUE), FALSE);
+}
+END_TEST
+
 START_TEST(test_metadata_disk_dyn_registration_cert_bound_tokens) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2173,6 +2336,10 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_conf_then_client_response_type_fallback);
 	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
 	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);
+	tcase_add_test(disk, test_metadata_disk_client_secret_not_yet_expired);
+	tcase_add_test(disk, test_metadata_disk_client_without_client_id);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_response_algorithms);
+	tcase_add_test(disk, test_metadata_disk_dyn_registration_failures);
 	tcase_add_test(disk, test_metadata_disk_provider_get_live_discovery);
 	tcase_add_test(disk, test_metadata_disk_provider_get_schemeless_issuer);
 	tcase_add_test(disk, test_metadata_disk_provider_refresh_within_interval_uses_cache);
