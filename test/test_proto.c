@@ -44,6 +44,7 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include "cfg/cfg_int.h"
 #include "check_util.h"
 #include "handle/handle.h"
 #include "http_server.h"
@@ -3216,6 +3217,118 @@ START_TEST(test_proto_request_auth_with_request_object_rs256) {
 }
 END_TEST
 
+/* drive one authorization request with the given OIDCRequestObject config and hand back the
+ * Location header it redirected to */
+static const char *e2e_request_object_location(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider,
+					       const char *request_object_config, const char *state) {
+	oidc_cfg_provider_request_object_set(r->pool, provider, request_object_config);
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc =
+	    oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", state, ps, NULL, NULL, NULL,
+			      NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+	return loc;
+}
+
+/*
+ * "request_object_type":"request" embeds the JWT in the authorization request itself instead of
+ * publishing it behind a request_uri, and the two ways of getting that setting wrong -- a
+ * non-string and an unknown value -- must leave the request object off rather than guess
+ */
+START_TEST(test_proto_request_auth_request_object_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *loc = NULL;
+
+	loc = e2e_request_object_location(
+	    r, c, provider, "{\"request_object_type\":\"request\",\"crypto\":{\"sign_alg\":\"none\"}}", "state-rot-1");
+	ck_assert_msg(_oidc_strstr(loc, "request=") != NULL, "the request object must be embedded: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") == NULL, "it must not also be passed by reference: %s", loc);
+
+	/* explicitly asking for the default is accepted rather than treated as unknown */
+	loc = e2e_request_object_location(
+	    r, c, provider, "{\"request_object_type\":\"request_uri\",\"crypto\":{\"sign_alg\":\"none\"}}",
+	    "state-rot-2");
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL, "request_uri= must appear: %s", loc);
+
+	/* not a string */
+	loc = e2e_request_object_location(r, c, provider,
+					  "{\"request_object_type\":42,\"crypto\":{\"sign_alg\":\"none\"}}",
+					  "state-rot-3");
+	ck_assert_msg(_oidc_strstr(loc, "request") == NULL, "no request object may be attached: %s", loc);
+
+	/* a string, but not one of the two accepted values */
+	loc = e2e_request_object_location(
+	    r, c, provider, "{\"request_object_type\":\"telepathy\",\"crypto\":{\"sign_alg\":\"none\"}}",
+	    "state-rot-4");
+	ck_assert_msg(_oidc_strstr(loc, "request") == NULL, "no request object may be attached: %s", loc);
+}
+END_TEST
+
+/*
+ * choosing the key to sign the request object with: the symmetric case, and the three ways it can
+ * find no key at all. A failure here must leave the request object off the authorization request
+ * rather than sending an unsigned one in its place.
+ */
+START_TEST(test_proto_request_auth_request_object_signing_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *loc = NULL;
+
+	/* HS256: signed with a key derived from the client secret, no private key needed */
+	oidc_cfg_provider_client_secret_set(r->pool, provider, "jar-signing-shared-secret-0123456789");
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"HS256\"}}", "state-rosk-1");
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL, "an HS256 request object must be produced: %s", loc);
+
+	/* RS256 with a key list that is present but holds no usable signing key */
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-2");
+	ck_assert_msg(_oidc_strstr(loc, "request") == NULL,
+		      "without a usable signing key no request object may be attached: %s", loc);
+
+	/* an algorithm with no key type behind it at all */
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"XY123\"}}", "state-rosk-3");
+	ck_assert_msg(_oidc_strstr(loc, "request") == NULL, "an unsupported alg may not produce one either: %s", loc);
+
+	/* per-provider client keys are preferred over the global list */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(oidc_test_cmd_get(OIDCPrivateKeyFiles), NULL,
+						     apr_psprintf(r->pool, "rsa-client#%s/private.pem", dir)));
+	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider,
+								  (apr_array_header_t *)oidc_cfg_private_keys_get(c)));
+	c->private_keys = NULL;
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-4");
+	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL,
+		      "a per-provider client key must be usable for signing: %s", loc);
+
+	/* and with neither list configured at all, which is a refusal of its own */
+	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, NULL));
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-5");
+	ck_assert_msg(_oidc_strstr(loc, "request") == NULL,
+		      "without any configured keys no request object may be attached: %s", loc);
+}
+END_TEST
+
+/*
+ * "url" overrides where the published request object is fetched from, for deployments that resolve
+ * it somewhere other than the redirect URI
+ */
+START_TEST(test_proto_request_auth_request_object_url_override) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	const char *loc = e2e_request_object_location(
+	    r, c, provider, "{\"url\":\"https://jar.example.com/resolve\",\"crypto\":{\"sign_alg\":\"none\"}}",
+	    "state-rourl-1");
+	ck_assert_msg(_oidc_strstr(loc, "jar.example.com%2Fresolve") != NULL,
+		      "the configured resolver URL must be used instead of the redirect URI: %s", loc);
+}
+END_TEST
+
 /* the request object is encrypted (sign_alg=none) with a symmetric key derived
  * from the client_secret: covers the OCT branch of the encryption-JWK resolver
  * and the JWE creation itself */
@@ -3334,6 +3447,84 @@ START_TEST(test_proto_auth_request_params_cannot_duplicate_ours) {
 	/* a parameter that collides with nothing is still added */
 	ck_assert_msg(_oidc_strstr(loc, "acr_values=loa3") != NULL,
 		      "a non-colliding extra parameter must still be sent");
+}
+END_TEST
+
+/*
+ * OIDCAuthRequestParams is a configuration directive, so unlike the request-supplied variant above
+ * it is allowed to override a parameter this module sets itself: the operator asked for it. A "#"
+ * value means "forward the same-named parameter of the current request", which is request-supplied
+ * whatever the source of the directive, and so is refused an override.
+ */
+START_TEST(test_proto_auth_request_params_configured) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+
+	/* "login_hint=#" forwards the request's own login_hint; "prompt=#" asks for one the request
+	 * does not carry and is left out rather than sent empty; "scope" overrides ours.
+	 * NB: written unescaped because the ap_unescape_url stub does not decode. */
+	ck_assert_ptr_null(oidc_cfg_provider_auth_request_params_set(
+	    r->pool, provider, "login_hint=#&prompt=#&scope=openid profile&extra=configured"));
+	r->args = "login_hint=alice%40example.com";
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-cfgparams", ps,
+				   NULL, NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+
+	ck_assert_msg(_oidc_strstr(loc, "login_hint=alice%40example.com") != NULL,
+		      "a \"#\" value must forward the request's own parameter: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "prompt=") == NULL,
+		      "a \"#\" value for a parameter the request does not carry must be left out: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "scope=openid%20profile") != NULL,
+		      "a configured parameter must be allowed to override ours: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "scope=openid&") == NULL, "and ours must not also be sent: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "extra=configured") != NULL, "a non-colliding one is added: %s", loc);
+}
+END_TEST
+
+/*
+ * a Pushed Authorization Request that cannot be made: the OP never advertised the endpoint, or it
+ * answers with an error. Either way the user must get an error page rather than a redirect to an
+ * authorization request that was never pushed.
+ */
+START_TEST(test_proto_request_auth_par_failures) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+	oidc_cfg_provider_auth_request_method_int_set(provider, OIDC_AUTH_REQUEST_METHOD_PAR);
+
+	/* PAR is requested but the provider metadata never carried a PAR endpoint */
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-par-1", ps, NULL,
+				   NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+
+	/* an endpoint that answers with an OAuth error object */
+	oidc_test_http_response_t resp = {
+	    .status_code = 400, .content_type = "application/json", .body = "{\"error\":\"invalid_request\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	ck_assert_ptr_null(oidc_cfg_provider_pushed_authorization_request_endpoint_url_set(
+	    r->pool, provider, oidc_test_http_server_url(srv, r->pool)));
+
+	ps = e2e_make_proto_state(r);
+	rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-par-2", ps, NULL, NULL,
+			       NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
 }
 END_TEST
 
@@ -4029,6 +4220,9 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_private_keys_load_from_pem);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_none);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_rs256);
+	tcase_add_test(e2e, test_proto_request_auth_request_object_type);
+	tcase_add_test(e2e, test_proto_request_auth_request_object_signing_keys);
+	tcase_add_test(e2e, test_proto_request_auth_request_object_url_override);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_encrypted_symmetric);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_encrypted_rsa);
 	tcase_add_test(e2e, test_proto_request_auth_with_request_object_encrypt_bad_alg);
@@ -4036,6 +4230,8 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_request_auth_request_object_copy_param_types);
 	tcase_add_test(e2e, test_proto_userinfo_request_signed_jwt_response);
 	tcase_add_test(e2e, test_proto_auth_request_params_cannot_duplicate_ours);
+	tcase_add_test(e2e, test_proto_auth_request_params_configured);
+	tcase_add_test(e2e, test_proto_request_auth_par_failures);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);
 	tcase_add_test(e2e, test_proto_request_auth_unknown_method);
