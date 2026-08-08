@@ -558,6 +558,26 @@ START_TEST(test_util_jwt) {
 	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE, "result is not TRUE");
 	ck_assert_str_eq(payload, str);
 
+	/*
+	 * the setting says how payloads are written from now on, not how an existing one was
+	 * written, so a payload must stay readable across a change to it. Reading it on the verify
+	 * side meant that toggling it under running traffic made every live session unreadable.
+	 */
+	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
+	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_STRIP_HDR");
+	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "compressed create failed");
+	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
+	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE,
+		      "a compressed payload must still verify after compression is switched off");
+	ck_assert_str_eq(payload, str);
+
+	/* and the other way round: written uncompressed, read by a server that compresses */
+	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "uncompressed create failed");
+	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
+	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE,
+		      "an uncompressed payload must still verify after compression is switched on");
+	ck_assert_str_eq(payload, str);
+
 	passphrase.secret1 = NULL;
 	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == FALSE, "result is not FALSE");
 }

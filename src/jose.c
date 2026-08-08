@@ -415,15 +415,56 @@ apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len
 }
 
 /*
- * decompress using (compile-time) zlib or libbrotli, otherwise just plain copy
+ * whether a buffer carries a zlib stream, from its two-byte header (RFC 1950 2.2): the low nibble
+ * of CMF is the compression method, 8 for deflate, and CMF*256+FLG must be a multiple of 31.
+ *
+ * The only other thing these payloads are ever set to is the JSON this module serialized, which
+ * cannot satisfy that: '{' is 0x7b, whose low nibble is 11 rather than 8. Leading whitespace is
+ * likewise excluded (space is 0x20, tab 0x09).
+ */
+static apr_byte_t oidc_jose_is_zlib(const char *input, int input_len) {
+	const unsigned char *b = (const unsigned char *)input;
+	if ((input == NULL) || (input_len < 2))
+		return FALSE;
+	if ((b[0] & 0x0f) != 8)
+		return FALSE;
+	return (((((unsigned int)b[0]) << 8) | b[1]) % 31) == 0 ? TRUE : FALSE;
+}
+
+/*
+ * decompress a payload, deciding from the payload itself rather than from how this build happens
+ * to be configured.
+ *
+ * The compressed form carries no marker saying which algorithm produced it, and the choice is made
+ * both at compile time (brotli / zlib / neither) and at runtime (OIDC_JWT_INTERNAL_NO_COMPRESS), so
+ * assuming the local setting is wrong in exactly the cases that matter: a mixed-version cluster
+ * sharing a cache, or an operator toggling that variable under running traffic. Assuming produced a
+ * failed decompress, then a JSON parse error, then a discarded session and a silent re-login, with
+ * nothing naming the cause.
+ *
+ * Detecting instead makes an uncompressed payload readable by a build with compression enabled and
+ * vice versa. What detection cannot repair is a zlib payload arriving at a build without zlib -- the
+ * bytes cannot be inflated without the library - but that at least reports what happened.
  */
 apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 				oidc_jose_error_t *err) {
-#ifdef USE_LIBBROTLI
-	return oidc_jose_brotli_uncompress(pool, input, input_len, output, output_len, err);
-#elif defined(USE_ZLIB)
-	return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, err);
+
+	if (oidc_jose_is_zlib(input, input_len)) {
+#ifdef USE_ZLIB
+		return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, err);
 #else
+		oidc_jose_error(err, "payload is zlib compressed but this build has no zlib support: it was written "
+				     "by a build configured with zlib");
+		return FALSE;
+#endif
+	}
+
+#ifdef USE_LIBBROTLI
+	/* brotli has no header to recognize, so anything not zlib-framed is assumed to be brotli
+	 * when this build produces brotli; an uncompressed payload fails here as it did before */
+	return oidc_jose_brotli_uncompress(pool, input, input_len, output, output_len, err);
+#else
+	/* not compressed, or compressed by an algorithm this build does not have */
 	*output = apr_pmemdup(pool, input, input_len);
 	*output_len = input_len;
 	return TRUE;

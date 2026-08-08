@@ -163,6 +163,44 @@ START_TEST(test_jose_get_string_and_timestamps) {
 }
 END_TEST
 
+/*
+ * a payload carries no marker saying how it was compressed, and the choice is made both at compile
+ * time and at runtime, so decompression decides from the payload rather than from how this build
+ * happens to be configured. That is what lets a build with compression read one written without it
+ * -- a mixed-version cluster on one cache, or an operator toggling
+ * OIDC_JWT_INTERNAL_NO_COMPRESS under traffic.
+ */
+START_TEST(test_jose_uncompress_detects_uncompressed) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	char *out = NULL;
+	int out_len = 0;
+
+	/* the session payload as it is written when compression is off: plain JSON, passed through */
+	const char *json = "{ \"r\": \"alice\", \"e\": 1234567890 }";
+	int json_len = (int)_oidc_strlen(json);
+	ck_assert_msg(oidc_jose_uncompress(pool, json, json_len, &out, &out_len, &err) == TRUE,
+		      "an uncompressed payload must pass through, not be fed to the decompressor");
+	ck_assert_int_eq(out_len, json_len);
+	ck_assert_msg(memcmp(out, json, json_len) == 0, "uncompressed payload was altered");
+
+	/* '{' is 0x7b: low nibble 11, so it can never be mistaken for a zlib header (which needs 8) */
+	ck_assert_int_ne((unsigned char)json[0] & 0x0f, 8);
+
+	/* and a genuinely compressed one is still recognised and inflated */
+	const char *input = "the quick brown fox jumps over the lazy dog";
+	int input_len = (int)_oidc_strlen(input);
+	char *cmp = NULL;
+	int cmp_len = 0;
+	ck_assert_msg(oidc_jose_compress(pool, input, input_len, &cmp, &cmp_len, &err) == TRUE, "compress failed");
+	out = NULL;
+	out_len = 0;
+	ck_assert_msg(oidc_jose_uncompress(pool, cmp, cmp_len, &out, &out_len, &err) == TRUE, "uncompress failed");
+	ck_assert_int_eq(out_len, input_len);
+	ck_assert_msg(memcmp(out, input, input_len) == 0, "round trip differs from the original");
+}
+END_TEST
+
 START_TEST(test_jose_compress_uncompress) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	const char *input = "the quick brown fox jumps over the lazy dog";
@@ -1462,6 +1500,7 @@ int main(void) {
 	tcase_add_test(core, test_jose_hash_and_base64_and_length);
 	tcase_add_test(core, test_jose_get_string_and_timestamps);
 	tcase_add_test(core, test_jose_compress_uncompress);
+	tcase_add_test(core, test_jose_uncompress_detects_uncompressed);
 	tcase_add_test(core, test_jose_compress_uncompress_tiny);
 	tcase_add_test(core, test_jose_jwk_and_json_and_copy_lists);
 	tcase_add_test(core, test_jose_jwe_decrypt_plaintext);

@@ -1,4 +1,8 @@
 08/07/2026
+- recognize whether a stored payload is compressed instead of assuming the local setting, so a
+  session survives a change to OIDC_JWT_INTERNAL_NO_COMPRESS and is readable across servers
+  built with and without compression; previously flipping that variable handed the compressed
+  bytes back as the session contents. The written format is unchanged.
 - stamp the session payload with a format version and discard a session written in a newer
   format instead of misreading it; sessions written before this carry no version and still
   load, so upgrading and downgrading are both unaffected
