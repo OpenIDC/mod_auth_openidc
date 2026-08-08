@@ -37,7 +37,6 @@ noinst_HEADERS = \
 	http_server.h \
 	fuzz/fuzz.h
 
-LDADD = ${top_builddir}/src/libauth_openidc.la ${LIBADD}
 
 noinst_PROGRAMS = test-cmd
 
@@ -48,18 +47,32 @@ test_cmd_SOURCES = \
 
 if HAVE_CHECK
 
-noinst_LTLIBRARIES = libtest.la
+noinst_LTLIBRARIES = libtest.la libteststub.la
 
 libtest_la_CFLAGS = ${AM_CFLAGS} -fPIC
 
 libtest_la_SOURCES = \
 	util.c \
 	check_util.c \
-	http_server.c \
-	stub.c
+	http_server.c
+
+# the Apache stubs live apart from the fixture above: the fixture calls into the module, the stubs
+# call nothing, and keeping them in one archive makes the test link cyclic (see LDADD below)
+libteststub_la_CFLAGS = ${AM_CFLAGS} -fPIC
+libteststub_la_SOURCES = stub.c
 
 AM_CFLAGS += @CHECK_CFLAGS@
-LDADD += libtest.la @CHECK_LIBS@
+
+# Ordered so that every dependency points forward and one left-to-right scan suffices: the fixture
+# (util.c) calls into the module, the module needs the Apache stubs, and the stubs need nothing.
+# Holding the stubs in libtest.la instead made the two archives mutually dependent, which no single
+# ordering can satisfy.
+#
+# That link used to succeed by accident: util/util.h pulled in cfg/cfg.h, so even util/base64.o
+# referenced auth_openidc_module, and that spurious edge dragged the module out of
+# libauth_openidc.a before libtest.a was reached. Dropping that coupling reverses the pull order
+# and breaks the link; this ordering does not depend on it either way.
+LDADD = libtest.la ${top_builddir}/src/libauth_openidc.la libteststub.la ${LIBADD} @CHECK_LIBS@
 
 oidc_unit_tests = \
 	test_cfg \
@@ -103,6 +116,12 @@ check_PROGRAMS = $(oidc_unit_tests) $(oidc_fuzz_targets)
 # corpora). The fuzz binaries themselves are driven by that script, not run
 # directly.
 TESTS = $(oidc_unit_tests) check_registration.sh check_directives.sh check_conf_reference.sh fuzz/run-fuzzers.sh
+
+
+else
+
+# without libcheck only test-cmd is built, and it compiles stub.c into itself
+LDADD = ${top_builddir}/src/libauth_openidc.la ${LIBADD}
 
 endif
 
