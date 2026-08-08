@@ -392,6 +392,28 @@ START_TEST(test_util_html_escape) {
 	// TODO: which spec/function is actually followed here?
 	ck_assert_ptr_eq(oidc_util_html_javascript_escape(pool, NULL), NULL);
 	ck_assert_str_eq(oidc_util_html_javascript_escape(pool, "@*_+-./"), "@*_+-.\\/");
+
+	/* every entry of the JavaScript escape table in one go: quote, double quote, backslash,
+	 * forward slash, CR, LF, and the angle brackets that would otherwise close a <script> */
+	ck_assert_str_eq(oidc_util_html_javascript_escape(pool, "'"
+							       "\""
+							       "\\"
+							       "/"
+							       "\r"
+							       "\n"
+							       "<"
+							       ">"),
+			 "\\'"
+			 "\\\""
+			 "\\\\"
+			 "\\/"
+			 "\\r"
+			 "\\n"
+			 "\\x3c"
+			 "\\x3e");
+
+	/* characters with no escape sequence pass through unchanged, interleaved with escaped ones */
+	ck_assert_str_eq(oidc_util_html_javascript_escape(pool, "a<b>c"), "a\\x3cb\\x3ec");
 }
 END_TEST
 
@@ -445,6 +467,52 @@ START_TEST(test_util_html_template) {
 }
 END_TEST
 
+START_TEST(test_util_html_template_escape_and_format) {
+	int rv = -1;
+	char *contents = NULL;
+	char *path = NULL;
+	const char *dir = NULL;
+	request_rec *r = oidc_test_request_get();
+
+	apr_temp_dir_get(&dir, r->pool);
+
+	/* a template that cannot be read renders nothing and leaves the cached content NULL,
+	 * so a later request retries the read rather than rendering a half-read template */
+	rv = oidc_util_html_send_in_template(r, apr_psprintf(r->pool, "%s/oidc-no-such-template.html", dir), &contents,
+					     "arg1", OIDC_POST_PRESERVE_ESCAPE_NONE, NULL,
+					     OIDC_POST_PRESERVE_ESCAPE_NONE);
+	ck_assert_int_eq(rv, OK);
+	ck_assert_ptr_null(contents);
+
+	/* "%%" is a literal percent rather than a placeholder, so a single "%s" still matches the
+	 * one placeholder expected for a NULL arg2; the HTML escape mode escapes the argument */
+	path = apr_psprintf(r->pool, "%s/oidc-test-template-ok.html", dir);
+	ck_assert_int_eq(oidc_util_file_write(r, path, "100%% <b>%s</b>"), TRUE);
+	contents = NULL;
+	rv = oidc_util_html_send_in_template(r, path, &contents, "<script>", OIDC_POST_PRESERVE_ESCAPE_HTML, NULL,
+					     OIDC_POST_PRESERVE_ESCAPE_NONE);
+	ck_assert_int_eq(rv, OK);
+	ck_assert_str_eq(oidc_request_state_get(r, "data"), "100% <b>&lt;script&gt;</b>");
+
+	/* a specifier that is neither "%s" nor "%%" is refused outright: passing e.g. "%n" on to
+	 * apr_psprintf is what the format check exists to prevent */
+	path = apr_psprintf(r->pool, "%s/oidc-test-template-bad-specifier.html", dir);
+	ck_assert_int_eq(oidc_util_file_write(r, path, "%s and %x"), TRUE);
+	contents = NULL;
+	rv = oidc_util_html_send_in_template(r, path, &contents, "arg1", OIDC_POST_PRESERVE_ESCAPE_NONE, NULL,
+					     OIDC_POST_PRESERVE_ESCAPE_NONE);
+	ck_assert_int_eq(rv, HTTP_INTERNAL_SERVER_ERROR);
+
+	/* the right specifiers but the wrong number of them is refused just the same */
+	path = apr_psprintf(r->pool, "%s/oidc-test-template-bad-count.html", dir);
+	ck_assert_int_eq(oidc_util_file_write(r, path, "%s and %s"), TRUE);
+	contents = NULL;
+	rv = oidc_util_html_send_in_template(r, path, &contents, "arg1", OIDC_POST_PRESERVE_ESCAPE_NONE, NULL,
+					     OIDC_POST_PRESERVE_ESCAPE_NONE);
+	ck_assert_int_eq(rv, HTTP_INTERNAL_SERVER_ERROR);
+}
+END_TEST
+
 START_TEST(test_util_jq) {
 	request_rec *r = oidc_test_request_get();
 	oidc_json_t *json = NULL;
@@ -455,6 +523,9 @@ START_TEST(test_util_jq) {
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".bogus"), "null");
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, "bogus"), "{\"jan\":\"jan\",\"piet\":\"piet\"}");
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "\"jan\"");
+	/* a filter that yields more than one output runs the result loop more than once and the
+	 * last output wins, rather than the first one or a concatenation of them */
+	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".[]"), "\"piet\"");
 	/* an identical input+filter repeat is served from the jq result cache */
 	ck_assert_str_eq(oidc_util_jq_filter(r, json, ".jan"), "\"jan\"");
 	/* a TTL of 0 (via the env var) disables the cache in both directions */
@@ -1381,6 +1452,7 @@ int main(void) {
 	tcase_add_test(c, test_util_html_escape);
 	tcase_add_test(c, test_util_html_content);
 	tcase_add_test(c, test_util_html_template);
+	tcase_add_test(c, test_util_html_template_escape_and_format);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("jq");

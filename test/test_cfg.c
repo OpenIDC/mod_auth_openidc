@@ -1054,6 +1054,56 @@ START_TEST(test_cmd_crypto_passphrase) {
 }
 END_TEST
 
+/*
+ * "exec:<command>" runs a command and takes the passphrase from its first output line, so that
+ * the secret does not have to sit in the configuration file. Every outcome of that has to be
+ * reported as a configuration error rather than leaving the passphrase silently unset.
+ */
+START_TEST(test_cmd_crypto_passphrase_exec) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCCryptoPassphrase);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const char *rv = NULL;
+
+	/* the command produced a passphrase: it is what ends up in the config */
+	oidc_test_exec_line_prime("s3cret-from-exec");
+	ck_assert_ptr_null(oidc_cmd_crypto_passphrase_set(cmd, NULL, "exec:/bin/echo s3cret-from-exec", NULL));
+	ck_assert_str_eq(oidc_cfg_crypto_passphrase_secret1_get(cfg), "s3cret-from-exec");
+
+	/* the second passphrase goes through the same parse */
+	oidc_test_exec_line_prime("second-from-exec");
+	ck_assert_ptr_null(oidc_cmd_crypto_passphrase_set(cmd, NULL, "plain1", "exec:/bin/echo second-from-exec"));
+	ck_assert_str_eq(oidc_cfg_crypto_passphrase_secret1_get(cfg), "plain1");
+	ck_assert_str_eq(oidc_cfg_crypto_passphrase_secret2_get(cfg), "second-from-exec");
+
+	/* the command ran but printed nothing: a common mistake (a shell pipeline that needs
+	 * "bash -c") that must not pass for an empty passphrase */
+	oidc_test_exec_line_prime("");
+	rv = oidc_cmd_crypto_passphrase_set(cmd, NULL, "exec:/bin/true", NULL);
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_ptr_nonnull(_oidc_strstr(rv, "empty"));
+
+	/* the command could not be run at all */
+	oidc_test_exec_line_prime(NULL);
+	rv = oidc_cmd_crypto_passphrase_set(cmd, NULL, "exec:/no/such/command", NULL);
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_ptr_nonnull(_oidc_strstr(rv, "Unable to get passphrase"));
+
+	/* NB: there is no case here for the "Unable to parse exec arguments" leg -- APR's
+	 * apr_tokenize_to_argv accepts everything a configuration file can put in front of it,
+	 * unbalanced quotes and trailing backslashes included, and returns APR_SUCCESS */
+
+	/* "exec:" with nothing but whitespace after it tokenizes to an empty argument list */
+	rv = oidc_cmd_crypto_passphrase_set(cmd, NULL, "exec:     ", NULL);
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_ptr_nonnull(_oidc_strstr(rv, "Invalid exec location"));
+
+	/* an "exec:" too short to carry a command is not treated as one: it is the literal
+	 * passphrase, which is what keeps a passphrase that happens to start with "exec:" working */
+	ck_assert_ptr_null(oidc_cmd_crypto_passphrase_set(cmd, NULL, "exec:", NULL));
+	ck_assert_str_eq(oidc_cfg_crypto_passphrase_secret1_get(cfg), "exec:");
+}
+END_TEST
+
 START_TEST(test_cmd_outgoing_proxy) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCOutgoingProxy);
 
@@ -2393,6 +2443,7 @@ int main(void) {
 	tcase_add_test(core, test_cmd_oauth_verify_shared_keys);
 	tcase_add_test(core, test_cmd_oauth_decrypt_shared_keys);
 	tcase_add_test(core, test_cmd_crypto_passphrase);
+	tcase_add_test(core, test_cmd_crypto_passphrase_exec);
 	tcase_add_test(core, test_cmd_outgoing_proxy);
 	tcase_add_test(core, test_cmd_cookie_domain);
 	tcase_add_test(core, test_cmd_session_inactivity_timeout);

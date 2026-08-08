@@ -81,6 +81,10 @@ void oidc_test_added_input_filter_reset(void);
 /* prime the next ap_get_brigade() call to yield `body` followed by EOS, and to return `rc` */
 void oidc_test_brigade_prime(const char *body, apr_status_t rc);
 
+/* what ap_get_exec_line() hands back for an "exec:" directive; NULL (the default) means the
+ * command could not be run at all */
+void oidc_test_exec_line_prime(const char *output);
+
 /* the first authz_provider the module registered, for driving its parse_require_line */
 const void *oidc_test_authz_provider_get(void);
 

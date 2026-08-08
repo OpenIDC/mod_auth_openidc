@@ -26,6 +26,7 @@ static oidc_test_input_filter_fn _oidc_test_input_filter = NULL;
 static const char *_oidc_test_added_input_filter = NULL;
 static const char *_oidc_test_brigade_body = NULL;
 static apr_status_t _oidc_test_brigade_rc = APR_SUCCESS;
+static const char *_oidc_test_exec_line_output = NULL;
 
 #define ap_HOOK_check_user_id_t void
 
@@ -283,8 +284,18 @@ AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *
 	return expr->filename;
 }
 
+/*
+ * Apache runs the command and hands back its first output line, or NULL when it could not be
+ * run at all. Tests prime the answer with oidc_test_exec_line_prime rather than spawning a
+ * process, so an "exec:" directive can be driven through all of its outcomes; the unprimed
+ * default is NULL, i.e. "the command could not be run".
+ */
 AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd, const char *const *argv) {
-	return NULL;
+	return (_oidc_test_exec_line_output == NULL) ? NULL : apr_pstrdup(p, _oidc_test_exec_line_output);
+}
+
+void oidc_test_exec_line_prime(const char *output) {
+	_oidc_test_exec_line_output = output;
 }
 
 AP_DECLARE(void)
