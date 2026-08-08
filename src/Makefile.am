@@ -36,6 +36,7 @@ libauth_openidc_la_SOURCES = \
 	mod_auth_openidc.c \
 	state.c \
 	cfg/cfg.c \
+	cfg/check.c \
 	cfg/cache.c \
 	cfg/provider.c \
 	cfg/oauth.c \
