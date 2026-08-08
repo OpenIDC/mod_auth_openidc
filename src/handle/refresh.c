@@ -179,11 +179,26 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 	 * wait for the "other" caller to populate the refresh token response cache results; bound the
 	 * wait to the lock TTL - by which time the lock entry will have expired anyway - so a cache
 	 * backend that does not expire entries promptly cannot stall the request indefinitely
+	 *
+	 * NB: the mutex is dropped around the sleep. It is created with global == TRUE
+	 * (oidc_cfg_refresh_mutex_get), i.e. a cross-process apr_global_mutex shared by every httpd
+	 * child, and it is not per-token - so holding it here would block every refresh anywhere on
+	 * this machine behind this one waiter for up to the full bounded wait, when all this thread
+	 * is doing is polling for someone else's result. oidc_cache_redis_exec() drops its mutex
+	 * around its retry sleep for the same reason.
+	 *
+	 * What the mutex protects is the read-then-set-the-lock sequence below: the cache read on
+	 * entry, or the last one in this loop, must not be separated from the
+	 * oidc_cache_set_refresh_token() under "no_cache_found" by another caller doing the same.
+	 * Re-acquiring before the read at the end of each iteration keeps that pair atomic, so the
+	 * "only one refresh per machine" property this lock exists for is unaffected.
 	 */
 	int retries = OIDC_REFRESH_LOCK_TTL * 2;
 	while ((retries-- > 0) && (s_json != NULL) && (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
 		oidc_warn(r, "existing refresh in progress, back off for 0.5s before re-trying the cache");
+		oidc_cache_mutex_unlock(r->pool, r->server, oidc_cfg_refresh_mutex_get(c));
 		apr_sleep(apr_time_from_msec(500));
+		oidc_cache_mutex_lock(r->pool, r->server, oidc_cfg_refresh_mutex_get(c));
 		s_json = NULL;
 		oidc_cache_get_refresh_token(r, refresh_token, &s_json);
 	}
