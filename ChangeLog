@@ -1,4 +1,7 @@
 08/07/2026
+- security: give each process-local cache its own memory pool instead of sharing one across all
+  five, which let two threads in two different caches allocate from that pool concurrently
+  under different locks (threaded MPMs only)
 - performance: re-check the entry under the write lock when replacing a process-local cache
   entry, so concurrent refreshers no longer each rebuild it; for the JWKS cache a redundant
   rebuild permanently retired another set of keys

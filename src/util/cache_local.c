@@ -244,7 +244,21 @@ oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool
 
 	oidc_cache_local_t *cache = apr_pcalloc(pool, sizeof(oidc_cache_local_t));
 	apr_uint64_t compact_at = 0;
-	cache->pool = pool;
+
+	/*
+	 * everything this cache allocates after creation hangs off a private subpool, not off the
+	 * caller's pool directly. All five caches are created in the same (post-config) pool and each
+	 * serializes only on its OWN rwlock, so allocating values straight from that shared pool let
+	 * two threads in two different caches into it at once - and an apr pool is not thread-safe:
+	 * they would bump the same first_avail, or mutate the same child list when a nested subpool
+	 * is created. With a pool per cache, that cache's write lock is a sufficient guard again.
+	 *
+	 * The caller's pool is still touched here at creation time, which is single-threaded, and the
+	 * PRE-cleanup below is still registered on it so free_value runs before this subpool - its
+	 * child - is destroyed.
+	 */
+	if (apr_pool_create(&cache->pool, pool) != APR_SUCCESS)
+		return NULL;
 	cache->name = apr_pstrdup(pool, (name != NULL) ? name : "cache");
 	cache->max_entries = (max_entries > 0) ? max_entries : 1;
 	cache->evict_on_full = evict_on_full;
@@ -263,7 +277,7 @@ oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool
 
 	/* the hash, its interned keys and the nodes live in a subpool of their own so compaction can
 	 * return the memory of superseded entries; see oidc_cache_local_compact_unlocked */
-	if (apr_pool_create(&cache->kpool, pool) != APR_SUCCESS)
+	if (apr_pool_create(&cache->kpool, cache->pool) != APR_SUCCESS)
 		return NULL;
 	cache->hash = apr_hash_make(cache->kpool);
 	/* a PRE-cleanup so free_value runs while the hash - and any per-entry subpools a caller nests
