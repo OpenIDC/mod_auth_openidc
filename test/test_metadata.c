@@ -30,6 +30,7 @@
 #include "check_util.h"
 #include "http_server.h"
 #include "metadata.h"
+#include "metadata/internal.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util.h"
@@ -100,6 +101,35 @@ START_TEST(test_metadata_is_valid_missing_authz_endpoint) {
 END_TEST
 
 /*
+ * A provider advertising only capabilities this module does not implement has to be refused at
+ * validation time, not discovered halfway through an authentication request. One valid document
+ * mutated one array at a time, so each refusal is checked in isolation.
+ */
+START_TEST(test_metadata_is_valid_rejects_unsupported_capabilities) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	static const struct {
+		const char *key;
+		const char *unsupported;
+	} cases[] = {
+	    {"response_types_supported", "unsupported_flow"},
+	    {"response_modes_supported", "carrier_pigeon"},
+	    {"token_endpoint_auth_methods_supported", "secret_handshake"},
+	};
+
+	for (unsigned int i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		oidc_json_t *j = NULL;
+		ck_assert_int_eq(oidc_json_decode_object(r, VALID_METADATA_JSON, &j), TRUE);
+		ck_assert_int_eq(json_object_set_new(j, cases[i].key, json_pack("[s]", cases[i].unsupported)), 0);
+		ck_assert_msg(oidc_metadata_provider_is_valid(r, c, j, "https://idp.example.com") == FALSE,
+			      "a provider advertising only \"%s\" for \"%s\" must be refused", cases[i].unsupported,
+			      cases[i].key);
+		oidc_json_decref(j);
+	}
+}
+END_TEST
+
+/*
  * Tests for oidc_metadata_provider_parse — parses a JSON metadata object
  * into an oidc_provider_t. Existing values are NOT overridden.
  */
@@ -143,6 +173,28 @@ START_TEST(test_metadata_parse_preserves_existing_values) {
 	ck_assert_str_eq(oidc_cfg_provider_authorization_endpoint_url_get(provider),
 			 "https://idp.example.com/authorize");
 
+	oidc_json_decref(j);
+}
+END_TEST
+
+/*
+ * the parse also has to settle on a token endpoint authentication method, and a provider offering
+ * only one this deployment cannot use has to fail the parse rather than fall through to a default
+ * that the OP will then reject
+ */
+START_TEST(test_metadata_parse_no_usable_token_endpoint_auth) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	/* mutual-TLS client authentication only, with no client certificate configured */
+	const char *metadata = "{\"issuer\":\"https://idp.example.com\","
+			       "\"authorization_endpoint\":\"https://idp.example.com/authorize\","
+			       "\"token_endpoint\":\"https://idp.example.com/token\","
+			       "\"token_endpoint_auth_methods_supported\":[\"tls_client_auth\"]}";
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r, metadata, &j), TRUE);
+	ck_assert_int_eq(oidc_metadata_provider_parse(r, c, j, provider), FALSE);
 	oidc_json_decref(j);
 }
 END_TEST
@@ -1350,6 +1402,142 @@ END_TEST
 /* live OpenID Connect Discovery: no cached/disk metadata, so the provider
  * document is fetched from <issuer>/.well-known/openid-configuration and
  * written to the metadata directory */
+/*
+ * OIDCProviderMetadataRefreshInterval: with it set, a cached provider document is used until it is
+ * older than the interval and re-fetched after that. None of that ran, including the part that
+ * matters most in production -- what happens when the OP is unreachable at the moment the cached
+ * document goes stale.
+ */
+
+/* the metadata body a provider at `issuer` would publish */
+static const char *e2e_provider_metadata_for(request_rec *r, const char *issuer) {
+	return apr_psprintf(r->pool,
+			    "{\"issuer\":\"%s\","
+			    "\"authorization_endpoint\":\"%s/authorize\","
+			    "\"token_endpoint\":\"%s/token\","
+			    "\"jwks_uri\":\"%s/jwks\","
+			    "\"response_types_supported\":[\"code\"],"
+			    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+			    issuer, issuer, issuer, issuer);
+}
+
+START_TEST(test_metadata_disk_provider_refresh_within_interval_uses_cache) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+	const char *issuer = "https://idp.example.com";
+
+	ck_assert_ptr_null(oidc_cmd_provider_metadata_refresh_interval_set(
+	    oidc_test_cmd_get("OIDCProviderMetadataRefreshInterval"), NULL, "3600"));
+
+	/* freshly written, so well within the interval: no discovery is attempted, which is what
+	 * makes this test's lack of an HTTP server meaningful rather than incidental */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), VALID_METADATA_JSON);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, issuer, &j, TRUE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(j, "issuer")), issuer);
+	oidc_json_decref(j);
+}
+END_TEST
+
+START_TEST(test_metadata_disk_provider_refresh_falls_back_to_stale_cache) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+	apr_finfo_t before, after;
+
+	ck_assert_ptr_null(oidc_cmd_provider_metadata_refresh_interval_set(
+	    oidc_test_cmd_get("OIDCProviderMetadataRefreshInterval"), NULL, "60"));
+
+	/* the OP answers the refresh with an error */
+	oidc_test_http_response_t resp = {
+	    .status_code = 500, .content_type = "text/plain", .body = "upstream is having a bad day"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	const char *issuer = oidc_test_http_server_url(srv, r->pool);
+
+	/* a cached document that has aged past the interval */
+	const char *path = oidc_metadata_provider_file_path(r, issuer);
+	e2e_write_file(r, path, e2e_provider_metadata_for(r, issuer));
+	ck_assert_int_eq(apr_file_mtime_set(path, apr_time_now() - apr_time_from_sec(3600), r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_stat(&before, path, APR_FINFO_MTIME, r->pool), APR_SUCCESS);
+
+	/* the refresh fails, so the expired document is served rather than the request failing */
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, issuer, &j, TRUE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(j, "issuer")), issuer);
+	oidc_json_decref(j);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* and its timestamp was pushed forward, so the next request does not hammer the failing OP */
+	ck_assert_int_eq(apr_stat(&after, path, APR_FINFO_MTIME, r->pool), APR_SUCCESS);
+	ck_assert_int_gt((int)apr_time_sec(after.mtime), (int)apr_time_sec(before.mtime));
+}
+END_TEST
+
+START_TEST(test_metadata_disk_provider_refresh_replaces_stale_cache) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+
+	ck_assert_ptr_null(oidc_cmd_provider_metadata_refresh_interval_set(
+	    oidc_test_cmd_get("OIDCProviderMetadataRefreshInterval"), NULL, "60"));
+
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = "{}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	const char *issuer = oidc_test_http_server_url(srv, r->pool);
+	resp.body = e2e_provider_metadata_for(r, issuer);
+
+	/* a stale cached document that names an endpoint the refreshed one does not */
+	const char *path = oidc_metadata_provider_file_path(r, issuer);
+	e2e_write_file(r, path,
+		       apr_psprintf(r->pool,
+				    "{\"issuer\":\"%s\","
+				    "\"authorization_endpoint\":\"%s/OLD-authorize\","
+				    "\"response_types_supported\":[\"code\"]}",
+				    issuer, issuer));
+	ck_assert_int_eq(apr_file_mtime_set(path, apr_time_now() - apr_time_from_sec(3600), r->pool), APR_SUCCESS);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, issuer, &j, TRUE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	/* the refreshed document won, and the stale one was let go rather than leaked */
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(j, "authorization_endpoint")),
+			 apr_psprintf(r->pool, "%s/authorize", issuer));
+	oidc_json_decref(j);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/*
+ * an issuer given without a scheme is discovered over https, so "idp.example.com" and
+ * "https://idp.example.com" name the same provider
+ */
+START_TEST(test_metadata_disk_provider_get_schemeless_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+
+	/* a port with nothing listening, so the https attempt fails at once instead of reaching
+	 * the network; what is being checked is which URL was assembled, not that it answered */
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_gt(port, 0);
+	const char *issuer = apr_psprintf(r->pool, "127.0.0.1:%d", port);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, issuer, &j, TRUE), FALSE);
+	ck_assert_ptr_null(j);
+}
+END_TEST
+
 START_TEST(test_metadata_disk_provider_get_live_discovery) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1926,11 +2114,13 @@ int main(void) {
 	tcase_add_test(validate, test_metadata_is_valid_missing_issuer);
 	tcase_add_test(validate, test_metadata_is_valid_issuer_mismatch);
 	tcase_add_test(validate, test_metadata_is_valid_missing_authz_endpoint);
+	tcase_add_test(validate, test_metadata_is_valid_rejects_unsupported_capabilities);
 
 	TCase *parse = tcase_create("parse");
 	tcase_add_checked_fixture(parse, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(parse, test_metadata_parse_populates_empty_provider);
 	tcase_add_test(parse, test_metadata_parse_preserves_existing_values);
+	tcase_add_test(parse, test_metadata_parse_no_usable_token_endpoint_auth);
 	tcase_add_test(parse, test_metadata_parse_mtls_endpoint_aliases);
 	tcase_add_test(parse, test_metadata_parse_mtls_endpoint_aliases_invalid);
 	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_advertised);
@@ -1984,6 +2174,10 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
 	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);
 	tcase_add_test(disk, test_metadata_disk_provider_get_live_discovery);
+	tcase_add_test(disk, test_metadata_disk_provider_get_schemeless_issuer);
+	tcase_add_test(disk, test_metadata_disk_provider_refresh_within_interval_uses_cache);
+	tcase_add_test(disk, test_metadata_disk_provider_refresh_falls_back_to_stale_cache);
+	tcase_add_test(disk, test_metadata_disk_provider_refresh_replaces_stale_cache);
 	tcase_add_test(disk, test_metadata_disk_get_with_empty_conf_file);
 	tcase_add_test(disk, test_metadata_disk_get_with_invalid_conf_alg);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);
