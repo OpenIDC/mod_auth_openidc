@@ -1,4 +1,7 @@
 08/07/2026
+- docs: correct five wrong statements in auth_openidc.conf about the defaults of
+  OIDCMemCacheConnectionsMin, OIDCHTTPTimeoutShort, OIDCClientName, OIDCResponseMode and
+  OIDCProviderMetadataRefreshInterval
 - security: give each process-local cache its own memory pool instead of sharing one across all
   five, which let two threads in two different caches allocate from that pool concurrently
   under different locks (threaded MPMs only)
