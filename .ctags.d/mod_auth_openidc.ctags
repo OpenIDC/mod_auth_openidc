@@ -1,35 +1,24 @@
-# Universal Ctags recipe for mod_auth_openidc's generated config accessors.
+# Universal Ctags options for mod_auth_openidc.
 #
-# The per-server / per-provider / per-OAuth / per-directory directive getters
-# and setters in src/cfg/ are produced by token-pasting macros (see
-# cfg/cfg.h, cfg/provider.h, cfg/oauth.h, cfg/dir.h and their cfg/*.c bodies).
-# Their names are assembled from the struct member name, so a plain grep or an
-# editor "jump to definition" cannot find e.g. oidc_cfg_provider_issuer_get.
+# This file used to synthesize tags for the config accessors that cfg/ generates with
+# token-pasting macros (oidc_cfg_provider_issuer_get, oidc_cmd_dir_pass_claims_as_set, ...), by
+# matching each generator's CALL site with a regex and reassembling the name it would produce.
 #
-# These rules synthesize tags for those names from each generator's CALL site,
-# so `ctags -R` (Universal Ctags) makes them navigable. It is a best-effort
-# index: a few generator variants may over- or under-tag; the compiler remains
-# the source of truth. Requires Universal Ctags (not Exuberant). Usage:
+# Those rules are gone: they were wrong often enough to mislead. Measured against the compiled
+# tree they emitted 91 accessor names that do not exist -- 68 of which appear nowhere in the
+# sources at all -- while missing 82 that do. The whole cfg/cache.c family was mis-tagged, because
+# that generator prepends "cache_" to the member name and the regex could not know: it produced
+# oidc_cfg_shm_size_max_get for what is really oidc_cfg_cache_shm_size_max_get. Reconstructing a
+# macro's output with a regex cannot be made reliable; each new generator variant is a new way to
+# be wrong.
 #
-#     ctags -R src/        # reads .ctags.d/*.ctags automatically
+# The compiler knows the answer, so it is asked instead:
 #
-# The leading `^` anchors at column 0, matching the generator CALL sites (which
-# start the line) and never the `#define` lines (which start with "#define ").
-
-# base, per-server: OIDC_CFG_MEMBER_* / OIDC_CMD_MEMBER_* -> oidc_cfg_<m>_get, oidc_cmd_<m>_set
---regex-C=/^OIDC_(CFG|CMD)_MEMBER_FUNC[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_\2_get/f/
---regex-C=/^OIDC_(CFG|CMD)_MEMBER_FUNC[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_\2_set/f/
-
-# provider: OIDC_CFG_PROVIDER_MEMBER_* (decl) / OIDC_PROVIDER_MEMBER_* (impl)
---regex-C=/^OIDC_(CFG_)?PROVIDER_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_provider_\2_get/f/
---regex-C=/^OIDC_(CFG_)?PROVIDER_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_provider_\2_set/f/
---regex-C=/^OIDC_(CFG_)?PROVIDER_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_provider_\2_set/f/
-
-# OAuth resource server: OIDC_CFG_OAUTH_MEMBER_* (decl) / OIDC_OAUTH_MEMBER_* (impl)
---regex-C=/^OIDC_(CFG_)?OAUTH_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_oauth_\2_get/f/
---regex-C=/^OIDC_(CFG_)?OAUTH_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_oauth_\2_set/f/
---regex-C=/^OIDC_(CFG_)?OAUTH_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_oauth_\2_set/f/
-
-# per-directory: OIDC_CFG_DIR_MEMBER_* -> oidc_cfg_dir_<m>_get, oidc_cmd_dir_<m>_set
---regex-C=/^OIDC_CFG_DIR_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cfg_dir_\1_get/f/
---regex-C=/^OIDC_CFG_DIR_MEMBER[A-Z_]*\(([a-zA-Z0-9_]+)/oidc_cmd_dir_\1_set/f/
+#     make -C src cfgtags        # writes src/cfgtags
+#
+# See src/cfg/gen-tags.sh. Use it alongside an ordinary index, which covers everything else:
+#
+#     ctags -R src/
+#     vim ':set tags=./tags,./src/cfgtags'
+#
+# Nothing else here needs special handling, so no options are set.

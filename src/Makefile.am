@@ -168,4 +168,19 @@ uninstall-local:
 	rm -f $(DESTDIR)@APACHE_MODULEDIR@/mod_auth_openidc.so mod_auth_openidc.la
 
 clean-local:
-	rm -f mod_auth_openidc.la *.gcno */*.gcno
+	rm -f mod_auth_openidc.la *.gcno */*.gcno cfgtags
+
+# Tags for the config accessors that cfg/ generates with token-pasting macros. Their names are
+# assembled by the preprocessor and appear in no source line, so neither grep nor ctags can find
+# them; cfg/gen-tags.sh asks the compiler instead. Writes ./cfgtags, to be used alongside an
+# ordinary ctags index, e.g. vim ':set tags=./tags,./src/cfgtags'.
+CFGTAGS_INPUT = $(srcdir)/cfg/cfg.c $(srcdir)/cfg/provider.c $(srcdir)/cfg/oauth.c \
+	$(srcdir)/cfg/dir.c $(srcdir)/cfg/cache.c $(srcdir)/cfg/parse.c $(srcdir)/cfg/cmds.c
+
+cfgtags:
+	CPP="$(CC) -E $(DEFAULT_INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)" \
+		$(SHELL) $(srcdir)/cfg/gen-tags.sh $(CFGTAGS_INPUT) > cfgtags
+
+.PHONY: cfgtags
+
+EXTRA_DIST = cfg/gen-tags.sh
