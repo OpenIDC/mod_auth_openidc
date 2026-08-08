@@ -43,6 +43,7 @@
 
 #include "check_util.h"
 #include "mod_auth_openidc.h"
+#include "proto/proto.h"
 #include "util.h"
 #include "util/pcre_subst.h"
 #include "util/request_state.h"
@@ -651,6 +652,138 @@ START_TEST(test_util_jwt) {
 
 	passphrase.secret1 = NULL;
 	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == FALSE, "result is not FALSE");
+}
+END_TEST
+
+/*
+ * OIDCCryptoPassphrase takes a second, previous passphrase so that it can be rotated without
+ * invalidating every live session and cache entry. Which of the two keys is used is decided from
+ * the "kid" in the header of the payload in hand -- absent means it was written before the
+ * rotation -- and none of that was covered.
+ */
+START_TEST(test_util_jwt_passphrase_rotation) {
+	request_rec *r = oidc_test_request_get();
+	const char *str = "{ \"key\": \"value\" }";
+	char *cser = NULL;
+	char *payload = NULL;
+	char *kid = NULL;
+
+	/* written before the rotation: one passphrase, so no "kid" to choose by */
+	oidc_crypto_passphrase_t old = {"old-secret-0123456789012345678901", NULL};
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&old), TRUE);
+	ck_assert_int_eq(oidc_util_jwt_create(r, &old, str, &cser), TRUE);
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, cser, NULL, NULL, &kid));
+	ck_assert_ptr_null(kid);
+
+	/* after the rotation the old passphrase is the second one, and a payload without a "kid"
+	 * is read with it rather than with the new one */
+	oidc_crypto_passphrase_t rotated = {"new-secret-0123456789012345678901", "old-secret-0123456789012345678901"};
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&rotated), TRUE);
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &rotated, cser, &payload), TRUE);
+	ck_assert_str_eq(payload, str);
+
+	/* anything written from now on is stamped with a "kid" and read with the new passphrase */
+	cser = NULL;
+	ck_assert_int_eq(oidc_util_jwt_create(r, &rotated, str, &cser), TRUE);
+	kid = NULL;
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, cser, NULL, NULL, &kid));
+	ck_assert_str_eq(kid, "1");
+	payload = NULL;
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &rotated, cser, &payload), TRUE);
+	ck_assert_str_eq(payload, str);
+
+	/* once the rotation is finished and the old passphrase is dropped, what it wrote is gone --
+	 * reported as a failure to read rather than as an empty payload */
+	payload = NULL;
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &old, cser, &payload), FALSE);
+	ck_assert_ptr_null(payload);
+}
+END_TEST
+
+/*
+ * the derived key material is computed once at post-config time; a passphrase that never went
+ * through that has to be refused rather than used as if it had a key
+ */
+START_TEST(test_util_jwt_without_derived_keys) {
+	request_rec *r = oidc_test_request_get();
+	const char *str = "{ \"key\": \"value\" }";
+	char *cser = NULL;
+	char *payload = NULL;
+
+	/* a passphrase that was never run through oidc_crypto_passphrase_derive_keys */
+	oidc_crypto_passphrase_t raw = {"secret-0123456789012345678901234", NULL};
+	ck_assert_int_eq(oidc_util_jwt_create(r, &raw, str, &cser), FALSE);
+
+	/* the same on the read side, against a payload written with proper key material */
+	oidc_crypto_passphrase_t good = {"secret-0123456789012345678901234", NULL};
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&good), TRUE);
+	ck_assert_int_eq(oidc_util_jwt_create(r, &good, str, &cser), TRUE);
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &raw, cser, &payload), FALSE);
+	ck_assert_ptr_null(payload);
+
+	/* and on the branch a rotation takes: no "kid" in the payload sends the read at the second
+	 * passphrase, whose key material is missing here too */
+	oidc_crypto_passphrase_t raw_rotated = {"new-secret-0123456789012345678901",
+						"old-secret-0123456789012345678901"};
+	payload = NULL;
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &raw_rotated, cser, &payload), FALSE);
+	ck_assert_ptr_null(payload);
+}
+END_TEST
+
+/*
+ * the environment-variable overrides are read off r->subprocess_env, which a request need not
+ * have; the default has to hold rather than the lookup crashing
+ */
+START_TEST(test_util_jwt_without_subprocess_env) {
+	request_rec *r = oidc_test_request_get();
+	const char *str = "{ \"key\": \"value\" }";
+	char *cser = NULL;
+	char *payload = NULL;
+	apr_table_t *saved = r->subprocess_env;
+
+	oidc_crypto_passphrase_t passphrase = {"secret-0123456789012345678901234", NULL};
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&passphrase), TRUE);
+
+	r->subprocess_env = NULL;
+	apr_byte_t created = oidc_util_jwt_create(r, &passphrase, str, &cser);
+	apr_byte_t verified = created ? oidc_util_jwt_verify(r, &passphrase, cser, &payload) : FALSE;
+	r->subprocess_env = saved;
+
+	ck_assert_int_eq(created, TRUE);
+	ck_assert_int_eq(verified, TRUE);
+	ck_assert_str_eq(payload, str);
+}
+END_TEST
+
+
+/*
+ * regression: the decompressor decides from the payload's first two bytes, and that test has
+ * false positives -- 19 printable two-character prefixes satisfy it. Session and state payloads
+ * are JSON and cannot, but cache values go through the same create/verify pair and are arbitrary
+ * strings, so an uncompressed cached value starting with e.g. "x " was declared compressed, failed
+ * to inflate, and was lost.
+ */
+START_TEST(test_util_jwt_payload_that_looks_compressed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_crypto_passphrase_t passphrase = {"secret-0123456789012345678901234", NULL};
+	static const char *lookalikes[] = {"x ", "H,", "80", "X(", "h$", "(4"};
+
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&passphrase), TRUE);
+
+	/* written without compression, which is what leaves the payload bytes on the wire as they are */
+	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
+
+	for (unsigned int i = 0; i < sizeof(lookalikes) / sizeof(lookalikes[0]); i++) {
+		char *cser = NULL, *payload = NULL;
+		const char *str = apr_psprintf(r->pool, "%sthe rest of a perfectly ordinary value", lookalikes[i]);
+		ck_assert_int_eq(oidc_util_jwt_create(r, &passphrase, str, &cser), TRUE);
+		ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE,
+			      "a payload starting with \"%s\" must survive the round trip", lookalikes[i]);
+		ck_assert_str_eq(payload, str);
+	}
+
+	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
 }
 END_TEST
 
@@ -1469,6 +1602,10 @@ int main(void) {
 	c = tcase_create("jwt");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_jwt);
+	tcase_add_test(c, test_util_jwt_passphrase_rotation);
+	tcase_add_test(c, test_util_jwt_without_derived_keys);
+	tcase_add_test(c, test_util_jwt_without_subprocess_env);
+	tcase_add_test(c, test_util_jwt_payload_that_looks_compressed);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("key");

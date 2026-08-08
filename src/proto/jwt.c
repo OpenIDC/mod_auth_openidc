@@ -257,7 +257,10 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;
 	}
-	if ((alg != NULL) || (enc != NULL)) {
+	/* NB: "kid" belongs in this condition too: leaving it out meant that a caller asking only
+	 * for the key id skipped the parse entirely and was handed NULL, which reads as "the header
+	 * carries no kid" rather than as "you did not ask for anything I decode" */
+	if ((alg != NULL) || (enc != NULL) || (kid != NULL)) {
 		oidc_json_t *json = NULL;
 		oidc_json_decode_object(r, result, &json);
 		if (json) {

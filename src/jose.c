@@ -341,13 +341,18 @@ end:
  * inflate using zlib
  */
 static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
-					    int *output_len, oidc_jose_error_t *err) {
+					    int *output_len, apr_byte_t *inflated_anything, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
 	int status = Z_OK;
 	size_t len = OIDC_CJOSE_UNCOMPRESS_CHUNK;
 	char *tmp = NULL;
 	char *buf = apr_pcalloc(pool, len);
 	z_stream zlib;
+
+	/* whether any output was produced before failing, i.e. whether this really was a zlib stream:
+	 * a buffer that only happens to start with two zlib-shaped bytes fails on the first inflate()
+	 * having produced nothing. See the caller. */
+	*inflated_anything = FALSE;
 
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
@@ -396,6 +401,8 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	rv = TRUE;
 
 end:
+
+	*inflated_anything = (zlib.total_out > 0) ? TRUE : FALSE;
 
 	inflateEnd(&zlib);
 
@@ -457,7 +464,20 @@ apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_l
 
 	if (oidc_jose_is_zlib(input, input_len)) {
 #ifdef USE_ZLIB
-		return oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, err);
+		/* the two-byte test is a heuristic and has false positives: 19 printable two-character
+		 * prefixes satisfy it ("x ", "H,", "80", "X(", "h$", ...). Session and state payloads are
+		 * JSON and cannot, but cache values reach this same path and are arbitrary strings, so a
+		 * cached value starting with one of those would be declared compressed and then lost.
+		 * Only inflate() can settle it: if it rejects the input without producing a single byte,
+		 * this was not a zlib stream and the payload passes through as it would have without the
+		 * heuristic. A stream that did inflate and then failed (e.g. hit the size cap) is a real
+		 * one, and its failure stands. */
+		apr_byte_t inflated_anything = FALSE;
+		if (oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, &inflated_anything, err) ==
+		    TRUE)
+			return TRUE;
+		if (inflated_anything == TRUE)
+			return FALSE;
 #else
 		oidc_jose_error(err, "payload is zlib compressed but this build has no zlib support: it was written "
 				     "by a build configured with zlib");
