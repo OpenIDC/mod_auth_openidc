@@ -50,8 +50,11 @@
 #include "util.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
+#include <unistd.h>
 
 #ifdef USE_LIBHIREDIS
 #include "cache/redis.h"
@@ -671,6 +674,308 @@ START_TEST(test_cache_file_default_tmp_dir) {
 
 	cfg->cache.impl = prev;
 	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
+}
+END_TEST
+
+/*
+ * The tests below drive oidc_cache_file's get/set directly rather than through oidc_cache_get/set,
+ * because they have to know the exact on-disk file in order to damage it: the wrapper hashes and
+ * encodes the key, so the name it lands under is not predictable from the test. The keys are
+ * chosen so that oidc_http_url_encode leaves them unchanged.
+ */
+static char *e2e_file_cache_path(request_rec *r, const char *section, const char *key) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	return apr_psprintf(r->pool, "%s/mod-auth-openidc-%s-%s", cfg->cache.file_dir, section, key);
+}
+
+static void e2e_file_write_raw(request_rec *r, const char *path, const char *bytes, apr_size_t len) {
+	apr_file_t *fd = NULL;
+	apr_size_t written = 0;
+	ck_assert_int_eq(apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+				       APR_FPROT_UREAD | APR_FPROT_UWRITE, r->pool),
+			 APR_SUCCESS);
+	ck_assert_int_eq(apr_file_write_full(fd, bytes, len, &written), APR_SUCCESS);
+	apr_file_close(fd);
+}
+
+static void e2e_file_truncate(request_rec *r, const char *path, apr_off_t len) {
+	apr_file_t *fd = NULL;
+	ck_assert_int_eq(apr_file_open(&fd, path, APR_FOPEN_WRITE, APR_OS_DEFAULT, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_file_trunc(fd, len), APR_SUCCESS);
+	apr_file_close(fd);
+}
+
+/*
+ * a cache file that is shorter than what its header says must be reported as an error rather than
+ * handed back as a short value: the caller would otherwise get a truncated session or state cookie
+ */
+START_TEST(test_cache_file_truncated_entry_is_an_error) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+	const char *value_written = "0123456789";
+	char *value = NULL;
+	apr_finfo_t fi;
+	apr_size_t header_len = 0;
+
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "trunc", value_written, expiry), TRUE);
+
+	/* derive the header length from a real entry rather than from the (private) header struct,
+	 * so this does not have to track its layout: the file is the header plus the NUL-terminated value */
+	const char *path = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "trunc");
+	ck_assert_int_eq(apr_stat(&fi, path, APR_FINFO_SIZE, r->pool), APR_SUCCESS);
+	header_len = (apr_size_t)fi.size - (_oidc_strlen(value_written) + 1);
+	ck_assert_int_gt((int)header_len, 0);
+
+	/* the header survives but the value behind it is short */
+	e2e_file_truncate(r, path, (apr_off_t)header_len + 1);
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "trunc", &value), FALSE);
+
+	/* the header itself is short */
+	e2e_file_truncate(r, path, 2);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "trunc", &value), FALSE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+/*
+ * reading an expired entry deletes it. When the directory does not allow that, the read still has
+ * to report the miss it found rather than failing.
+ */
+START_TEST(test_cache_file_expired_entry_undeletable) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+	char *value = NULL;
+	apr_finfo_t fi;
+
+	apr_time_t past = apr_time_now() - apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "stale", "stale-value", past), TRUE);
+
+	/* readable and searchable but not writable, so the entry can be opened and found expired but
+	 * not removed. NB: as root the mode bits do not apply and the entry is simply deleted, which
+	 * is the already-covered path rather than a failure */
+	ck_assert_int_eq(apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UEXECUTE), APR_SUCCESS);
+	apr_byte_t rv = oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "stale", &value);
+	ck_assert_int_eq(
+	    apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE),
+	    APR_SUCCESS);
+
+	ck_assert_int_eq(rv, TRUE);
+	ck_assert_ptr_null(value);
+	(void)apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "stale"), APR_FINFO_TYPE, r->pool);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+/*
+ * the cleaning cycle walks the cache directory and has to cope with whatever else is in there:
+ * an entry it cannot open, an entry whose header is unreadable, and files that are not its own
+ */
+START_TEST(test_cache_file_clean_cycle_handles_junk) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+	apr_finfo_t fi;
+
+	/* clean on every write instead of once a minute */
+	cfg->cache.file_clean_interval = 0;
+
+	/* a directory carrying the cache file prefix. NB: opening a directory read-only succeeds on
+	 * Linux and it is the read that fails, so this lands on the "corrupt header" arm -- and its
+	 * removal then fails, which is the point: a directory must survive a cleaning cycle */
+	const char *subdir = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "subdir");
+	ck_assert_int_eq(apr_dir_make(subdir, APR_FPROT_OS_DEFAULT, r->pool), APR_SUCCESS);
+
+	/* a dangling symlink, which is the one shape that cannot be opened at all -- and unlike a
+	 * mode-0000 file it cannot be opened by root either, so this holds however the tests run */
+	const char *dangling = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "dangling");
+	ck_assert_int_eq(symlink("/nonexistent/target", dangling), 0);
+
+	/* an entry too short to hold a header */
+	const char *corrupt = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "corrupt");
+	e2e_file_write_raw(r, corrupt, "xx", 2);
+
+	/* and a file that is none of our business */
+	const char *foreign = apr_psprintf(r->pool, "%s/not-ours.txt", cfg->cache.file_dir);
+	e2e_file_write_raw(r, foreign, "leave me alone", 14);
+
+	/* the first write into a fresh directory creates the "last cleaned" marker and runs a cycle */
+	apr_time_t future = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "keep", "keep-value", future), TRUE);
+
+	/* the unreadable entry is gone, the entry just written and the foreign file are not, and the
+	 * directory is left alone rather than being reported as a corrupt entry and removed */
+	ck_assert_int_ne(apr_stat(&fi, corrupt, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_stat(&fi, foreign, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_stat(&fi, subdir, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "keep", &value), TRUE);
+	ck_assert_str_eq(value, "keep-value");
+
+	/* a second cycle, which unlike the first one runs with entries already in the directory: one
+	 * still valid (kept) and one expired (removed) */
+	ck_assert_int_eq(
+	    oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "stale", "v", apr_time_now() - apr_time_from_sec(60)),
+	    TRUE);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "keep2", "v2", future), TRUE);
+	ck_assert_int_ne(apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "stale"), APR_FINFO_TYPE,
+				  r->pool),
+			 APR_SUCCESS);
+	ck_assert_int_eq(
+	    apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "keep"), APR_FINFO_TYPE, r->pool),
+	    APR_SUCCESS);
+
+	apr_file_remove(dangling, r->pool);
+	apr_dir_remove(subdir, r->pool);
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+/*
+ * a cache directory that cannot be listed must not stop entries from being written: cleaning is
+ * housekeeping, and its failure is logged rather than propagated
+ */
+START_TEST(test_cache_file_clean_cycle_unreadable_dir) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+
+	apr_time_t future = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "before", "v", future), TRUE);
+
+	/* writable and searchable but not listable, so apr_dir_open fails while the write still works.
+	 * NB: running as root defeats the mode bits, in which case this simply exercises a plain
+	 * cleaning cycle instead of the failure -- it does not turn into a false failure */
+	cfg->cache.file_clean_interval = 0;
+	ck_assert_int_eq(apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UWRITE | APR_FPROT_UEXECUTE), APR_SUCCESS);
+	apr_byte_t rv = oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "after", "v2", future);
+	ck_assert_int_eq(apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE |
+								    APR_FPROT_UEXECUTE),
+			 APR_SUCCESS);
+	ck_assert_int_eq(rv, TRUE);
+
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "after", &value), TRUE);
+	ck_assert_str_eq(value, "v2");
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+/*
+ * a cache directory that does not exist: neither the "last cleaned" marker nor the entry itself
+ * can be created, and the write has to report that rather than claim the entry was stored
+ */
+START_TEST(test_cache_file_missing_dir_fails_the_write) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+
+	cfg->cache.file_dir = apr_psprintf(r->pool, "%s/does-not-exist", cfg->cache.file_dir);
+
+	apr_time_t future = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "nowhere", "v", future), FALSE);
+
+	/* reading from it is an ordinary miss, not an error */
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "nowhere", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+/*
+ * deleting an entry that is not there, and a write whose atomic rename into place cannot happen
+ */
+START_TEST(test_cache_file_delete_missing_and_rename_failure) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+	apr_finfo_t fi;
+
+	/* deleting an entry that was never written reports success: the caller asked for it to be
+	 * gone, and it is */
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "never-written", NULL, 0), TRUE);
+
+	/* a non-empty directory sitting where the entry should go: the temporary file is written but
+	 * cannot be renamed over it, and the partial file must not be left behind */
+	const char *target = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "blocked");
+	ck_assert_int_eq(apr_dir_make(target, APR_FPROT_OS_DEFAULT, r->pool), APR_SUCCESS);
+	e2e_file_write_raw(r, apr_psprintf(r->pool, "%s/occupied", target), "x", 1);
+
+	apr_time_t future = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "blocked", "v", future), FALSE);
+	ck_assert_int_eq(apr_stat(&fi, target, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+
+	apr_file_remove(apr_psprintf(r->pool, "%s/occupied", target), r->pool);
+	apr_dir_remove(target, r->pool);
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
+/*
+ * a write that cannot complete -- a full disk, a quota -- must fail the set and drop the partial
+ * temporary file, rather than reporting a stored entry that only turns out to be unreadable later.
+ * RLIMIT_FSIZE stands in for the full disk; SIGXFSZ has to be ignored for the duration or the
+ * process is killed instead of the write failing.
+ */
+START_TEST(test_cache_file_short_write_fails_the_set) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+	struct rlimit saved, tight;
+	void (*saved_handler)(int) = NULL;
+	apr_byte_t rv_header = TRUE, rv_value = TRUE;
+	apr_byte_t limited = FALSE;
+	apr_finfo_t fi;
+	apr_size_t header_len = 0;
+	const char *value_written = "0123456789";
+	apr_time_t future = apr_time_now() + apr_time_from_sec(60);
+
+	/* create the "last cleaned" marker while writing still works, so that the limit below only
+	 * affects the entry being written, and measure the header from a real entry */
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "primer", value_written, future), TRUE);
+	ck_assert_int_eq(apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "primer"), APR_FINFO_SIZE,
+				  r->pool),
+			 APR_SUCCESS);
+	header_len = (apr_size_t)fi.size - (_oidc_strlen(value_written) + 1);
+
+	ck_assert_int_eq(getrlimit(RLIMIT_FSIZE, &saved), 0);
+	saved_handler = signal(SIGXFSZ, SIG_IGN);
+
+	tight = saved;
+	tight.rlim_cur = header_len / 2; /* the header write itself cannot complete */
+	if (setrlimit(RLIMIT_FSIZE, &tight) == 0) {
+		limited = TRUE;
+		rv_header = oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "toobig-header", value_written, future);
+		/* room for the header but not for the value behind it */
+		tight.rlim_cur = header_len + 1;
+		setrlimit(RLIMIT_FSIZE, &tight);
+		rv_value = oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "toobig-value", value_written, future);
+		setrlimit(RLIMIT_FSIZE, &saved);
+	}
+	signal(SIGXFSZ, saved_handler);
+
+	/* asserted only once the limit is back: libcheck's CK_FORK=no mode (which the valgrind runs
+	 * use) shares this process, so a failed assertion inside the limited region would leave the
+	 * rest of the run unable to write */
+	if (limited == FALSE)
+		return;
+	ck_assert_int_eq(rv_header, FALSE);
+	ck_assert_int_eq(rv_value, FALSE);
+
+	/* neither attempt stored anything readable, and neither left a temporary file behind */
+	char *value = NULL;
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "toobig-header", &value), TRUE);
+	ck_assert_ptr_null(value);
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "toobig-value", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
 }
 END_TEST
 
@@ -1849,6 +2154,13 @@ int main(void) {
 	tcase_add_test(file, test_cache_file_expired_entry_is_miss);
 	tcase_add_test(file, test_cache_file_overwrite_and_delete);
 	tcase_add_test(file, test_cache_file_default_tmp_dir);
+	tcase_add_test(file, test_cache_file_truncated_entry_is_an_error);
+	tcase_add_test(file, test_cache_file_expired_entry_undeletable);
+	tcase_add_test(file, test_cache_file_clean_cycle_handles_junk);
+	tcase_add_test(file, test_cache_file_clean_cycle_unreadable_dir);
+	tcase_add_test(file, test_cache_file_missing_dir_fails_the_write);
+	tcase_add_test(file, test_cache_file_delete_missing_and_rename_failure);
+	tcase_add_test(file, test_cache_file_short_write_fails_the_set);
 
 	Suite *s = suite_create("cache");
 	suite_add_tcase(s, core);
