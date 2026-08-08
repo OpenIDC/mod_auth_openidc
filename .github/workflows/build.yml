@@ -161,7 +161,7 @@ jobs:
           CODE_COVERAGE_OUTPUT_FILE=coverage.info \
           CODE_COVERAGE_OUTPUT_DIRECTORY=coverage-report \
           2>&1 | tee coverage.log || { cat test/test-suite.log; exit 1; }
-    # minimum-coverage gates: last measured 94.2% lines / 53.9% branches (2026-08-08); the
+    # minimum-coverage gates: last measured 95.6% lines / 54.9% branches (2026-08-08); the
     # floors sit below that to absorb run-to-run wobble from the live redis/memcache tcases.
     # Bump them in the same PR that raises coverage meaningfully. NB: the line gate also
     # indirectly fails the job on test failures, which the AX_CODE_COVERAGE "-make -k check"
@@ -171,12 +171,12 @@ jobs:
     # artifact of the -flto fat objects) and lcov treats that as fatal rather than a warning.
     - name: Enforce minimum line coverage
       run: >
-        lcov --summary test/coverage.info --fail-under-lines 93
+        lcov --summary test/coverage.info --fail-under-lines 94
         --rc branch_coverage=1 --ignore-errors inconsistent
     # lcov has no --fail-under-branches counterpart, so read the rate out of the summary
     - name: Enforce minimum branch coverage
       run: |
-        MIN=53
+        MIN=54
         rate=$(lcov --summary test/coverage.info --rc branch_coverage=1 \
                  --ignore-errors inconsistent 2>&1 \
                  | sed -n 's/^ *branches\.*: \([0-9.]*\)%.*/\1/p')

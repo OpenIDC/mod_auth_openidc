@@ -1,3 +1,17 @@
+08/08/2026
+- do not lose an uncompressed payload whose first two bytes happen to look like a zlib header:
+  19 printable two-character prefixes satisfy that test ("x ", "H,", "80", "X(", "h$", ...), and
+  cache values -- unlike sessions and state cookies -- are arbitrary strings, so such a value was
+  declared compressed, failed to inflate and was silently dropped. Only reachable when payloads
+  are written uncompressed (OIDC_JWT_INTERNAL_NO_COMPRESS, or a build with neither zlib nor
+  brotli). A payload that does start inflating and then fails is still reported as an error
+- performance: grow the decompression buffer by doubling rather than by a fixed 8KB chunk;
+  inflating up to the 10MB cap took ~1280 rounds and left 6.25GB of dead buffers behind in the
+  request pool, which is the outcome that cap exists to prevent. It now costs under 30MB
+- fix oidc_proto_jwt_header_peek handing back no key id to a caller that asks only for the "kid"
+- test: raise line coverage from 94.2% to 95.6% and start measuring branch coverage (54.9%),
+  both gated in CI; the test suite no longer runs twice per coverage job
+
 08/07/2026
 - recognize whether a stored payload is compressed instead of assuming the local setting, so a
   session survives a change to OIDC_JWT_INTERNAL_NO_COMPRESS and is readable across servers

@@ -3293,22 +3293,29 @@ START_TEST(test_proto_request_auth_request_object_signing_keys) {
 	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"XY123\"}}", "state-rosk-3");
 	ck_assert_msg(_oidc_strstr(loc, "request") == NULL, "an unsupported alg may not produce one either: %s", loc);
 
+	/* with neither key list configured at all, which is a refusal of its own */
+	apr_array_header_t *fixture_keys = (apr_array_header_t *)oidc_cfg_private_keys_get(c);
+	c->private_keys = NULL;
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-4");
+	ck_assert_msg(_oidc_strstr(loc, "request") == NULL,
+		      "without any configured keys no request object may be attached: %s", loc);
+	c->private_keys = fixture_keys;
+
 	/* per-provider client keys are preferred over the global list */
 	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(oidc_test_cmd_get(OIDCPrivateKeyFiles), NULL,
 						     apr_psprintf(r->pool, "rsa-client#%s/private.pem", dir)));
-	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider,
-								  (apr_array_header_t *)oidc_cfg_private_keys_get(c)));
+	apr_array_header_t *keys = (apr_array_header_t *)oidc_cfg_private_keys_get(c);
+	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, keys));
 	c->private_keys = NULL;
-	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-4");
+	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-5");
 	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL,
 		      "a per-provider client key must be usable for signing: %s", loc);
 
-	/* and with neither list configured at all, which is a refusal of its own */
+	/* hand the list back to the config: cfg and the provider each destroy the list they hold, so
+	 * exactly one of them may point at it when the fixture tears down */
 	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, NULL));
-	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-5");
-	ck_assert_msg(_oidc_strstr(loc, "request") == NULL,
-		      "without any configured keys no request object may be attached: %s", loc);
+	c->private_keys = keys;
 }
 END_TEST
 
