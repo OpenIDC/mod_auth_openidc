@@ -368,7 +368,8 @@ static apr_byte_t oidc_util_appinfo_cache_apply(request_rec *r, const oidc_json_
  */
 static void oidc_util_appinfo_cache_store(oidc_json_t *j_attrs, const char *key, const apr_table_t *pairs) {
 	struct oidc_util_appinfo_cache_build_ctx ctx = {.claims = j_attrs, .pairs = pairs};
-	oidc_cache_local_set_build(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_build, &ctx);
+	oidc_cache_local_set_build(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_valid, j_attrs,
+				   oidc_util_appinfo_cache_build, &ctx);
 }
 
 /*

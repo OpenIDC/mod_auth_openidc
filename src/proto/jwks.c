@@ -168,7 +168,8 @@ static void oidc_proto_jwks_cache_set(const char *sel_key, apr_hash_t *result, i
 	struct oidc_proto_jwks_cache_build_ctx ctx = {.result = result, .refresh_interval = refresh_interval};
 	if (apr_hash_count(result) < 1)
 		return;
-	oidc_cache_local_set_build(_oidc_proto_jwks_cache, sel_key, oidc_proto_jwks_cache_build, &ctx);
+	oidc_cache_local_set_build(_oidc_proto_jwks_cache, sel_key, oidc_proto_jwks_cache_valid, NULL,
+				   oidc_proto_jwks_cache_build, &ctx);
 }
 
 /*

@@ -385,8 +385,8 @@ apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, 
 	return rv;
 }
 
-void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oidc_cache_local_compute_fn build,
-				 void *baton) {
+void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
+				 const void *vctx, oidc_cache_local_compute_fn build, void *baton) {
 	oidc_cache_local_node_t *existing = NULL;
 	void *value = NULL;
 
@@ -395,7 +395,23 @@ void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oid
 
 	oidc_cache_local_wrlock(cache);
 	existing = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
-	if (existing != NULL) {
+	if ((existing != NULL) && (validate != NULL) && (validate(existing->value, vctx) != 0)) {
+		/*
+		 * re-check under the write lock, as get_or_compute does: a caller arrives here having
+		 * found the entry stale (or absent) on the read path, and several of them can find
+		 * that at the same moment and queue on this lock. Only the first needs to rebuild -
+		 * for the rest the entry is fresh again by the time they get in.
+		 *
+		 * Without this they each free the entry the winner just built and build it again,
+		 * which for the jwks cache is not merely wasted work: its free_value does not free
+		 * but retires the keys onto a list released only at pool cleanup, so every redundant
+		 * rebuild permanently retires another full key set. That is what makes the "bounded
+		 * by key rollovers" note on that list true rather than bounded by rollovers times
+		 * the number of threads that happened to refresh together.
+		 */
+		value = existing->value;
+		oidc_cache_local_touch(existing);
+	} else if (existing != NULL) {
 		/* replace a (typically stale) entry: free the old value, then build and store the new one
 		 * in place under the interned key (or drop the entry when the rebuild yields nothing) */
 		if (cache->free_value != NULL)

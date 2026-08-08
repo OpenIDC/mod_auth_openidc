@@ -329,7 +329,7 @@ START_TEST(test_cache_local_get_use_set_build) {
 
 	/* build stores a fresh entry; get_use validates it fresh and hands out the payload */
 	struct test_build_ctx b1 = {.stamp = 1, .payload = 100};
-	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "k", test_build, &b1));
+	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "k", NULL, NULL, test_build, &b1));
 
 	int want = 1, out = -1;
 	ck_assert(oidc_cache_local_get_use(cache, "k", test_validate, &want, test_use, &out) == TRUE);
@@ -343,7 +343,7 @@ START_TEST(test_cache_local_get_use_set_build) {
 
 	/* rebuilding the key frees the old entry and stores the new one */
 	struct test_build_ctx b2 = {.stamp = 2, .payload = 200};
-	oidc_cache_local_set_build(cache, "k", test_build, &b2);
+	oidc_cache_local_set_build(cache, "k", NULL, NULL, test_build, &b2);
 	ck_assert_int_eq(_free_count, 1);
 	out = -1;
 	ck_assert(oidc_cache_local_get_use(cache, "k", test_validate, &stale, test_use, &out) == TRUE);
@@ -356,8 +356,46 @@ START_TEST(test_cache_local_get_use_set_build) {
 
 	/* the primitives tolerate a NULL cache */
 	ck_assert(oidc_cache_local_get_use(NULL, "k", test_validate, &want, test_use, &out) == FALSE);
-	ck_assert_ptr_null(oidc_cache_local_set_build(NULL, "k", test_build, &b1));
+	ck_assert_ptr_null(oidc_cache_local_set_build(NULL, "k", NULL, NULL, test_build, &b1));
 	oidc_cache_local_clear(NULL);
+}
+END_TEST
+
+/*
+ * the write-lock re-check: several callers can find the same entry stale at the same moment and
+ * queue on the write lock, but by the time the later ones get in the first has already rebuilt it.
+ * With a freshness test supplied they must hand back what is there rather than free and rebuild -
+ * for the jwks cache a redundant rebuild permanently retires another key set.
+ */
+START_TEST(test_cache_local_set_build_rechecks_under_lock) {
+	_free_count = 0;
+	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "recheck", 8, 1, test_free_value, NULL, NULL);
+
+	struct test_build_ctx b1 = {.stamp = 1, .payload = 100};
+	void *first = oidc_cache_local_set_build(cache, "k", NULL, NULL, test_build, &b1);
+	ck_assert_ptr_nonnull(first);
+
+	/* the loser of the race: its freshness token matches what is stored, so nothing is freed,
+	 * nothing is rebuilt, and it gets the winner's entry back */
+	int fresh = 1;
+	struct test_build_ctx b2 = {.stamp = 1, .payload = 200};
+	ck_assert_ptr_eq(oidc_cache_local_set_build(cache, "k", test_validate, &fresh, test_build, &b2), first);
+	ck_assert_int_eq(_free_count, 0);
+
+	int want = 1, out = -1;
+	ck_assert(oidc_cache_local_get_use(cache, "k", test_validate, &want, test_use, &out) == TRUE);
+	ck_assert_int_eq(out, 100); /* the winner's payload, not the skipped rebuild's 200 */
+
+	/* a genuinely stale entry is still replaced, and its old value still freed */
+	int stale = 2;
+	struct test_build_ctx b3 = {.stamp = 2, .payload = 300};
+	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "k", test_validate, &stale, test_build, &b3));
+	ck_assert_int_eq(_free_count, 1);
+	out = -1;
+	ck_assert(oidc_cache_local_get_use(cache, "k", test_validate, &stale, test_use, &out) == TRUE);
+	ck_assert_int_eq(out, 300);
+
+	oidc_cache_local_clear(cache);
 }
 END_TEST
 
@@ -393,11 +431,11 @@ START_TEST(test_cache_local_subpool_entries_freed_on_cleanup) {
 	_free_count = 0;
 
 	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, child, "pooled", 8, 1, test_pooled_free, NULL, NULL);
-	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "a", test_pooled_build, &v));
-	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "b", test_pooled_build, &v));
+	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "a", NULL, NULL, test_pooled_build, &v));
+	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "b", NULL, NULL, test_pooled_build, &v));
 
 	/* overwriting an entry destroys its old subpool via free_value */
-	oidc_cache_local_set_build(cache, "a", test_pooled_build, &v);
+	oidc_cache_local_set_build(cache, "a", NULL, NULL, test_pooled_build, &v);
 	ck_assert_int_eq(_free_count, 1);
 
 	/* destroying the owning pool destroys each remaining entry's subpool via free_value - as a
@@ -529,6 +567,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_local_null_safe);
 	tcase_add_test(core, test_cache_local_owner_reset_on_pool_cleanup);
 	tcase_add_test(core, test_cache_local_get_use_set_build);
+	tcase_add_test(core, test_cache_local_set_build_rechecks_under_lock);
 	tcase_add_test(core, test_cache_local_subpool_entries_freed_on_cleanup);
 	tcase_add_test(core, test_cache_local_survives_compaction);
 	tcase_add_test(core, test_cache_local_churn_does_not_grow_without_bound);

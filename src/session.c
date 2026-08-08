@@ -148,7 +148,9 @@ static oidc_json_t *oidc_session_cache_get(const oidc_cfg_t *c, const char *uuid
 /* store a new reference to the parsed state, keyed by session id and validated by the raw string */
 static void oidc_session_cache_set(const oidc_cfg_t *c, const char *uuid, const char *raw, oidc_json_t *state) {
 	struct oidc_session_cache_build_ctx ctx = {.raw = raw, .state = state, .cfg = c};
-	oidc_cache_local_set_build(_oidc_session_cache, uuid, oidc_session_cache_build, &ctx);
+	const oidc_session_cache_ctx_t vctx = {.raw = raw, .cfg = c};
+	oidc_cache_local_set_build(_oidc_session_cache, uuid, oidc_session_cache_valid, &vctx, oidc_session_cache_build,
+				   &ctx);
 }
 
 /*

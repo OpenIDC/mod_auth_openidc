@@ -126,8 +126,14 @@ apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, 
  * set/get_or_compute. Returns the stored value, or NULL when `build` returns NULL. Use this after
  * the (expensive) work of producing the value has been done outside the lock, paired with
  * get_use for the fast lookup path.
+ *
+ * `validate` re-checks under the write lock, in the same spirit as get_or_compute: when an entry is
+ * already present and validate(value, vctx) is non-zero, it is fresh again - another thread rebuilt
+ * it while this one waited for the lock - and it is returned untouched instead of being freed and
+ * rebuilt. Pass the same validate/vctx used with get_use. Passing NULL keeps the unconditional
+ * replace, which is only right for a cache whose entries have no freshness test.
  */
-void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oidc_cache_local_compute_fn build,
-				 void *baton);
+void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
+				 const void *vctx, oidc_cache_local_compute_fn build, void *baton);
 
 #endif // _MOD_AUTH_OPENIDC_UTIL_CACHE_LOCAL_H_

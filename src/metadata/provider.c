@@ -107,7 +107,8 @@ static apr_byte_t oidc_metadata_provider_cache_get(const char *path, const apr_f
 /* store a new reference to the parsed document keyed by path, stamped with the file's mtime+size */
 static void oidc_metadata_provider_cache_set(const char *path, const apr_finfo_t *fi, oidc_json_t *json) {
 	struct oidc_metadata_provider_cache_build_ctx ctx = {.fi = fi, .json = json};
-	oidc_cache_local_set_build(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_build, &ctx);
+	oidc_cache_local_set_build(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_valid, fi,
+				   oidc_metadata_provider_cache_build, &ctx);
 }
 
 /*

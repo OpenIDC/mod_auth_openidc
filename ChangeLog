@@ -1,4 +1,7 @@
 08/07/2026
+- performance: re-check the entry under the write lock when replacing a process-local cache
+  entry, so concurrent refreshers no longer each rebuild it; for the JWKS cache a redundant
+  rebuild permanently retired another set of keys
 - performance: release the cross-process refresh mutex while backing off for a refresh that
   another caller is performing, so one waiter no longer blocks every refresh on the machine
 - security: do not revoke a session's tokens at the OP on an unauthenticated front-channel
