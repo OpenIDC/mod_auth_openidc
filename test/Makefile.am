@@ -152,7 +152,19 @@ ${oidc_unit_tests:%=%.valgrind}: ${oidc_unit_tests}
 
 valgrind: ${oidc_unit_tests:%=%.valgrind}
 
-CODE_COVERAGE_LCOV_SHOPTS = --ignore-errors inconsistent --ignore-errors unused
+# branch coverage on top of line coverage: a line that ran still hides the leg of its
+# condition that never did, and those are exactly the cases unit tests miss. NB: the
+# AX_CODE_COVERAGE default derives the branch flags from CODE_COVERAGE_BRANCH_COVERAGE
+# into these two variables, so setting that alone would have no effect here -- both are
+# overridden below and have to carry the --rc themselves. "branch_coverage" is the lcov 2
+# spelling; the older "lcov_branch_coverage"/"genhtml_branch_coverage" still work but warn.
+CODE_COVERAGE_BRANCH_COVERAGE = 1
+# NB: genhtml needs the same "inconsistent" tolerance as lcov above, and needs it more: it
+# treats what lcov reports as a warning ("line is hit but no branches on line have been
+# evaluated", which the -flto fat objects produce for a handful of lines) as a fatal error
+# and refuses to write the report at all.
+CODE_COVERAGE_LCOV_SHOPTS = --ignore-errors inconsistent --ignore-errors unused --rc branch_coverage=1
+CODE_COVERAGE_GENHTML_OPTIONS = --ignore-errors inconsistent --rc branch_coverage=1
 
 # the live redis/memcache integration tcases (test_cache.c) register only when
 # these are set, so the default "make check" leaves them off. The coverage and
