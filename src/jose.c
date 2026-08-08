@@ -363,15 +363,21 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	}
 
 	while (status == Z_OK) {
-		if (zlib.total_out >= OIDC_CJOSE_UNCOMPRESS_CHUNK) {
-			if (len + OIDC_CJOSE_UNCOMPRESS_CHUNK > OIDC_CJOSE_UNCOMPRESS_MAX) {
+		/* NB: grow by doubling, not by a fixed chunk. The old buffer cannot be handed back to
+		 * the pool, so a fixed chunk made the output buffer cost quadratic in its own size:
+		 * inflating up to the OIDC_CJOSE_UNCOMPRESS_MAX cap took ~1280 rounds and left 6.25GB
+		 * of dead buffers behind in the pool, which is exactly the outcome that cap exists to
+		 * prevent. Doubling reaches the same cap in ~11 rounds and under 30MB. */
+		if (zlib.total_out >= len) {
+			if (len >= OIDC_CJOSE_UNCOMPRESS_MAX) {
 				oidc_jose_error(err, "inflate() output would exceed %d bytes",
 						OIDC_CJOSE_UNCOMPRESS_MAX);
 				goto end;
 			}
-			tmp = apr_pcalloc(pool, len + OIDC_CJOSE_UNCOMPRESS_CHUNK);
+			size_t next = (len > OIDC_CJOSE_UNCOMPRESS_MAX / 2) ? OIDC_CJOSE_UNCOMPRESS_MAX : len * 2;
+			tmp = apr_pcalloc(pool, next);
 			_oidc_memcpy(tmp, buf, len);
-			len += OIDC_CJOSE_UNCOMPRESS_CHUNK;
+			len = next;
 			buf = tmp;
 		}
 		zlib.next_out = (Bytef *)(buf + zlib.total_out);

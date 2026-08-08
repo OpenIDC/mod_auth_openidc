@@ -245,6 +245,65 @@ START_TEST(test_jose_compress_uncompress_tiny) {
 }
 END_TEST
 
+#if defined(USE_ZLIB) && !defined(USE_LIBBROTLI)
+
+/*
+ * the inflate output buffer starts at one chunk and grows as the payload turns out to be
+ * bigger, up to a hard cap that exists so that a decompression bomb cannot be inflated
+ * indefinitely. Both the growing and the refusal at the cap went untested; the cap in
+ * particular is the interesting one, since nothing else in the module bounds the output.
+ *
+ * Guarded on the zlib build without brotli: oidc_jose_compress produces brotli when brotli
+ * is configured, and the zlib inflate path (the one with the cap) is only reached for a
+ * payload that is actually zlib-framed.
+ */
+START_TEST(test_jose_uncompress_grows_beyond_one_chunk) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	char *out = NULL, *un = NULL;
+	int out_len = 0, un_len = 0;
+	/* comfortably more than the 8192-byte initial buffer, so the grow path runs several times */
+	const int input_len = 100 * 1024;
+	char *input = apr_palloc(pool, input_len);
+
+	/* not a constant fill: that would deflate to almost nothing and say little about the
+	 * inflate side, whereas this still compresses while producing a real amount of output */
+	for (int i = 0; i < input_len; i++)
+		input[i] = (char)('a' + (i % 26) + ((i / 26) % 3));
+
+	ck_assert_msg(oidc_jose_compress(pool, input, input_len, &out, &out_len, &err) == TRUE, "compress failed: %s",
+		      oidc_jose_e2s(pool, err));
+	ck_assert_msg(oidc_jose_uncompress(pool, out, out_len, &un, &un_len, &err) == TRUE, "uncompress failed: %s",
+		      oidc_jose_e2s(pool, err));
+	ck_assert_int_eq(un_len, input_len);
+	ck_assert_mem_eq(un, input, input_len);
+}
+END_TEST
+
+START_TEST(test_jose_uncompress_refuses_beyond_the_cap) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	char *out = NULL, *un = NULL;
+	int out_len = 0, un_len = 0;
+	/* just past OIDC_CJOSE_UNCOMPRESS_MAX (10MB), so inflating it has to stop at the cap;
+	 * a constant fill is the point here -- it deflates to a few KB, which is what makes
+	 * this a decompression bomb rather than a large payload */
+	const int input_len = 11 * 1024 * 1024;
+	char *input = apr_pcalloc(pool, input_len);
+	memset(input, 'A', input_len);
+
+	ck_assert_msg(oidc_jose_compress(pool, input, input_len, &out, &out_len, &err) == TRUE, "compress failed: %s",
+		      oidc_jose_e2s(pool, err));
+	ck_assert_msg(out_len < input_len / 100, "the bomb did not compress: %d bytes", out_len);
+
+	ck_assert_msg(oidc_jose_uncompress(pool, out, out_len, &un, &un_len, &err) == FALSE,
+		      "a payload inflating past the cap must be refused, not inflated");
+	ck_assert_ptr_nonnull(_oidc_strstr(oidc_jose_e2s(pool, err), "exceed"));
+}
+END_TEST
+
+#endif
+
 START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -1502,6 +1561,10 @@ int main(void) {
 	tcase_add_test(core, test_jose_compress_uncompress);
 	tcase_add_test(core, test_jose_uncompress_detects_uncompressed);
 	tcase_add_test(core, test_jose_compress_uncompress_tiny);
+#if defined(USE_ZLIB) && !defined(USE_LIBBROTLI)
+	tcase_add_test(core, test_jose_uncompress_grows_beyond_one_chunk);
+	tcase_add_test(core, test_jose_uncompress_refuses_beyond_the_cap);
+#endif
 	tcase_add_test(core, test_jose_jwk_and_json_and_copy_lists);
 	tcase_add_test(core, test_jose_jwe_decrypt_plaintext);
 	tcase_add_test(core, test_jwt_sign_parse_compressed);
