@@ -1,4 +1,7 @@
 08/07/2026
+- stamp the session payload with a format version and discard a session written in a newer
+  format instead of misreading it; sessions written before this carry no version and still
+  load, so upgrading and downgrading are both unaffected
 - docs: correct five wrong statements in auth_openidc.conf about the defaults of
   OIDCMemCacheConnectionsMin, OIDCHTTPTimeoutShort, OIDCClientName, OIDCResponseMode and
   OIDCProviderMetadataRefreshInterval

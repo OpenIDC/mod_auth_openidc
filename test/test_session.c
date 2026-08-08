@@ -448,6 +448,60 @@ START_TEST(test_session_cache_corruption) {
 }
 END_TEST
 
+/*
+ * the payload format version: a session written before the field existed still loads, one written
+ * by a newer module is discarded rather than read with the wrong meaning attached to its keys, and
+ * what this module writes carries the version it claims to write
+ */
+START_TEST(test_session_format_version) {
+	request_rec *r = oidc_test_request_get();
+	const char *uuid = "beefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef";
+	apr_time_t future = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_t *z = NULL;
+	char *s_json = NULL;
+
+	/* 1: no version at all - the layout written before the field existed - still loads */
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	s_json = apr_psprintf(r->pool, "{\"i\":\"%s\",\"e\":%d,\"r\":\"alice\"}", uuid, (int)apr_time_sec(future));
+	ck_assert_int_eq(oidc_cache_set_session(r, uuid, s_json, future), TRUE);
+	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
+	ck_assert_str_eq(z->remote_user, "alice");
+	oidc_session_free(r, z);
+
+	/* 2: the version this module writes loads too */
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	s_json =
+	    apr_psprintf(r->pool, "{\"v\":1,\"i\":\"%s\",\"e\":%d,\"r\":\"alice\"}", uuid, (int)apr_time_sec(future));
+	ck_assert_int_eq(oidc_cache_set_session(r, uuid, s_json, future), TRUE);
+	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
+	oidc_session_free(r, z);
+
+	/* 3: a version from the future is rejected, so the user re-authenticates here */
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	s_json =
+	    apr_psprintf(r->pool, "{\"v\":99,\"i\":\"%s\",\"e\":%d,\"r\":\"alice\"}", uuid, (int)apr_time_sec(future));
+	ck_assert_int_eq(oidc_cache_set_session(r, uuid, s_json, future), TRUE);
+	ck_assert_int_eq(oidc_session_load(r, &z), FALSE);
+	oidc_session_free(r, z);
+
+	/* 4: what save() writes carries the version, so another server can apply the checks above.
+	 * Drop the cookie first so this starts from a genuinely new session rather than depending on
+	 * the load above having rejected one. */
+	apr_table_unset(r->headers_in, "Cookie");
+	oidc_session_load(r, &z);
+	z->remote_user = apr_pstrdup(r->pool, "bob");
+	z->expiry = future;
+	oidc_session_set_issuer(r, z, "https://idp.example.com");
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
+	s_json = NULL;
+	oidc_cache_get_session(r, z->uuid, &s_json);
+	ck_assert_ptr_nonnull(s_json);
+	ck_assert_msg(_oidc_strstr(s_json, "\"v\":1") != NULL, "the saved payload must carry the format version: %s",
+		      s_json);
+	oidc_session_free(r, z);
+}
+END_TEST
+
 /* mutating a session whose parsed state is shared with the process-level cache
  * copies the state first (copy-on-write) */
 START_TEST(test_session_state_unshare_on_write) {
@@ -595,6 +649,7 @@ int main(void) {
 	tcase_add_test(c, test_session_cookie_samesite_variants);
 	tcase_add_test(c, test_session_load_cache_fallback_to_cookie);
 	tcase_add_test(c, test_session_cache_corruption);
+	tcase_add_test(c, test_session_format_version);
 	tcase_add_test(c, test_session_state_unshare_on_write);
 	tcase_add_test(c, test_session_claim_filtering);
 #ifdef USE_LIBJQ

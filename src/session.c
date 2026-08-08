@@ -185,6 +185,21 @@ static const char *oidc_session_cache_cookie_key(request_rec *r, const char *coo
 #define OIDC_SESSION_KEY_USERINFO_CLAIMS "uic"
 /* key for storing the id_token claims in the session context */
 #define OIDC_SESSION_KEY_IDTOKEN_CLAIMS "idc"
+/* the name of the payload format version attribute in the session */
+#define OIDC_SESSION_FORMAT_VERSION_KEY "v"
+
+/*
+ * the session payload layout that this module writes.
+ *
+ * Bump it when a change to the payload cannot be read correctly by a module that predates the
+ * change: a mixed-version fleet sharing one cache backend then gets a session it does not
+ * understand *rejected*, i.e. the user re-authenticates, instead of silently misparsed.
+ *
+ * Sessions written before this field existed carry no version at all, which is why an absent
+ * value reads as version 1 rather than as an error - adding the field is not itself a format
+ * change, since a reader takes the keys it knows and ignores the rest in both directions.
+ */
+#define OIDC_SESSION_FORMAT_VERSION 1
 
 /*
  * encode/serialize the session object/data into a string, possibly a serialized encrypted JWT when encryption is
@@ -209,6 +224,26 @@ static apr_byte_t oidc_session_encode(request_rec *r, const oidc_cfg_t *c, const
 }
 
 /*
+ * check that the decoded payload is a layout this module understands; see
+ * OIDC_SESSION_FORMAT_VERSION. A session from a newer module is rejected rather than read with
+ * the wrong meaning attached to its keys - the caller treats that as "no session", so the user
+ * re-authenticates against this server and a payload is written in the layout it does write.
+ */
+static apr_byte_t oidc_session_version_supported(request_rec *r, const oidc_session_t *z) {
+	int version = 0;
+	/* absent: written before the field existed, i.e. the original layout */
+	oidc_json_object_get_int(z->state, OIDC_SESSION_FORMAT_VERSION_KEY, &version, 1);
+	if (version > OIDC_SESSION_FORMAT_VERSION) {
+		oidc_warn(r,
+			  "discarding a session in payload format version %d: this module writes and understands "
+			  "up to version %d, so it was written by a newer mod_auth_openidc sharing this cache",
+			  version, OIDC_SESSION_FORMAT_VERSION);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+/*
  * parse a session object from the provided string, which may be an encrypted JWT is encryption is on
  */
 static apr_byte_t oidc_session_decode(request_rec *r, const oidc_cfg_t *c, oidc_session_t *z, const char *s_json,
@@ -216,7 +251,9 @@ static apr_byte_t oidc_session_decode(request_rec *r, const oidc_cfg_t *c, oidc_
 	char *s_payload = NULL;
 
 	if (encrypt == FALSE) {
-		return oidc_json_decode_object(r, s_json, &z->state);
+		if (oidc_json_decode_object(r, s_json, &z->state) == FALSE)
+			return FALSE;
+		return oidc_session_version_supported(r, z);
 	} else if (oidc_cfg_crypto_passphrase_secret1_get(c) == NULL) {
 		oidc_error(r, "cannot decrypt session state because " OIDCCryptoPassphrase " is not set");
 		return FALSE;
@@ -227,7 +264,10 @@ static apr_byte_t oidc_session_decode(request_rec *r, const oidc_cfg_t *c, oidc_
 		return FALSE;
 	}
 
-	return oidc_json_decode_object(r, s_payload, &z->state);
+	if (oidc_json_decode_object(r, s_payload, &z->state) == FALSE)
+		return FALSE;
+
+	return oidc_session_version_supported(r, z);
 }
 
 #define OIDC_SESSION_ID_LEN 20
@@ -680,6 +720,7 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, oidc_session_sav
 	apr_byte_t rc = FALSE;
 
 	if (z->state != NULL) {
+		oidc_session_set_int(r, z, OIDC_SESSION_FORMAT_VERSION_KEY, OIDC_SESSION_FORMAT_VERSION);
 		oidc_session_set(r, z, OIDC_SESSION_REMOTE_USER_KEY, z->remote_user);
 		oidc_session_set_timestamp(r, z, OIDC_SESSION_EXPIRY_KEY, z->expiry);
 		oidc_session_set(r, z, OIDC_SESSION_SESSION_ID, z->uuid);
