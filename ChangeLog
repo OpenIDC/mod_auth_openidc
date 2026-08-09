@@ -18,6 +18,7 @@
 - name the (virtual) host in the messages of the post-config check: httpd does not record which
   server_rec a startup message was logged against, so with more than one vhost neither the refusals
   nor the warnings said which one to fix
+- release 2.4.20.1
 
 08/08/2026
 - do not lose an uncompressed payload whose first two bytes happen to look like a zlib header:
