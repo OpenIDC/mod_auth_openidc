@@ -386,14 +386,22 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	if (section_key == NULL)
 		return FALSE;
 
+	/*
+	 * how many value bytes fit in a slot, computed in a *signed* type on purpose: entry_size_max is
+	 * an int and sizeof() is unsigned, so the subtraction would otherwise be done unsigned and wrap
+	 * into a huge limit if the configured slot size were ever smaller than the entry header - the
+	 * check would then pass and the _oidc_strcpy below would run off the end of the slot. The
+	 * configured minimum keeps that out of reach today; this does not depend on it.
+	 */
+	const apr_ssize_t value_size_max = (apr_ssize_t)entry_size_max - (apr_ssize_t)sizeof(oidc_cache_shm_entry_t);
+
 	/* check that the passed in value is valid; reject at ">=" rather than ">" so the NUL terminator
 	 * written by the _oidc_strcpy below always fits within the entry, independent of struct padding */
-	if ((value != NULL) && (_oidc_strlen(value) >= (entry_size_max - sizeof(oidc_cache_shm_entry_t)))) {
+	if ((value != NULL) && ((value_size_max <= 0) || ((apr_ssize_t)_oidc_strlen(value) >= value_size_max))) {
 		oidc_error(r,
-			   "could not store value since value size is too large (%lu >= %lu); consider "
+			   "could not store value since value size is too large (%ld >= %ld); consider "
 			   "increasing " OIDCCacheShmEntrySizeMax "",
-			   (unsigned long)_oidc_strlen(value),
-			   (unsigned long)(entry_size_max - sizeof(oidc_cache_shm_entry_t)));
+			   (long)_oidc_strlen(value), (long)value_size_max);
 		return FALSE;
 	}
 
