@@ -1,28 +1,15 @@
 08/10/2026
-- remove the process-local derived-object cache tier (util/cache_local) and the five caches built
-  on it: the parsed session state, the flattened appinfo claim pairs, the parsed provider metadata,
-  the JWKs selection result and the compiled Require-claim regexes. Measured on a protected,
-  non-proxied request, the whole tier saved 24-34% of the module's own CPU, and essentially all of
-  that was the parsed-session cache alone -- the other four were at or below the run-to-run noise.
-  That is not worth the concurrency, eviction, teardown and cache-coherency surface it added, which
-  produced defects in two consecutive releases. The session state is parsed per request again and
-  is once more private to it, so the copy-on-write in the session setters goes too
-- cache/file: report an expired entry as a miss without unlinking it, and leave reclaiming it to
-  the cleaning cycle. A writer replaces an entry by renaming a freshly written temp file over the
-  path and never locks the path itself, so nothing ordered that rename against a read: between
-  finding an entry expired and unlinking it, the rename could have landed, and the unlink then
-  threw away the entry that had just replaced it -- a silently lost session, with the user sent
-  back through authentication. The cleaning cycle already reclaimed every expired entry that was
-  never read again
-- cache/shm: compute the per-slot value size limit in a signed type. entry_size_max is an int and
-  sizeof() is unsigned, so the subtraction was done unsigned and would have wrapped into a huge
-  limit -- passing the check and overrunning the slot -- had the configured slot size ever been
-  smaller than the entry header. The configured minimum keeps that out of reach, but the check no
-  longer depends on it
+- remove the process-local derived-object cache tier (util/cache_local) and the five caches on it:
+  parsed session state, appinfo claim pairs, provider metadata, JWKs selection and compiled
+  Require-claim regexes. It was worth 24-34% of the module's own CPU, nearly all of that the
+  session cache alone, which does not pay for the concurrency and teardown surface it added
+- cache/file: report an expired entry as a miss without unlinking it, leaving that to the cleaning
+  cycle; a writer's rename could land in between and the unlink then threw away the entry that had
+  just replaced it
+- cache/shm: compute the per-slot value size limit signed, so it cannot wrap into a huge limit when
+  the configured slot size is smaller than the entry header
 - do not strand a failed regular-expression compile in the pool it was handed: oidc_pcre_compile
-  allocated its wrapper, and on failure its error message, before it could know the pattern was
-  invalid. It now allocates nothing unless the compile succeeds, and takes a NULL error_str for
-  callers with no use for the message
+  now allocates nothing unless the compile succeeds, and takes a NULL error_str
 
 08/09/2026
 - store the process-local JWKS selection cache serialized and give each request its own parsed
