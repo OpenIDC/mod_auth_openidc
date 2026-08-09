@@ -189,20 +189,21 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 	/* check if this cache entry has already expired */
 	if (apr_time_now() >= info.expire) {
 
-		/* yep, expired: unlock and close before deleting the cache file */
+		/*
+		 * report the miss and leave the file where it is rather than unlinking it here.
+		 *
+		 * A writer replaces an entry by renaming a freshly written temp file over this path and
+		 * never locks the path itself, so nothing orders that rename against this read: between
+		 * finding the entry expired and unlinking it, the rename can have landed, and the unlink
+		 * would then throw away the entry that just replaced it - a silently lost session, with
+		 * the user sent back through authentication. Reclaiming expired entries is
+		 * oidc_cache_file_clean's job, which is what already reclaimed every expired entry that
+		 * was never read again.
+		 */
 		apr_file_unlock(fd);
 		apr_file_close(fd);
 
-		/* log this event */
-		oidc_debug(r, "cache entry \"%s\" expired, removing file \"%s\"", key, path);
-
-		/* and kill it; a concurrent reader of the same expired entry may have removed it
-		 * between our unlock and here, so a vanished file is not an error */
-		rc = apr_file_remove(path, r->pool);
-		if ((rc != APR_SUCCESS) && (APR_STATUS_IS_ENOENT(rc) == 0)) {
-			oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
-				   apr_strerror(rc, s_err, sizeof(s_err)));
-		}
+		oidc_debug(r, "cache entry \"%s\" expired, leaving file \"%s\" to the cleaning cycle", key, path);
 
 		/* nothing strange happened really */
 		return TRUE;

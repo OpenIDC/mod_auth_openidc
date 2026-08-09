@@ -7,6 +7,13 @@
   That is not worth the concurrency, eviction, teardown and cache-coherency surface it added, which
   produced defects in two consecutive releases. The session state is parsed per request again and
   is once more private to it, so the copy-on-write in the session setters goes too
+- cache/file: report an expired entry as a miss without unlinking it, and leave reclaiming it to
+  the cleaning cycle. A writer replaces an entry by renaming a freshly written temp file over the
+  path and never locks the path itself, so nothing ordered that rename against a read: between
+  finding an entry expired and unlinking it, the rename could have landed, and the unlink then
+  threw away the entry that had just replaced it -- a silently lost session, with the user sent
+  back through authentication. The cleaning cycle already reclaimed every expired entry that was
+  never read again
 - do not strand a failed regular-expression compile in the pool it was handed: oidc_pcre_compile
   allocated its wrapper, and on failure its error message, before it could know the pattern was
   invalid. It now allocates nothing unless the compile succeeds, and takes a NULL error_str for

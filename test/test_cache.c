@@ -869,31 +869,41 @@ START_TEST(test_cache_file_truncated_entry_is_an_error) {
 END_TEST
 
 /*
- * reading an expired entry deletes it. When the directory does not allow that, the read still has
- * to report the miss it found rather than failing.
+ * reading an expired entry reports a miss and leaves the file where it is.
+ *
+ * The read path deliberately does not unlink it: a writer replaces an entry by renaming a freshly
+ * written temp file over the path and never locks the path itself, so between finding the entry
+ * expired and unlinking it that rename can have landed - and the unlink would then throw away the
+ * entry that just replaced it. Reclaiming expired entries is the cleaning cycle's job.
  */
-START_TEST(test_cache_file_expired_entry_undeletable) {
+START_TEST(test_cache_file_expired_entry_left_for_cleaner) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
 	char *value = NULL;
 	apr_finfo_t fi;
 
+	/* keep a write from running a cleaning cycle underneath the assertions below */
+	cfg->cache.file_clean_interval = 3600;
+
 	apr_time_t past = apr_time_now() - apr_time_from_sec(60);
 	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "stale", "stale-value", past), TRUE);
+	const char *path = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "stale");
 
-	/* readable and searchable but not writable, so the entry can be opened and found expired but
-	 * not removed. NB: as root the mode bits do not apply and the entry is simply deleted, which
-	 * is the already-covered path rather than a failure */
-	ck_assert_int_eq(apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UEXECUTE), APR_SUCCESS);
-	apr_byte_t rv = oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "stale", &value);
-	ck_assert_int_eq(
-	    apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE),
-	    APR_SUCCESS);
-
-	ck_assert_int_eq(rv, TRUE);
+	/* the read reports the miss it found ... */
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "stale", &value), TRUE);
 	ck_assert_ptr_null(value);
-	(void)apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "stale"), APR_FINFO_TYPE, r->pool);
+	/* ... and leaves the file for the cleaning cycle */
+	ck_assert_int_eq(apr_stat(&fi, path, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+
+	/* the regression this pins: an entry freshly written for the same key survives, instead of
+	 * being unlinked by the reader that had just found the previous one expired */
+	apr_time_t future = apr_time_now() + apr_time_from_sec(60);
+	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "stale", "fresh-value", future), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "stale", &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+	ck_assert_str_eq(value, "fresh-value");
 
 	e2e_restore_cache_backend(prev);
 }
@@ -2285,7 +2295,7 @@ int main(void) {
 	tcase_add_test(file, test_cache_file_overwrite_and_delete);
 	tcase_add_test(file, test_cache_file_default_tmp_dir);
 	tcase_add_test(file, test_cache_file_truncated_entry_is_an_error);
-	tcase_add_test(file, test_cache_file_expired_entry_undeletable);
+	tcase_add_test(file, test_cache_file_expired_entry_left_for_cleaner);
 	tcase_add_test(file, test_cache_file_clean_cycle_handles_junk);
 	tcase_add_test(file, test_cache_file_clean_cycle_unreadable_dir);
 	tcase_add_test(file, test_cache_file_missing_dir_fails_the_write);
