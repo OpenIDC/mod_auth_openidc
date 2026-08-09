@@ -68,6 +68,32 @@ static int *mkval(int n) {
 }
 
 /*
+ * The cache exposes exactly two ways in and out - get_use() and set_build() - because a value read
+ * out of an evicting cache is only safe to touch under the lock. These shims give the tests the
+ * plain get/set they want on top of those two. Handing the stored pointer back out past the lock is
+ * sound here and only here: the suite is single-threaded, so nothing can evict underneath it.
+ */
+static void test_copy_out(void *value, void *baton) {
+	*(void **)baton = value;
+}
+
+static void *test_get(oidc_cache_local_t *cache, const char *key) {
+	void *value = NULL;
+	oidc_cache_local_get_use(cache, key, NULL, NULL, test_copy_out, &value);
+	return value;
+}
+
+static void *test_build_baton(apr_pool_t *pool, const char *key, void *baton) {
+	return baton;
+}
+
+/* stores `value` (NULL drops the entry, freeing what was there); returns FALSE when it was not
+ * stored, in which case `value` is still the caller's to free */
+static apr_byte_t test_set(oidc_cache_local_t *cache, const char *key, void *value) {
+	return oidc_cache_local_set_build(cache, key, NULL, NULL, test_build_baton, value);
+}
+
+/*
  * resident set size of this process, or 0 when it cannot be determined (non-Linux, /proc not
  * mounted). APR pool allocations are invisible to the C library's own accounting - the allocator
  * mmaps its blocks - so this is the portable-enough way to observe that a cache is not retaining
@@ -100,12 +126,12 @@ START_TEST(test_cache_local_basic_set_get) {
 	ck_assert_ptr_nonnull(cache);
 
 	int a = 1, b = 2;
-	oidc_cache_local_set(cache, "a", &a);
-	oidc_cache_local_set(cache, "b", &b);
+	test_set(cache, "a", &a);
+	test_set(cache, "b", &b);
 
-	ck_assert_ptr_eq(oidc_cache_local_get(cache, "a"), &a);
-	ck_assert_ptr_eq(oidc_cache_local_get(cache, "b"), &b);
-	ck_assert_ptr_null(oidc_cache_local_get(cache, "missing"));
+	ck_assert_ptr_eq(test_get(cache, "a"), &a);
+	ck_assert_ptr_eq(test_get(cache, "b"), &b);
+	ck_assert_ptr_null(test_get(cache, "missing"));
 }
 END_TEST
 
@@ -116,36 +142,47 @@ START_TEST(test_cache_local_overwrite_frees_old) {
 
 	int *v1 = mkval(1);
 	int *v2 = mkval(2);
-	oidc_cache_local_set(cache, "k", v1);
-	oidc_cache_local_set(cache, "k", v2);
+	test_set(cache, "k", v1);
+	test_set(cache, "k", v2);
 
 	/* the old value must have been freed, the new one stored, and the entry count unchanged */
 	ck_assert_int_eq(_free_count, 1);
-	ck_assert_ptr_eq(oidc_cache_local_get(cache, "k"), v2);
+	ck_assert_ptr_eq(test_get(cache, "k"), v2);
 
 	/* free the survivor so valgrind stays clean (no cleanup will run before teardown here) */
-	oidc_cache_local_set(cache, "k", NULL);
+	test_set(cache, "k", NULL);
 }
 END_TEST
 
-START_TEST(test_cache_local_get_or_compute_memoizes) {
+/* an entry that is a pure function of its key never goes stale; see oidc_authz_pcre_cache_get() */
+static int test_always_fresh(void *value, const void *ctx) {
+	return 1;
+}
+
+/*
+ * the memoize idiom every caller now uses: look up, and on a miss build under the write lock and
+ * look up again. Passing an always-fresh validator is what makes a concurrent second builder hand
+ * back the first one's entry rather than free and rebuild it.
+ */
+START_TEST(test_cache_local_miss_then_build_then_hit) {
 
 	int compute_count = 0;
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "goc", 8, 0, NULL, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "memo", 8, 0, NULL, NULL, NULL);
 
-	void *first = oidc_cache_local_get_or_compute(cache, "hello", test_compute, &compute_count);
+	ck_assert_ptr_null(test_get(cache, "hello"));
+	ck_assert(oidc_cache_local_set_build(cache, "hello", test_always_fresh, NULL, test_compute, &compute_count) ==
+		  TRUE);
+	void *first = test_get(cache, "hello");
 	ck_assert_ptr_nonnull(first);
 	ck_assert_int_eq(*(int *)first, 5);
 	ck_assert_int_eq(compute_count, 1);
 
-	/* a second lookup returns the same cached object without recomputing */
-	void *second = oidc_cache_local_get_or_compute(cache, "hello", test_compute, &compute_count);
-	ck_assert_ptr_eq(second, first);
+	/* the entry is never stale, so a second build is a no-op that keeps the first one's value */
+	ck_assert(oidc_cache_local_set_build(cache, "hello", test_always_fresh, NULL, test_compute, &compute_count) ==
+		  TRUE);
+	ck_assert_ptr_eq(test_get(cache, "hello"), first);
 	ck_assert_int_eq(compute_count, 1);
-
-	/* a plain get also sees it */
-	ck_assert_ptr_eq(oidc_cache_local_get(cache, "hello"), first);
 }
 END_TEST
 
@@ -153,21 +190,21 @@ START_TEST(test_cache_local_bound_stops_when_full) {
 
 	int compute_count = 0;
 
-	/* evict_on_full = 0: once full, new keys are not cached and compute is not called for them */
+	/* evict_on_full = 0: once full, new keys are not cached and build is not called for them */
 	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "bound", 2, 0, NULL, NULL, NULL);
 
-	ck_assert_ptr_nonnull(oidc_cache_local_get_or_compute(cache, "a", test_compute, &compute_count));
-	ck_assert_ptr_nonnull(oidc_cache_local_get_or_compute(cache, "b", test_compute, &compute_count));
+	ck_assert(oidc_cache_local_set_build(cache, "a", NULL, NULL, test_compute, &compute_count) == TRUE);
+	ck_assert(oidc_cache_local_set_build(cache, "b", NULL, NULL, test_compute, &compute_count) == TRUE);
 	ck_assert_int_eq(compute_count, 2);
 
-	/* full: c is neither computed nor cached */
-	ck_assert_ptr_null(oidc_cache_local_get_or_compute(cache, "c", test_compute, &compute_count));
+	/* full: c is neither built nor cached */
+	ck_assert(oidc_cache_local_set_build(cache, "c", NULL, NULL, test_compute, &compute_count) == FALSE);
 	ck_assert_int_eq(compute_count, 2);
 
 	/* the earlier entries are still served */
-	ck_assert_ptr_nonnull(oidc_cache_local_get(cache, "a"));
-	ck_assert_ptr_nonnull(oidc_cache_local_get(cache, "b"));
-	ck_assert_ptr_null(oidc_cache_local_get(cache, "c"));
+	ck_assert_ptr_nonnull(test_get(cache, "a"));
+	ck_assert_ptr_nonnull(test_get(cache, "b"));
+	ck_assert_ptr_null(test_get(cache, "c"));
 }
 END_TEST
 
@@ -178,16 +215,16 @@ START_TEST(test_cache_local_bound_evicts_one_when_full) {
 	/* evict_on_full = 1: inserting past the bound evicts a single (LRU) entry, not the whole cache */
 	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "lru", 2, 1, test_free_value, NULL, NULL);
 
-	oidc_cache_local_set(cache, "a", mkval(1));
-	oidc_cache_local_set(cache, "b", mkval(2));
+	test_set(cache, "a", mkval(1));
+	test_set(cache, "b", mkval(2));
 	ck_assert_int_eq(_free_count, 0);
 
 	/* the third insert evicts exactly one entry (not both) and stores c */
-	oidc_cache_local_set(cache, "c", mkval(3));
+	test_set(cache, "c", mkval(3));
 	ck_assert_int_eq(_free_count, 1);
-	ck_assert_ptr_nonnull(oidc_cache_local_get(cache, "c"));
+	ck_assert_ptr_nonnull(test_get(cache, "c"));
 	/* exactly one of the two originals survives alongside c (which one is the LRU tie-break) */
-	int survivors = (oidc_cache_local_get(cache, "a") != NULL) + (oidc_cache_local_get(cache, "b") != NULL);
+	int survivors = (test_get(cache, "a") != NULL) + (test_get(cache, "b") != NULL);
 	ck_assert_int_eq(survivors, 1);
 
 	/* the remaining values are freed by the cache's pool cleanup at teardown */
@@ -208,16 +245,16 @@ START_TEST(test_cache_local_warns_on_young_eviction) {
 
 	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "warn", 2, 1, test_free_value, test_warn, NULL);
 
-	oidc_cache_local_set(cache, "a", mkval(1));
-	oidc_cache_local_set(cache, "b", mkval(2));
+	test_set(cache, "a", mkval(1));
+	test_set(cache, "b", mkval(2));
 	ck_assert_int_eq(_warn_count, 0);
 
 	/* overflow evicts a just-inserted (young) entry, so the warn hook fires once */
-	oidc_cache_local_set(cache, "c", mkval(3));
+	test_set(cache, "c", mkval(3));
 	ck_assert_int_eq(_warn_count, 1);
 
 	/* a further overflow within the rate-limit window is suppressed */
-	oidc_cache_local_set(cache, "d", mkval(4));
+	test_set(cache, "d", mkval(4));
 	ck_assert_int_eq(_warn_count, 1);
 }
 END_TEST
@@ -229,9 +266,9 @@ START_TEST(test_cache_local_cleanup_frees_values) {
 	_free_count = 0;
 
 	oidc_cache_local_t *cache = oidc_cache_local_create(child, "cln", 8, 0, test_free_value, NULL, NULL);
-	oidc_cache_local_set(cache, "a", mkval(1));
-	oidc_cache_local_set(cache, "b", mkval(2));
-	oidc_cache_local_set(cache, "c", mkval(3));
+	test_set(cache, "a", mkval(1));
+	test_set(cache, "b", mkval(2));
+	test_set(cache, "c", mkval(3));
 	ck_assert_int_eq(_free_count, 0);
 
 	/* destroying the pool runs the cache cleanup, which frees every stored value */
@@ -246,37 +283,13 @@ START_TEST(test_cache_local_null_safe) {
 	int v = 1;
 
 	/* a NULL cache is tolerated everywhere */
-	ck_assert_ptr_null(oidc_cache_local_get(NULL, "k"));
-	oidc_cache_local_set(NULL, "k", &v);
-	ck_assert_ptr_null(oidc_cache_local_get_or_compute(NULL, "k", test_compute, NULL));
+	ck_assert_ptr_null(test_get(NULL, "k"));
+	ck_assert(test_set(NULL, "k", &v) == FALSE);
+	oidc_cache_local_clear(NULL);
 
 	/* a NULL key is tolerated too */
-	ck_assert_ptr_null(oidc_cache_local_get(cache, NULL));
-	oidc_cache_local_set(cache, NULL, &v);
-	ck_assert_ptr_null(oidc_cache_local_get_or_compute(cache, NULL, test_compute, NULL));
-}
-END_TEST
-
-/*
- * get_or_compute hands the caller a cache-owned pointer and then drops the lock, which only holds
- * up while nothing can evict the entry underneath it. On an evicting cache it must therefore refuse
- * outright rather than return a pointer another thread may free; callers treat that exactly like a
- * full cache and compute per request.
- */
-START_TEST(test_cache_local_get_or_compute_refuses_on_evicting_cache) {
-	int compute_count = 0;
-	oidc_cache_local_t *evicting = oidc_cache_local_create(pool, "evict", 8, 1, NULL, NULL, NULL);
-	oidc_cache_local_t *stable = oidc_cache_local_create(pool, "stable", 8, 0, NULL, NULL, NULL);
-
-	/* refused, and `compute` is not even run */
-	ck_assert_ptr_null(oidc_cache_local_get_or_compute(evicting, "k", test_compute, &compute_count));
-	ck_assert_int_eq(compute_count, 0);
-	/* nothing was stored either */
-	ck_assert_ptr_null(oidc_cache_local_get(evicting, "k"));
-
-	/* the same call against a cache that never evicts is unaffected */
-	ck_assert_ptr_nonnull(oidc_cache_local_get_or_compute(stable, "k", test_compute, &compute_count));
-	ck_assert_int_eq(compute_count, 1);
+	ck_assert_ptr_null(test_get(cache, NULL));
+	ck_assert(test_set(cache, NULL, &v) == FALSE);
 }
 END_TEST
 
@@ -510,7 +523,7 @@ START_TEST(test_cache_local_survives_compaction) {
 
 	for (int i = 0; i < churn; i++) {
 		snprintf(key, sizeof(key), "key-%06d", i);
-		oidc_cache_local_set(cache, key, mkval(i));
+		test_set(cache, key, mkval(i));
 	}
 
 	/* the bound held: everything but max_entries values was evicted and freed exactly once */
@@ -527,7 +540,7 @@ START_TEST(test_cache_local_survives_compaction) {
 	int present = 0;
 	for (int i = 0; i < churn; i++) {
 		snprintf(key, sizeof(key), "key-%06d", i);
-		const int *v = (const int *)oidc_cache_local_get(cache, key);
+		const int *v = (const int *)test_get(cache, key);
 		if (v == NULL)
 			continue;
 		present++;
@@ -565,7 +578,7 @@ START_TEST(test_cache_local_churn_does_not_grow_without_bound) {
 	for (int i = 0; i < max_entries; i++) {
 		snprintf(key, 24, "warm-%018d", i);
 		key[23] = 'k';
-		oidc_cache_local_set(cache, key, mkval(i));
+		test_set(cache, key, mkval(i));
 	}
 
 	before = oidc_test_resident_bytes();
@@ -576,7 +589,7 @@ START_TEST(test_cache_local_churn_does_not_grow_without_bound) {
 	for (int i = 0; i < 20000; i++) {
 		snprintf(key, 24, "sess-%018d", i);
 		key[23] = 'k';
-		oidc_cache_local_set(cache, key, mkval(i));
+		test_set(cache, key, mkval(i));
 	}
 
 	after = oidc_test_resident_bytes();
@@ -605,8 +618,7 @@ int main(void) {
 	tcase_add_checked_fixture(core, test_cache_local_setup, test_cache_local_teardown);
 	tcase_add_test(core, test_cache_local_basic_set_get);
 	tcase_add_test(core, test_cache_local_overwrite_frees_old);
-	tcase_add_test(core, test_cache_local_get_or_compute_memoizes);
-	tcase_add_test(core, test_cache_local_get_or_compute_refuses_on_evicting_cache);
+	tcase_add_test(core, test_cache_local_miss_then_build_then_hit);
 	tcase_add_test(core, test_cache_local_bound_stops_when_full);
 	tcase_add_test(core, test_cache_local_bound_evicts_one_when_full);
 	tcase_add_test(core, test_cache_local_warns_on_young_eviction);

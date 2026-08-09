@@ -85,10 +85,36 @@ void oidc_authz_pcre_cache_init(apr_pool_t *pool) {
  * compiling and caching it on first use; returns NULL when the cache is not initialized, the
  * cache is full or the pattern does not compile - the caller then compiles per-request as before
  */
+struct oidc_authz_pcre_use_ctx {
+	request_rec *r;
+	struct oidc_pcre *pcre;
+};
+
+/* under the read lock: wrap the shared compiled program in a request-local alias, so match state
+ * stays per-request and the program cannot go away between the lookup and its use */
+static void oidc_authz_pcre_cache_use(void *value, void *baton) {
+	struct oidc_authz_pcre_use_ctx *ctx = baton;
+	ctx->pcre = oidc_pcre_alias(ctx->r->pool, (const struct oidc_pcre *)value);
+}
+
+/* a compiled program is a pure function of its pattern, so a cached entry is never stale. Saying so
+ * is what stops a second thread that also missed from freeing and rebuilding the entry the first one
+ * just stored - which would pull the compiled program out from under whoever already aliased it */
+static int oidc_authz_pcre_cache_valid(void *value, const void *ctx) {
+	return 1;
+}
+
 static struct oidc_pcre *oidc_authz_pcre_cache_get(request_rec *r, const char *spec) {
-	const struct oidc_pcre *cached =
-	    oidc_cache_local_get_or_compute(_oidc_authz_pcre_cache, spec, oidc_authz_pcre_compile, NULL);
-	return (cached != NULL) ? oidc_pcre_alias(r->pool, cached) : NULL;
+	struct oidc_authz_pcre_use_ctx ctx = {.r = r, .pcre = NULL};
+	if (oidc_cache_local_get_use(_oidc_authz_pcre_cache, spec, NULL, NULL, oidc_authz_pcre_cache_use, &ctx) == TRUE)
+		return ctx.pcre;
+	/* a miss: compile it under the write lock, then take the alias the same way. Nothing evicts
+	 * from this cache, so the entry cannot vanish in between; when it is full nothing was stored
+	 * and the second lookup misses too, leaving the caller to compile per request */
+	oidc_cache_local_set_build(_oidc_authz_pcre_cache, spec, oidc_authz_pcre_cache_valid, NULL,
+				   oidc_authz_pcre_compile, NULL);
+	oidc_cache_local_get_use(_oidc_authz_pcre_cache, spec, NULL, NULL, oidc_authz_pcre_cache_use, &ctx);
+	return ctx.pcre;
 }
 
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, oidc_json_t *val, const char *key) {

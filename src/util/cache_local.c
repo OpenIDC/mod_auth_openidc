@@ -289,94 +289,6 @@ void oidc_cache_local_clear(oidc_cache_local_t *cache) {
 	oidc_cache_local_unlock(cache);
 }
 
-void *oidc_cache_local_get(oidc_cache_local_t *cache, const char *key) {
-	oidc_cache_local_node_t *node = NULL;
-	void *value = NULL;
-	if ((cache == NULL) || (key == NULL))
-		return NULL;
-	oidc_cache_local_rdlock(cache);
-	node = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
-	if (node != NULL) {
-		oidc_cache_local_touch(node);
-		value = node->value;
-	}
-	oidc_cache_local_unlock(cache);
-	return value;
-}
-
-void oidc_cache_local_set(oidc_cache_local_t *cache, const char *key, void *value) {
-	apr_byte_t stored = FALSE;
-	oidc_cache_local_node_t *existing = NULL;
-
-	if ((cache == NULL) || (key == NULL))
-		return;
-
-	oidc_cache_local_wrlock(cache);
-	existing = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
-	if (existing != NULL) {
-		/* overwrite: release the old value and update in place (apr_hash keeps the interned key) */
-		if (cache->free_value != NULL)
-			cache->free_value(existing->value);
-		existing->value = value;
-		existing->access = apr_time_now();
-		stored = TRUE;
-	} else if (oidc_cache_local_make_room_unlocked(cache) == TRUE) {
-		oidc_cache_local_insert(cache, key, value);
-		stored = TRUE;
-	}
-	oidc_cache_local_unlock(cache);
-
-	/* ownership was transferred to us; if we could not store it, release it */
-	if ((stored == FALSE) && (cache->free_value != NULL))
-		cache->free_value(value);
-}
-
-void *oidc_cache_local_get_or_compute(oidc_cache_local_t *cache, const char *key, oidc_cache_local_compute_fn compute,
-				      void *baton) {
-	oidc_cache_local_node_t *node = NULL;
-	void *value = NULL;
-
-	if ((cache == NULL) || (key == NULL) || (compute == NULL))
-		return NULL;
-
-	/*
-	 * this hands the caller the cache-owned value and then drops the lock, so it is only sound on
-	 * a cache that never evicts: on one that does, another thread can pick this very entry as its
-	 * LRU victim and run free_value on it while the caller is still holding the pointer. Refuse
-	 * rather than hand out a pointer that may not survive the return; the caller falls back to
-	 * computing per request, exactly as it does when the cache is full. Use
-	 * oidc_cache_local_get_use() to read from an evicting cache.
-	 */
-	if (cache->evict_on_full != 0)
-		return NULL;
-
-	oidc_cache_local_rdlock(cache);
-	node = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
-	if (node != NULL) {
-		oidc_cache_local_touch(node);
-		value = node->value;
-	}
-	oidc_cache_local_unlock(cache);
-	if (value != NULL)
-		return value;
-
-	oidc_cache_local_wrlock(cache);
-	/* re-check under the write lock: another thread may have inserted the key meanwhile */
-	node = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
-	if (node != NULL) {
-		value = node->value;
-	} else if (oidc_cache_local_make_room_unlocked(cache) == TRUE) {
-		/* compute (and any process-lifetime allocation) happens under the write lock,
-		 * since the cache pool is not thread-safe */
-		value = compute(cache->pool, key, baton);
-		if (value != NULL)
-			oidc_cache_local_insert(cache, key, value);
-	}
-	oidc_cache_local_unlock(cache);
-
-	return value;
-}
-
 apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
 				    const void *vctx, oidc_cache_local_use_fn use, void *ubaton) {
 	oidc_cache_local_node_t *node = NULL;
@@ -409,7 +321,7 @@ apr_byte_t oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key
 	existing = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
 	if ((existing != NULL) && (validate != NULL) && (validate(existing->value, vctx) != 0)) {
 		/*
-		 * re-check under the write lock, as get_or_compute does: a caller arrives here having
+		 * re-check under the write lock: a caller arrives here having
 		 * found the entry stale (or absent) on the read path, and several of them can find
 		 * that at the same moment and queue on this lock. Only the first needs to rebuild -
 		 * for the rest the entry is fresh again by the time they get in.

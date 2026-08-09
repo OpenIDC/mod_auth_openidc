@@ -43,6 +43,10 @@
  *
  * Values are owned by the cache; `free_value` (if given) is called for each value when it is
  * evicted or when the cache is torn down at pool cleanup. The cache never copies values.
+ *
+ * There are exactly two ways in and out - oidc_cache_local_get_use() and oidc_cache_local_set_build()
+ * - and both run the caller's callback with the lock held. Nothing hands a stored pointer back past
+ * the lock, because on a cache that evicts, another thread may free it the moment the lock drops.
  */
 typedef struct oidc_cache_local_t oidc_cache_local_t;
 
@@ -93,34 +97,6 @@ oidc_cache_local_t *oidc_cache_local_create(apr_pool_t *pool, const char *name, 
 void oidc_cache_local_clear(oidc_cache_local_t *cache);
 
 /*
- * look up `key`; returns the stored value or NULL (read-locked).
- *
- * The value is BORROWED: it stays owned by the cache and the lock is gone by the time this returns,
- * so the pointer only remains valid while nothing can evict the entry. That makes this safe on a
- * cache created with `evict_on_full` == 0, and for single-threaded inspection (which is all the
- * unit tests do with it); everything else must read through oidc_cache_local_get_use(), which runs
- * the caller's callback while the read lock is still held. No production caller uses this.
- */
-void *oidc_cache_local_get(oidc_cache_local_t *cache, const char *key);
-
-/* store `value` under `key`, taking ownership of `value`; replaces (and frees) any existing value.
- * When the cache is full and does not reset, `value` is not stored and is freed via `free_value`. */
-void oidc_cache_local_set(oidc_cache_local_t *cache, const char *key, void *value);
-
-/*
- * return the value cached for `key`; on a miss, compute it under the write lock (with a re-check),
- * store and return it. Returns NULL when the cache is full and does not evict, or when `compute`
- * returns NULL. The returned value is owned by the cache; do not free it.
- *
- * Like oidc_cache_local_get() this hands out a BORROWED pointer after dropping the lock, so it is
- * only defined on a cache created with `evict_on_full` == 0 - one whose entries live as long as the
- * cache does. On an evicting cache it refuses and returns NULL rather than hand back a pointer
- * another thread may free; read those through oidc_cache_local_get_use() instead.
- */
-void *oidc_cache_local_get_or_compute(oidc_cache_local_t *cache, const char *key, oidc_cache_local_compute_fn compute,
-				      void *baton);
-
-/*
  * look up `key`; when it is present and fresh (validate is NULL or validate(value, vctx) is
  * non-zero), invoke use(value, ubaton) while the read lock is held and return TRUE; otherwise
  * return FALSE. Running `use` under the lock lets the caller safely take a reference to or copy the
@@ -133,7 +109,7 @@ apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, 
 /*
  * store the entry for `key` produced by `build` (called under the write lock so the cache pool is
  * used single-threaded), replacing and freeing any existing entry; honors the bound the same way as
- * set/get_or_compute. Returns TRUE when `key` holds a value on return, FALSE when `build` declined
+ * set_build's own bound. Returns TRUE when `key` holds a value on return, FALSE when `build` declined
  * (returned NULL) or the cache was full and does not evict. Use this after the (expensive) work of
  * producing the value has been done outside the lock, paired with get_use for the fast lookup path.
  *
@@ -141,7 +117,7 @@ apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, 
  * lock is released, and this is the primitive the evicting caches use, so another thread could free
  * it before the caller ever looked at it. Read the value back with get_use if you need it.
  *
- * `validate` re-checks under the write lock, in the same spirit as get_or_compute: when an entry is
+ * `validate` re-checks under the write lock: when an entry is
  * already present and validate(value, vctx) is non-zero, it is fresh again - another thread rebuilt
  * it while this one waited for the lock - and it is returned untouched instead of being freed and
  * rebuilt. Pass the same validate/vctx used with get_use. Passing NULL keeps the unconditional
