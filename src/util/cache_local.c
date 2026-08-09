@@ -27,6 +27,7 @@
 
 #include "util/cache_local.h"
 
+#include <apr_atomic.h>
 #include <apr_hash.h>
 #include <apr_strings.h>
 #include <apr_thread_rwlock.h>
@@ -43,11 +44,20 @@
 #define OIDC_CACHE_LOCAL_COMPACT_FACTOR 4
 
 /* a stored value plus its last-access time; the hash maps interned keys to these nodes so eviction
- * can pick the least-recently-used one instead of clearing the whole cache */
+ * can pick the least-recently-used one instead of clearing the whole cache.
+ *
+ * The stamp is in whole seconds, which is all the LRU ordering ever resolved anyway (see
+ * oidc_cache_local_touch), and 32 bits wide so it can be read and written through apr_atomic_*:
+ * touch() runs under the READ lock, where concurrent readers stamp the same node. */
 typedef struct oidc_cache_local_node_t {
 	void *value;
-	apr_time_t access;
+	apr_uint32_t access;
 } oidc_cache_local_node_t;
+
+/* seconds, in the same arbitrary epoch for every node; only differences are ever used */
+static apr_uint32_t oidc_cache_local_now_sec(void) {
+	return (apr_uint32_t)apr_time_sec(apr_time_now());
+}
 
 struct oidc_cache_local_t {
 	/* the caller's (process/worker lifetime) pool; values built by the callbacks are allocated here */
@@ -66,10 +76,11 @@ struct oidc_cache_local_t {
 	 * create time so the multiplication cannot overflow at runtime) */
 	apr_uint32_t evictions;
 	apr_uint32_t compact_at;
+	/* seconds, as the nodes' stamps are; only touched under the write lock */
 	oidc_cache_local_free_fn free_value;
 	oidc_cache_local_log_fn log_full;
 	void *log_ctx;
-	apr_time_t last_warn;
+	apr_uint32_t last_warn;
 };
 
 static void oidc_cache_local_rdlock(oidc_cache_local_t *cache) {
@@ -91,23 +102,22 @@ static void oidc_cache_local_unlock(oidc_cache_local_t *cache) {
 }
 
 /*
- * refresh an entry's last-access stamp for the LRU ordering, but only when it has drifted by a
- * second or more, so hot entries read by many threads are not written on every lookup. The write
- * happens under the read lock and so races with concurrent readers doing the same, but the race is
- * benign: it is an aligned 64-bit store (never torn on the platforms we target) and the value only
- * drives which entry is evicted first, never correctness.
+ * refresh an entry's last-access stamp for the LRU ordering, but only when it has actually moved on,
+ * so hot entries read by many threads are not written on every lookup. This runs under the READ
+ * lock, so concurrent readers stamp the same node; the store is atomic and the value only decides
+ * which entry is evicted first, never correctness.
  */
 static void oidc_cache_local_touch(oidc_cache_local_node_t *node) {
-	const apr_time_t now = apr_time_now();
-	if ((now - node->access) >= apr_time_from_sec(1))
-		node->access = now;
+	const apr_uint32_t now = oidc_cache_local_now_sec();
+	if (apr_atomic_read32(&node->access) != now)
+		apr_atomic_set32(&node->access, now);
 }
 
 /* wrap value in a freshly-stamped node and insert it under a private copy of key; hold the write lock */
 static void oidc_cache_local_insert(oidc_cache_local_t *cache, const char *key, void *value) {
 	oidc_cache_local_node_t *node = apr_palloc(cache->kpool, sizeof(oidc_cache_local_node_t));
 	node->value = value;
-	node->access = apr_time_now();
+	node->access = oidc_cache_local_now_sec();
 	apr_hash_set(cache->hash, apr_pstrdup(cache->kpool, key), APR_HASH_KEY_STRING, node);
 }
 
@@ -166,7 +176,7 @@ static void oidc_cache_local_evict_lru_unlocked(oidc_cache_local_t *cache) {
 	for (apr_hash_index_t *hi = apr_hash_first(NULL, cache->hash); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, &key, &klen, &val);
 		oidc_cache_local_node_t *node = val;
-		if ((victim == NULL) || (node->access < victim->access)) {
+		if ((victim == NULL) || (apr_atomic_read32(&node->access) < apr_atomic_read32(&victim->access))) {
 			victim = node;
 			victim_key = key;
 			victim_klen = klen;
@@ -178,9 +188,9 @@ static void oidc_cache_local_evict_lru_unlocked(oidc_cache_local_t *cache) {
 	apr_hash_set(cache->hash, victim_key, victim_klen, NULL);
 
 	if (cache->log_full != NULL) {
-		const apr_time_t now = apr_time_now();
-		if (((now - victim->access) < apr_time_from_sec(OIDC_CACHE_LOCAL_YOUNG_EVICT_SEC)) &&
-		    ((now - cache->last_warn) > apr_time_from_sec(OIDC_CACHE_LOCAL_WARN_INTERVAL_SEC))) {
+		const apr_uint32_t now = oidc_cache_local_now_sec();
+		if (((now - apr_atomic_read32(&victim->access)) < OIDC_CACHE_LOCAL_YOUNG_EVICT_SEC) &&
+		    ((now - cache->last_warn) > OIDC_CACHE_LOCAL_WARN_INTERVAL_SEC)) {
 			cache->last_warn = now;
 			cache->log_full(cache->log_ctx, cache->name, cache->max_entries);
 		}
@@ -190,6 +200,13 @@ static void oidc_cache_local_evict_lru_unlocked(oidc_cache_local_t *cache) {
 		cache->free_value(victim->value);
 
 	cache->evictions++;
+}
+
+/* an entry left the hash: its interned key and node stay allocated until the next rebuild, so count
+ * it and rebuild once enough have accumulated. Must hold the write lock. */
+static void oidc_cache_local_account_removal_unlocked(oidc_cache_local_t *cache) {
+	if (cache->evictions >= cache->compact_at)
+		oidc_cache_local_compact_unlocked(cache);
 }
 
 /* ensure there is room for one more entry; must hold the write lock. Returns FALSE only when the
@@ -203,8 +220,7 @@ static apr_byte_t oidc_cache_local_make_room_unlocked(oidc_cache_local_t *cache)
 		return FALSE;
 	oidc_cache_local_evict_lru_unlocked(cache);
 	/* reclaim what the evicted entries left interned once enough of them have accumulated */
-	if (cache->evictions >= cache->compact_at)
-		oidc_cache_local_compact_unlocked(cache);
+	oidc_cache_local_account_removal_unlocked(cache);
 	return TRUE;
 }
 
@@ -261,14 +277,18 @@ oidc_cache_local_t *oidc_cache_local_create(apr_pool_t *pool, const char *name, 
 	cache->compact_at = (compact_at > APR_UINT32_MAX) ? APR_UINT32_MAX : (apr_uint32_t)compact_at;
 
 #if APR_HAS_THREADS
-	if (apr_thread_rwlock_create(&cache->rwlock, pool) != APR_SUCCESS)
+	if (apr_thread_rwlock_create(&cache->rwlock, pool) != APR_SUCCESS) {
+		apr_pool_destroy(cache->pool);
 		return NULL;
+	}
 #endif
 
 	/* the hash, its interned keys and the nodes live in a subpool of their own so compaction can
 	 * return the memory of superseded entries; see oidc_cache_local_compact_unlocked */
-	if (apr_pool_create(&cache->kpool, cache->pool) != APR_SUCCESS)
+	if (apr_pool_create(&cache->kpool, cache->pool) != APR_SUCCESS) {
+		apr_pool_destroy(cache->pool);
 		return NULL;
+	}
 	cache->hash = apr_hash_make(cache->kpool);
 	/* a PRE-cleanup so free_value runs while the hash - and any per-entry subpools a caller nests
 	 * inside its values (children of this pool) - are still valid; a regular cleanup would run only
@@ -321,17 +341,15 @@ apr_byte_t oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key
 	existing = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
 	if ((existing != NULL) && (validate != NULL) && (validate(existing->value, vctx) != 0)) {
 		/*
-		 * re-check under the write lock: a caller arrives here having
-		 * found the entry stale (or absent) on the read path, and several of them can find
-		 * that at the same moment and queue on this lock. Only the first needs to rebuild -
-		 * for the rest the entry is fresh again by the time they get in.
+		 * re-check under the write lock: a caller arrives here having found the entry stale
+		 * (or absent) on the read path, and several of them can find that at the same moment
+		 * and queue on this lock. Only the first needs to rebuild - for the rest the entry is
+		 * fresh again by the time they get in.
 		 *
-		 * Without this they each free the entry the winner just built and build it again,
-		 * which for the jwks cache is not merely wasted work: its free_value does not free
-		 * but retires the keys onto a list released only at pool cleanup, so every redundant
-		 * rebuild permanently retires another full key set. That is what makes the "bounded
-		 * by key rollovers" note on that list true rather than bounded by rollovers times
-		 * the number of threads that happened to refresh together.
+		 * Without it they each free the entry the winner just built and build it again. For a
+		 * cache whose entries are pure functions of their key that is merely wasted work; for
+		 * the authz-pcre cache it is a use-after-free, since the freed compiled program may
+		 * already have been aliased into a running request.
 		 */
 		value = existing->value;
 		oidc_cache_local_touch(existing);
@@ -343,9 +361,13 @@ apr_byte_t oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key
 		value = build(cache->pool, key, baton);
 		if (value != NULL) {
 			existing->value = value;
-			existing->access = apr_time_now();
+			existing->access = oidc_cache_local_now_sec();
 		} else {
+			/* the rebuild declined, so the entry goes; it leaves an interned key and a node
+			 * behind exactly as an eviction does, and is counted the same way */
 			apr_hash_set(cache->hash, key, APR_HASH_KEY_STRING, NULL);
+			cache->evictions++;
+			oidc_cache_local_account_removal_unlocked(cache);
 		}
 	} else if (oidc_cache_local_make_room_unlocked(cache) == TRUE) {
 		value = build(cache->pool, key, baton);
