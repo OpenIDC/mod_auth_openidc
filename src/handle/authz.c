@@ -46,76 +46,10 @@
 #include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
-#include "util/cache_local.h"
 #include "util/pcre_subst.h"
 #include "util/request_state.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
-
-/*
- * process-lifetime cache of compiled Require-claim regular expressions: the patterns come from
- * config-time constant (or expression-expanded) Require lines, so their number is small and
- * stable; compiling once per process instead of once per evaluation removes the dominant cost
- * of every regex authorization match. Consumers borrow the compiled program by reference (via
- * oidc_pcre_alias), so a live entry is never evicted: the cache simply stops caching once full.
- */
-static oidc_cache_local_t *_oidc_authz_pcre_cache = NULL;
-
-/* bounds the cache in case expression-expanded Require lines generate ever-changing patterns */
-#define OIDC_AUTHZ_PCRE_CACHE_MAX_ENTRIES 64
-
-/* oidc_cache_local free/compute adapters over the typed oidc_pcre API */
-static void oidc_authz_pcre_free_value(void *value) {
-	oidc_pcre_free((struct oidc_pcre *)value);
-}
-
-static void *oidc_authz_pcre_compile(apr_pool_t *pool, const char *key, void *baton) {
-	char *s_err = NULL;
-	return oidc_pcre_compile(pool, key, &s_err);
-}
-
-void oidc_authz_pcre_cache_init(apr_pool_t *pool) {
-	/* FALSE = stop-on-full (compiled programs are borrowed by reference, never evicted); no warn hook */
-	_oidc_authz_pcre_cache = oidc_cache_local_create(pool, "authz-pcre", OIDC_AUTHZ_PCRE_CACHE_MAX_ENTRIES, FALSE,
-							 oidc_authz_pcre_free_value, NULL, NULL);
-}
-
-/*
- * obtain a request-local alias to the cached compiled program for the specified pattern,
- * compiling and caching it on first use; returns NULL when the cache is not initialized, the
- * cache is full or the pattern does not compile - the caller then compiles per-request as before
- */
-struct oidc_authz_pcre_use_ctx {
-	request_rec *r;
-	struct oidc_pcre *pcre;
-};
-
-/* under the read lock: wrap the shared compiled program in a request-local alias, so match state
- * stays per-request and the program cannot go away between the lookup and its use */
-static void oidc_authz_pcre_cache_use(void *value, void *baton) {
-	struct oidc_authz_pcre_use_ctx *ctx = baton;
-	ctx->pcre = oidc_pcre_alias(ctx->r->pool, (const struct oidc_pcre *)value);
-}
-
-/* a compiled program is a pure function of its pattern, so a cached entry is never stale. Saying so
- * is what stops a second thread that also missed from freeing and rebuilding the entry the first one
- * just stored - which would pull the compiled program out from under whoever already aliased it */
-static int oidc_authz_pcre_cache_valid(void *value, const void *ctx) {
-	return 1;
-}
-
-static struct oidc_pcre *oidc_authz_pcre_cache_get(request_rec *r, const char *spec) {
-	struct oidc_authz_pcre_use_ctx ctx = {.r = r, .pcre = NULL};
-	if (oidc_cache_local_get_use(_oidc_authz_pcre_cache, spec, NULL, NULL, oidc_authz_pcre_cache_use, &ctx) == TRUE)
-		return ctx.pcre;
-	/* a miss: compile it under the write lock, then take the alias the same way. Nothing evicts
-	 * from this cache, so the entry cannot vanish in between; when it is full nothing was stored
-	 * and the second lookup misses too, leaving the caller to compile per request */
-	oidc_cache_local_set_build(_oidc_authz_pcre_cache, spec, oidc_authz_pcre_cache_valid, NULL,
-				   oidc_authz_pcre_compile, NULL);
-	oidc_cache_local_get_use(_oidc_authz_pcre_cache, spec, NULL, NULL, oidc_authz_pcre_cache_use, &ctx);
-	return ctx.pcre;
-}
 
 static apr_byte_t oidc_authz_match_json_string(request_rec *r, const char *spec, oidc_json_t *val, const char *key) {
 	return (_oidc_strcmp(oidc_json_string_value(val), spec) == 0);
@@ -304,9 +238,7 @@ static apr_byte_t oidc_authz_match_pcre(request_rec *r, const char *spec, oidc_j
 	if ((spec == NULL) || (val == NULL) || (key == NULL))
 		return FALSE;
 
-	preg = oidc_authz_pcre_cache_get(r, spec);
-	if (preg == NULL)
-		preg = oidc_pcre_compile(r->pool, spec, &s_err);
+	preg = oidc_pcre_compile(r->pool, spec, &s_err);
 	if (preg == NULL) {
 		oidc_error(r, "pattern [%s] is not a valid regular expression: %s", spec, s_err ? s_err : "<n/a>");
 		return FALSE;

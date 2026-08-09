@@ -58,7 +58,6 @@ struct oidc_pcre;
  * is allocated from `pool` unless the compile succeeds, so failing is free for a caller that hands
  * in a long-lived pool */
 struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str);
-struct oidc_pcre *oidc_pcre_alias(apr_pool_t *pool, const struct oidc_pcre *src);
 char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *, const char *, int, const char *);
 int oidc_pcre_exec(apr_pool_t *, struct oidc_pcre *, const char *, int, char **);
 void oidc_pcre_free(struct oidc_pcre *);

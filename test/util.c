@@ -208,12 +208,6 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 		exit(-1);
 	}
 
-	/* mirrors oidc_post_config; the pool cleanups reset the cache statics between tests */
-	oidc_authz_pcre_cache_init(request->server->process->pconf);
-	oidc_proto_jwks_cache_init(request->server->process->pconf, request->server);
-	oidc_metadata_provider_cache_init(request->server->process->pconf, request->server);
-	oidc_session_cache_init(request->server->process->pconf, request->server);
-	oidc_util_appinfo_cache_init(request->server->process->pconf, request->server);
 	oidc_http_curl_pool_init(request->server->process->pconf);
 
 	return request;

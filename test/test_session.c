@@ -502,9 +502,9 @@ START_TEST(test_session_format_version) {
 }
 END_TEST
 
-/* mutating a session whose parsed state is shared with the process-level cache
- * copies the state first (copy-on-write) */
-START_TEST(test_session_state_unshare_on_write) {
+/* a session round-trips through the cache backend: load it back by uuid, mutate it, and load it
+ * again; a state-less save then clears the sid/sub logout indexes */
+START_TEST(test_session_load_mutate_reload) {
 	request_rec *r = oidc_test_request_get();
 	const char *uuid = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -520,17 +520,15 @@ START_TEST(test_session_state_unshare_on_write) {
 	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
 	oidc_session_t *z2 = NULL;
 	ck_assert_int_eq(oidc_session_load(r, &z2), TRUE);
-	ck_assert_int_eq(z2->state_shared, TRUE);
-	/* the first mutation must un-share the state */
+	ck_assert_str_eq(oidc_session_get_issuer(r, z2), "https://idp.example.com");
 	oidc_session_set_issuer(r, z2, "https://other.example.org");
-	ck_assert_int_eq(z2->state_shared, FALSE);
 	ck_assert_str_eq(oidc_session_get_issuer(r, z2), "https://other.example.org");
 	oidc_session_free(r, z2);
 
-	/* a second load of the unchanged document is served straight from the parsed cache */
+	/* a second load still yields the document as it was stored */
 	oidc_session_t *z3 = NULL;
 	ck_assert_int_eq(oidc_session_load(r, &z3), TRUE);
-	ck_assert_int_eq(z3->state_shared, TRUE);
+	ck_assert_str_eq(oidc_session_get_issuer(r, z3), "https://idp.example.com");
 	oidc_session_free(r, z3);
 
 	/* saving a state-less session with sid/sub indexes clears those cache entries;
@@ -650,7 +648,7 @@ int main(void) {
 	tcase_add_test(c, test_session_load_cache_fallback_to_cookie);
 	tcase_add_test(c, test_session_cache_corruption);
 	tcase_add_test(c, test_session_format_version);
-	tcase_add_test(c, test_session_state_unshare_on_write);
+	tcase_add_test(c, test_session_load_mutate_reload);
 	tcase_add_test(c, test_session_claim_filtering);
 #ifdef USE_LIBJQ
 	tcase_add_test(c, test_session_claim_jq_filter);

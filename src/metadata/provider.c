@@ -34,83 +34,10 @@
 #include "http.h"
 #include "metrics.h"
 #include "proto/proto.h"
-#include "util/cache_local.h"
 #include "util/util.h"
 
 #include <apr_file_io.h>
 #include <apr_strings.h>
-
-/*
- * process-lifetime cache of parsed provider metadata from the metadata directory, keyed by the
- * metadata file path and validated by the file's mtime+size, so the per-request disk read and
- * JSON parse only happen when the file actually changed; multi-process consistency comes from
- * the shared file's timestamp. Requires thread-safe (atomic) JSON reference counting: the init
- * function leaves the cache disabled otherwise and every request falls back to reading the file.
- */
-typedef struct oidc_metadata_provider_cache_entry_t {
-	apr_time_t mtime;
-	apr_off_t size;
-	oidc_json_t *json;
-} oidc_metadata_provider_cache_entry_t;
-
-static oidc_cache_local_t *_oidc_metadata_provider_cache = NULL;
-
-/* bounds the cache with many (multi-tenant) providers; on overflow it is simply reset */
-#define OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES 64
-
-static void oidc_metadata_provider_cache_free(void *value) {
-	oidc_json_decref(((oidc_metadata_provider_cache_entry_t *)value)->json);
-}
-
-/* freshness: the cached document is valid while the file's mtime and size are unchanged */
-static int oidc_metadata_provider_cache_valid(void *value, const void *ctx) {
-	const oidc_metadata_provider_cache_entry_t *entry = value;
-	const apr_finfo_t *fi = ctx;
-	return (entry->mtime == fi->mtime) && (entry->size == fi->size);
-}
-
-/* under the read lock: hand out a new (atomic) reference to the cached document */
-static void oidc_metadata_provider_cache_use(void *value, void *baton) {
-	oidc_metadata_provider_cache_entry_t *entry = value;
-	*(oidc_json_t **)baton = oidc_json_incref(entry->json);
-}
-
-struct oidc_metadata_provider_cache_build_ctx {
-	const apr_finfo_t *fi;
-	oidc_json_t *json;
-};
-
-/* under the write lock: build an entry stamped with the file's mtime+size referencing the document */
-static void *oidc_metadata_provider_cache_build(apr_pool_t *pool, const char *key, void *baton) {
-	const struct oidc_metadata_provider_cache_build_ctx *ctx = baton;
-	oidc_metadata_provider_cache_entry_t *entry = apr_palloc(pool, sizeof(oidc_metadata_provider_cache_entry_t));
-	entry->mtime = ctx->fi->mtime;
-	entry->size = ctx->fi->size;
-	entry->json = oidc_json_incref(ctx->json);
-	return entry;
-}
-
-void oidc_metadata_provider_cache_init(apr_pool_t *pool, server_rec *s) {
-	/* sharing parsed JSON across threads is only safe with atomic reference counting */
-	if (oidc_json_refcount_threadsafe() == FALSE)
-		return;
-	_oidc_metadata_provider_cache =
-	    oidc_cache_local_create(pool, "metadata-provider", OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES, TRUE,
-				    oidc_metadata_provider_cache_free, oidc_util_cache_local_warn, s);
-}
-
-/* return a new reference to the cached parsed document when the file is unchanged */
-static apr_byte_t oidc_metadata_provider_cache_get(const char *path, const apr_finfo_t *fi, oidc_json_t **json) {
-	return oidc_cache_local_get_use(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_valid, fi,
-					oidc_metadata_provider_cache_use, json);
-}
-
-/* store a new reference to the parsed document keyed by path, stamped with the file's mtime+size */
-static void oidc_metadata_provider_cache_set(const char *path, const apr_finfo_t *fi, oidc_json_t *json) {
-	struct oidc_metadata_provider_cache_build_ctx ctx = {.fi = fi, .json = json};
-	oidc_cache_local_set_build(_oidc_metadata_provider_cache, path, oidc_metadata_provider_cache_valid, fi,
-				   oidc_metadata_provider_cache_build, &ctx);
-}
 
 /*
  * check to see if JSON provider metadata is valid
@@ -251,19 +178,16 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	/* get the full file path to the provider metadata for this issuer */
 	const char *provider_path = oidc_metadata_provider_file_path(r, issuer);
 
-	/* check the last-modified timestamp (and size): it feeds the refresh-interval logic and
-	 * validates the process-level parsed-metadata cache */
+	/* check the last-modified timestamp */
 	apr_byte_t use_cache = TRUE;
 	apr_finfo_t fi;
 	oidc_json_t *j_cache = NULL;
 	apr_byte_t have_cache = FALSE;
-	const apr_byte_t file_exists =
-	    (apr_stat(&fi, provider_path, APR_FINFO_MTIME | APR_FINFO_SIZE, r->pool) == APR_SUCCESS);
 
 	/* see if we are refreshing metadata and we need a refresh */
 	if (oidc_cfg_provider_metadata_refresh_interval_get(cfg) > 0) {
 
-		have_cache = file_exists;
+		have_cache = (apr_stat(&fi, provider_path, APR_FINFO_MTIME, r->pool) == APR_SUCCESS);
 
 		if (have_cache == TRUE)
 			use_cache =
@@ -273,17 +197,8 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 		oidc_debug(r, "use_cache: %s", use_cache ? "yes" : "no");
 	}
 
-	/* serve the already-parsed metadata from the process-level cache when the file is unchanged */
-	if ((file_exists == TRUE) && (use_cache == TRUE) &&
-	    (oidc_metadata_provider_cache_get(provider_path, &fi, &j_cache) == TRUE)) {
-		*j_provider = j_cache;
-		return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
-	}
-
-	/* see if we have valid metadata already, if so, cache the parsed document and return it */
-	if ((file_exists == TRUE) && (oidc_metadata_file_read_json(r, provider_path, &j_cache) == TRUE) &&
-	    (use_cache == TRUE)) {
-		oidc_metadata_provider_cache_set(provider_path, &fi, j_cache);
+	/* see if we have valid metadata already, if so, return it */
+	if ((oidc_metadata_file_read_json(r, provider_path, &j_cache) == TRUE) && (use_cache == TRUE)) {
 		*j_provider = j_cache;
 		return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
 	}

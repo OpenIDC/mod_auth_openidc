@@ -77,7 +77,6 @@ LDADD = libtest.la ${top_builddir}/src/libauth_openidc.la libteststub.la ${LIBAD
 oidc_unit_tests = \
 	test_cfg \
 	test_config \
-	test_cache_local \
 	test_util \
 	test_jose \
 	test_http \

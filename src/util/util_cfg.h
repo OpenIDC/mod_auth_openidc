@@ -62,7 +62,7 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
 			   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding);
 void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char *claim_prefix,
 			       const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
-			       oidc_appinfo_encoding_t encoding, apr_byte_t cacheable);
+			       oidc_appinfo_encoding_t encoding);
 
 // expr.c
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr,

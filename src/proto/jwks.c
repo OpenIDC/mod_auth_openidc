@@ -44,165 +44,6 @@
 #include "proto/proto.h"
 #include "util/util.h"
 
-#include "util/cache_local.h"
-
-/*
- * process-lifetime cache of JWKs selection results: maps (jwks-uri, kid, x5t, kty) to the keys that
- * selection picked out of the provider's JWKs document, so repeated validations against the same
- * signing key skip the fetch of that document and the import of every key in it that selection would
- * only throw away again. Entries expire in lockstep with the JWKs refresh interval and the whole
- * cache is purged on a forced refresh (suspected key rollover).
- *
- * Entries hold the selected keys SERIALIZED, exactly as the pluggable oidc_cache backends hold
- * theirs, and a reader parses its own copy into its own request pool. That costs an import of the
- * one or two keys that matched, and in exchange nothing is ever shared: an entry is owned by the
- * cache alone, so eviction, replacement and purge are a plain apr_pool_destroy() with no reader to
- * coordinate with. The alternative - handing out the imported cjose keys by reference - cannot free
- * them at all, because the backend refcount is a plain unsigned int that request context must not
- * touch, and every mechanism for deferring that free (retire lists, entry refcounts) is complexity
- * this tier does not otherwise need.
- */
-typedef struct oidc_proto_jwks_cache_entry_t {
-	/* private subpool, so an evicted or replaced entry returns its memory; see oidc_cache_local_t */
-	apr_pool_t *pool;
-	apr_time_t expires;
-	/* the selected keys as a JSON array */
-	const char *json;
-} oidc_proto_jwks_cache_entry_t;
-
-static oidc_cache_local_t *_oidc_proto_jwks_cache = NULL;
-
-/* bounds the cache; reached only with many providers/kids, then the least-recently-used entry goes */
-#define OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES 64
-
-/* eviction, replacement, purge and teardown: the entry is owned by the cache and nothing else can
- * be reading it, so returning its subpool is the whole of it */
-static void oidc_proto_jwks_cache_free(void *value) {
-	apr_pool_destroy(((oidc_proto_jwks_cache_entry_t *)value)->pool);
-}
-
-/* freshness: a cached selection result is valid until its refresh-interval expiry */
-static int oidc_proto_jwks_cache_valid(void *value, const void *ctx) {
-	return ((const oidc_proto_jwks_cache_entry_t *)value)->expires > apr_time_now();
-}
-
-struct oidc_proto_jwks_cache_use_ctx {
-	request_rec *r;
-	const char **json;
-};
-
-/* under the read lock: take a private copy of the serialized keys and nothing more, so the lock is
- * held for a strdup and the parsing happens in the caller's own time */
-static void oidc_proto_jwks_cache_use(void *value, void *baton) {
-	const oidc_proto_jwks_cache_entry_t *entry = value;
-	const struct oidc_proto_jwks_cache_use_ctx *ctx = baton;
-	*(ctx->json) = apr_pstrdup(ctx->r->pool, entry->json);
-}
-
-struct oidc_proto_jwks_cache_build_ctx {
-	request_rec *r;
-	apr_hash_t *result;
-	int refresh_interval;
-};
-
-/*
- * under the write lock: serialize the selected keys into an entry of their own, stamped with the
- * refresh-interval expiry; returns NULL (not cached) when the subpool cannot be created or a key
- * cannot be serialized. The intermediate strings are built in the request pool so only the finished
- * document occupies the entry.
- */
-static void *oidc_proto_jwks_cache_build(apr_pool_t *pool, const char *key, void *baton) {
-	const struct oidc_proto_jwks_cache_build_ctx *ctx = baton;
-	apr_pool_t *entry_pool = NULL;
-	oidc_proto_jwks_cache_entry_t *entry = NULL;
-	apr_array_header_t *parts = apr_array_make(ctx->r->pool, apr_hash_count(ctx->result), sizeof(const char *));
-	void *val = NULL;
-
-	for (apr_hash_index_t *hi = apr_hash_first(NULL, ctx->result); hi; hi = apr_hash_next(hi)) {
-		char *s_jwk = NULL;
-		oidc_jose_error_t err;
-		apr_hash_this(hi, NULL, NULL, &val);
-		if (oidc_jwk_to_json(ctx->r->pool, (const oidc_jwk_t *)val, &s_jwk, &err) == FALSE) {
-			oidc_warn(ctx->r, "oidc_jwk_to_json failed: %s; not caching the selection",
-				  oidc_jose_e2s(ctx->r->pool, err));
-			return NULL;
-		}
-		APR_ARRAY_PUSH(parts, const char *) = s_jwk;
-	}
-
-	if (apr_pool_create(&entry_pool, pool) != APR_SUCCESS)
-		return NULL;
-	entry = apr_pcalloc(entry_pool, sizeof(oidc_proto_jwks_cache_entry_t));
-	entry->pool = entry_pool;
-	entry->expires = apr_time_now() + apr_time_from_sec(ctx->refresh_interval);
-	/* each element is already a complete JSON object, so the array is a join */
-	entry->json = apr_pstrcat(entry_pool, "[", apr_array_pstrcat(ctx->r->pool, parts, ','), "]", NULL);
-	return entry;
-}
-
-void oidc_proto_jwks_cache_init(apr_pool_t *pool, server_rec *s) {
-	_oidc_proto_jwks_cache = oidc_cache_local_create(pool, "proto-jwks", OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES, TRUE,
-							 oidc_proto_jwks_cache_free, oidc_util_cache_local_warn, s);
-}
-
-static void oidc_proto_jwks_cache_purge(void) {
-	oidc_cache_local_clear(_oidc_proto_jwks_cache);
-}
-
-/*
- * outside the lock: parse our own copy of the cached document into request-owned keys, re-keyed the
- * way selection does - by kid, x5t or a unique counter. The keys are ordinary request-private ones,
- * so the caller destroys them exactly as it destroys freshly-selected keys.
- */
-static apr_byte_t oidc_proto_jwks_cache_parse(request_rec *r, const char *json, const char *x5t, apr_hash_t *result) {
-	oidc_json_t *arr = NULL;
-	char *s_err = NULL;
-
-	if (oidc_json_parse(r->pool, json, 0, &arr, &s_err) == FALSE) {
-		oidc_warn(r, "could not parse the cached key selection (%s); falling back to a fresh one", s_err);
-		return FALSE;
-	}
-
-	for (size_t i = 0; i < oidc_json_array_size(arr); i++) {
-		oidc_jwk_t *jwk = NULL;
-		oidc_jose_error_t err;
-		const char *hkey = NULL;
-		if (oidc_jwk_parse_json(r->pool, oidc_json_array_get(arr, i), &jwk, &err) == FALSE) {
-			oidc_warn(r, "oidc_jwk_parse_json failed on the cached key selection: %s",
-				  oidc_jose_e2s(r->pool, err));
-			oidc_jwk_list_destroy_hash(result);
-			oidc_json_decref(arr);
-			return FALSE;
-		}
-		hkey = jwk->kid;
-		if (hkey == NULL)
-			hkey = (x5t != NULL) ? x5t : apr_psprintf(r->pool, "%d", apr_hash_count(result));
-		apr_hash_set(result, hkey, APR_HASH_KEY_STRING, jwk);
-	}
-
-	oidc_json_decref(arr);
-	return (apr_hash_count(result) > 0);
-}
-
-/* return the cached selection result for the specified key in the result hash */
-static apr_byte_t oidc_proto_jwks_cache_get(request_rec *r, const char *sel_key, const char *x5t, apr_hash_t *result) {
-	const char *json = NULL;
-	struct oidc_proto_jwks_cache_use_ctx ctx = {.r = r, .json = &json};
-	if (oidc_cache_local_get_use(_oidc_proto_jwks_cache, sel_key, oidc_proto_jwks_cache_valid, NULL,
-				     oidc_proto_jwks_cache_use, &ctx) == FALSE)
-		return FALSE;
-	return oidc_proto_jwks_cache_parse(r, json, x5t, result);
-}
-
-/* store a non-empty selection result under the specified key, bounded by the refresh interval */
-static void oidc_proto_jwks_cache_set(request_rec *r, const char *sel_key, apr_hash_t *result, int refresh_interval) {
-	struct oidc_proto_jwks_cache_build_ctx ctx = {.r = r, .result = result, .refresh_interval = refresh_interval};
-	if (apr_hash_count(result) < 1)
-		return;
-	oidc_cache_local_set_build(_oidc_proto_jwks_cache, sel_key, oidc_proto_jwks_cache_valid, NULL,
-				   oidc_proto_jwks_cache_build, &ctx);
-}
-
 /*
  * when no kid/x5t was specified, include the JWK in the result if it is usable for signing;
  * takes ownership of jwk (either inserts it into result or destroys it)
@@ -313,25 +154,6 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 				    int ssl_validate_server, apr_hash_t *keys, apr_byte_t *force_refresh) {
 
 	oidc_json_t *j_jwks = NULL;
-	const char *x5t = oidc_jwt_hdr_get(jwt, OIDC_JOSE_JWK_X5T_STR);
-	const char *cache_uri = jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
-	const char *s_kid = jwt->header.kid ? jwt->header.kid : "";
-	const char *s_x5t = x5t ? x5t : "";
-	const char *sel_key = (cache_uri != NULL)
-				  ? apr_psprintf(r->pool, "%s#%s#%s#%d", cache_uri, s_kid, s_x5t, oidc_jwt_alg2kty(jwt))
-				  : NULL;
-
-	if (*force_refresh == TRUE) {
-		/* suspected key rollover: all cached selection results may derive from stale JWKs.
-		 * Gate this on the same rate limit as the download it accompanies, otherwise a stream of
-		 * requests carrying an unknown "kid" - which needs no authentication to send - keeps the
-		 * selection cache permanently empty even once the fetch itself is throttled. */
-		if (oidc_metadata_jwks_forced_refresh_throttled(r, jwks_uri) == FALSE)
-			oidc_proto_jwks_cache_purge();
-	} else if ((sel_key != NULL) && (oidc_proto_jwks_cache_get(r, sel_key, x5t, keys) == TRUE)) {
-		oidc_debug(r, "returning %d cached parsed key(s) for %s", apr_hash_count(keys), sel_key);
-		return TRUE;
-	}
 
 	/* get the set of JSON Web Keys for this provider (possibly by downloading them from the specified
 	 * provider->jwk_uri) */
@@ -364,10 +186,6 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 		*force_refresh = TRUE;
 		return oidc_proto_jwks_uri_keys(r, cfg, jwt, jwks_uri, ssl_validate_server, keys, force_refresh);
 	}
-
-	/* keep the parsed selection result for subsequent validations against the same signing key */
-	if (sel_key != NULL)
-		oidc_proto_jwks_cache_set(r, sel_key, keys, oidc_cfg_jwks_uri_refresh_interval_get(jwks_uri));
 
 	oidc_debug(r, "returning %d key(s) obtained from the (possibly cached) JWKs URI", apr_hash_count(keys));
 

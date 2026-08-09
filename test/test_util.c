@@ -137,16 +137,9 @@ START_TEST(test_util_appinfo_set) {
 				     &claims);
 	ck_assert_int_eq(rc, TRUE);
 
-	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
-				  TRUE);
+	oidc_util_appinfo_set_all(r, NULL, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 
-	/* cacheable=TRUE: the first call flattens and stores, the repeated (identical) call below
-	 * is served from the flattened-pairs cache and must produce the exact same headers */
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
-				  TRUE);
-	apr_table_clear(r->headers_in);
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
-				  TRUE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "hans");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\u00DCnther");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D\u2020gÿger");
@@ -162,7 +155,7 @@ START_TEST(test_util_appinfo_set) {
 	ck_assert_table_unset(r->subprocess_env, "OIDC_CLAIM_names");
 
 	oidc_util_appinfo_set_all(r, claims, "MYPREFIX_", "#", OIDC_APPINFO_PASS_HEADERS | OIDC_APPINFO_PASS_ENVVARS,
-				  OIDC_APPINFO_ENCODING_NONE, TRUE);
+				  OIDC_APPINFO_ENCODING_NONE);
 	ck_assert_table_str(r->headers_in, "MYPREFIX_simple", "hans");
 	ck_assert_table_str(r->headers_in, "MYPREFIX_name", "G\u00DCnther");
 	ck_assert_table_str(r->headers_in, "MYPREFIX_dagger", "D\u2020gÿger");
@@ -172,14 +165,14 @@ START_TEST(test_util_appinfo_set) {
 	ck_assert_table_str(r->subprocess_env, "MYPREFIX_anarr", "0#hans#piet#1");
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
-				  OIDC_APPINFO_ENCODING_BASE64URL, TRUE);
+				  OIDC_APPINFO_ENCODING_BASE64URL);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "aGFucw");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "R8OcbnRoZXI");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "ROKAoGfDv2dlcg");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_anarr", "MCxoYW5zLHBpZXQsMQ");
 
 	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS,
-				  OIDC_APPINFO_ENCODING_LATIN1, TRUE);
+				  OIDC_APPINFO_ENCODING_LATIN1);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_simple", "hans");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_name", "G\xDCnther");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dagger", "D?g\xFFger");
@@ -203,14 +196,12 @@ START_TEST(test_util_appinfo_array_delimiter_escape) {
 
 	/* a delimiter (or the backslash escape char) inside an element value is escaped so it cannot be
 	 * mistaken for an element separator: "a,b" -> "a\,b", "c\d" -> "c\\d" */
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
-				  TRUE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", ",", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_roles", "a\\,b,c\\\\d,e");
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins\\,OU=Groups,plain");
 
 	/* a multi-character delimiter is matched and escaped as a unit (no delimiter present => unchanged) */
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE,
-				  TRUE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins,OU=Groups::plain");
 
 	oidc_json_decref(claims);
@@ -1171,16 +1162,6 @@ START_TEST(test_util_mask_value) {
 }
 END_TEST
 
-/*
- * the oidc_cache_local_log_fn adapter the process-local caches are created with; it is only
- * called once one of them is full and starts evicting, which no unit test reaches organically
- */
-START_TEST(test_util_cache_local_warn) {
-	request_rec *r = oidc_test_request_get();
-	oidc_util_cache_local_warn(r->server, "session", 2000);
-}
-END_TEST
-
 START_TEST(test_util_apr_time_saturating) {
 	const apr_time_t sec_max = APR_INT64_MAX / APR_USEC_PER_SEC;
 
@@ -1683,7 +1664,6 @@ int main(void) {
 	tcase_add_test(c, test_util_set_trace_parent_flags);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	tcase_add_test(c, test_util_mask_value);
-	tcase_add_test(c, test_util_cache_local_warn);
 	tcase_add_test(c, test_util_apr_time_saturating);
 #ifdef HAVE_LIBPCRE2
 	tcase_add_test(c, test_util_pcre_get_substring_error_arms);

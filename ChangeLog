@@ -1,3 +1,17 @@
+08/10/2026
+- remove the process-local derived-object cache tier (util/cache_local) and the five caches built
+  on it: the parsed session state, the flattened appinfo claim pairs, the parsed provider metadata,
+  the JWKs selection result and the compiled Require-claim regexes. Measured on a protected,
+  non-proxied request, the whole tier saved 24-34% of the module's own CPU, and essentially all of
+  that was the parsed-session cache alone -- the other four were at or below the run-to-run noise.
+  That is not worth the concurrency, eviction, teardown and cache-coherency surface it added, which
+  produced defects in two consecutive releases. The session state is parsed per request again and
+  is once more private to it, so the copy-on-write in the session setters goes too
+- do not strand a failed regular-expression compile in the pool it was handed: oidc_pcre_compile
+  allocated its wrapper, and on failure its error message, before it could know the pattern was
+  invalid. It now allocates nothing unless the compile succeeds, and takes a NULL error_str for
+  callers with no use for the message
+
 08/09/2026
 - store the process-local JWKS selection cache serialized and give each request its own parsed
   copy, instead of sharing imported keys that could never be released; a worker no longer retains

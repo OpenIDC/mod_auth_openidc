@@ -43,99 +43,6 @@
 #include "util/util.h"
 #include "util/util_cfg.h"
 
-#include "util/cache_local.h"
-
-/*
- * process-lifetime cache of flattened claim name/value pairs, keyed by the identity of the
- * claims JSON object (plus the flattening parameters): with the parsed-session cache the claim
- * sets of an unchanged session are the same shared JSON objects on every request, so the
- * per-claim name construction, value rendering and encoding runs once instead of per request.
- * Each entry holds its own reference to the claims object, pinning the pointer so the key can
- * never be reused for a different object while the entry lives; requires atomic JSON reference
- * counting (the init function leaves the cache disabled otherwise). Each entry owns a private
- * subpool so evicted/replaced entries return the memory of their copied pairs.
- */
-typedef struct oidc_appinfo_cache_entry_t {
-	apr_pool_t *pool;
-	oidc_json_t *claims;
-	apr_table_t *pairs;
-} oidc_appinfo_cache_entry_t;
-
-static oidc_cache_local_t *_oidc_appinfo_cache = NULL;
-
-/* bounds the cache; on overflow the least-recently-used entry is evicted, retaining the hot set */
-#define OIDC_APPINFO_CACHE_MAX_ENTRIES 1000
-
-/* replays a single flattened pair into the request (defined below; used by the cache use callback) */
-static void oidc_util_appinfo_pair_apply(request_rec *r, const char *s_name, const char *s_value,
-					 oidc_appinfo_pass_in_t pass_in);
-
-/* release an entry: drop the pinning claims reference and return the subpool holding entry+pairs */
-static void oidc_util_appinfo_cache_free(void *value) {
-	oidc_appinfo_cache_entry_t *entry = value;
-	oidc_json_decref(entry->claims);
-	apr_pool_destroy(entry->pool);
-}
-
-/* freshness: the flattened pairs are valid while the key still maps to the same claims object;
- * the pinned reference guarantees the pointer cannot have been reused for a different object */
-static int oidc_util_appinfo_cache_valid(void *value, const void *ctx) {
-	return ((const oidc_appinfo_cache_entry_t *)value)->claims == (const oidc_json_t *)ctx;
-}
-
-struct oidc_util_appinfo_cache_use_ctx {
-	request_rec *r;
-	oidc_appinfo_pass_in_t pass_in;
-};
-
-/* under the read lock: replay the cached pairs into the request's tables (copying the strings, so
- * nothing references entry-owned memory once the lock is released) */
-static void oidc_util_appinfo_cache_use(void *value, void *baton) {
-	const oidc_appinfo_cache_entry_t *entry = value;
-	const struct oidc_util_appinfo_cache_use_ctx *ctx = baton;
-	const apr_array_header_t *arr = apr_table_elts(entry->pairs);
-	const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
-	for (int i = 0; i < arr->nelts; i++)
-		oidc_util_appinfo_pair_apply(ctx->r, elts[i].key, elts[i].val, ctx->pass_in);
-}
-
-struct oidc_util_appinfo_cache_build_ctx {
-	oidc_json_t *claims;
-	const apr_table_t *pairs;
-};
-
-/* under the write lock: build an entry in its own subpool, taking a pinning reference on the claims
- * object and copying the flattened pairs; returns NULL (not cached) when the subpool cannot be made */
-static void *oidc_util_appinfo_cache_build(apr_pool_t *pool, const char *key, void *baton) {
-	const struct oidc_util_appinfo_cache_build_ctx *ctx = baton;
-	apr_pool_t *entry_pool = NULL;
-	oidc_appinfo_cache_entry_t *entry = NULL;
-	const apr_array_header_t *arr = apr_table_elts(ctx->pairs);
-	const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
-	if (apr_pool_create(&entry_pool, pool) != APR_SUCCESS)
-		return NULL;
-	entry = apr_pcalloc(entry_pool, sizeof(oidc_appinfo_cache_entry_t));
-	entry->pool = entry_pool;
-	entry->claims = oidc_json_incref(ctx->claims);
-	entry->pairs = apr_table_make(entry_pool, arr->nelts + 1);
-	for (int i = 0; i < arr->nelts; i++)
-		apr_table_set(entry->pairs, elts[i].key, elts[i].val);
-	return entry;
-}
-
-void oidc_util_appinfo_cache_init(apr_pool_t *pool, server_rec *s) {
-	/* pinning/sharing JSON objects across threads is only safe with atomic reference counting */
-	if (oidc_json_refcount_threadsafe() == FALSE)
-		return;
-	_oidc_appinfo_cache = oidc_cache_local_create(pool, "appinfo", OIDC_APPINFO_CACHE_MAX_ENTRIES, TRUE,
-						      oidc_util_appinfo_cache_free, oidc_util_cache_local_warn, s);
-}
-
-static const char *oidc_util_appinfo_cache_key(apr_pool_t *pool, const oidc_json_t *j_attrs, const char *claim_prefix,
-					       const char *claim_delimiter, oidc_appinfo_encoding_t encoding) {
-	return apr_psprintf(pool, "%pp#%s#%s#%d", (const void *)j_attrs, claim_prefix, claim_delimiter, (int)encoding);
-}
-
 /*
  * convert a claim value from UTF-8 to the Latin1 character set
  */
@@ -302,52 +209,32 @@ static const char *oidc_util_appinfo_array_concat(request_rec *r, const oidc_jso
 }
 
 /*
- * render one claim and either pass it to the application directly or collect it into a pairs table
- */
-static void oidc_util_appinfo_set_or_collect(request_rec *r, const char *s_key, const char *s_value,
-					     const char *claim_prefix, oidc_appinfo_pass_in_t pass_in,
-					     oidc_appinfo_encoding_t encoding, apr_table_t *pairs) {
-	const char *s_name = NULL;
-	const char *s_rendered = NULL;
-	oidc_util_appinfo_render(r, s_key, s_value, claim_prefix, encoding, &s_name, &s_rendered);
-	if (pairs != NULL) {
-		if (s_rendered != NULL)
-			apr_table_set(pairs, s_name, s_rendered);
-	} else {
-		oidc_util_appinfo_pair_apply(r, s_name, s_rendered, pass_in);
-	}
-}
-
-/*
  * render a single JSON claim value to its application-header textual form
  */
 static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const oidc_json_t *j_value,
 				      const char *claim_prefix, const char *claim_delimiter,
-				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding,
-				      apr_table_t *pairs) {
+				      oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
 	char s_int[OIDC_JSON_MAX_INT_STR_LEN];
 
 	if (oidc_json_is_string(j_value)) {
-		oidc_util_appinfo_set_or_collect(r, s_key, oidc_json_string_value(j_value), claim_prefix, pass_in,
-						 encoding, pairs);
+		oidc_util_appinfo_set(r, s_key, oidc_json_string_value(j_value), claim_prefix, pass_in, encoding);
 	} else if (oidc_json_is_boolean(j_value)) {
-		oidc_util_appinfo_set_or_collect(r, s_key, oidc_json_is_true(j_value) ? "1" : "0", claim_prefix,
-						 pass_in, encoding, pairs);
+		oidc_util_appinfo_set(r, s_key, oidc_json_is_true(j_value) ? "1" : "0", claim_prefix, pass_in,
+				      encoding);
 	} else if (oidc_json_is_integer(j_value)) {
 		if (snprintf(s_int, OIDC_JSON_MAX_INT_STR_LEN, "%ld", (long)oidc_json_integer_value(j_value)) > 0)
-			oidc_util_appinfo_set_or_collect(r, s_key, s_int, claim_prefix, pass_in, encoding, pairs);
+			oidc_util_appinfo_set(r, s_key, s_int, claim_prefix, pass_in, encoding);
 	} else if (oidc_json_is_real(j_value)) {
-		oidc_util_appinfo_set_or_collect(r, s_key, apr_psprintf(r->pool, "%.8g", oidc_json_real_value(j_value)),
-						 claim_prefix, pass_in, encoding, pairs);
+		oidc_util_appinfo_set(r, s_key, apr_psprintf(r->pool, "%.8g", oidc_json_real_value(j_value)),
+				      claim_prefix, pass_in, encoding);
 	} else if (oidc_json_is_object(j_value)) {
-		oidc_util_appinfo_set_or_collect(
-		    r, s_key, oidc_json_encode(r->pool, j_value, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT),
-		    claim_prefix, pass_in, encoding, pairs);
+		oidc_util_appinfo_set(r, s_key,
+				      oidc_json_encode(r->pool, j_value, OIDC_JSON_PRESERVE_ORDER | OIDC_JSON_COMPACT),
+				      claim_prefix, pass_in, encoding);
 	} else if (oidc_json_is_array(j_value)) {
-		oidc_util_appinfo_set_or_collect(r, s_key,
-						 oidc_util_appinfo_array_concat(r, j_value, claim_delimiter, s_key),
-						 claim_prefix, pass_in, encoding, pairs);
+		oidc_util_appinfo_set(r, s_key, oidc_util_appinfo_array_concat(r, j_value, claim_delimiter, s_key),
+				      claim_prefix, pass_in, encoding);
 	} else {
 		oidc_debug(r, "unhandled JSON object type [%d] for key \"%s\" when parsing claims",
 			   oidc_json_typeof(j_value), s_key);
@@ -355,35 +242,11 @@ static void oidc_util_appinfo_set_one(request_rec *r, const char *s_key, const o
 }
 
 /*
- * apply the flattened pairs cached for the specified claims object; TRUE when served from the cache
- */
-static apr_byte_t oidc_util_appinfo_cache_apply(request_rec *r, const oidc_json_t *j_attrs, const char *key,
-						oidc_appinfo_pass_in_t pass_in) {
-	struct oidc_util_appinfo_cache_use_ctx ctx = {.r = r, .pass_in = pass_in};
-	return oidc_cache_local_get_use(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_valid, j_attrs,
-					oidc_util_appinfo_cache_use, &ctx);
-}
-
-/*
- * store the flattened pairs for the specified claims object, taking a reference that pins it
- */
-static void oidc_util_appinfo_cache_store(oidc_json_t *j_attrs, const char *key, const apr_table_t *pairs) {
-	struct oidc_util_appinfo_cache_build_ctx ctx = {.claims = j_attrs, .pairs = pairs};
-	oidc_cache_local_set_build(_oidc_appinfo_cache, key, oidc_util_appinfo_cache_valid, j_attrs,
-				   oidc_util_appinfo_cache_build, &ctx);
-}
-
-/*
- * set the user/claims information from the session in HTTP headers passed on to the application;
- * cacheable indicates that j_attrs is a shared (read-only, process-lifetime) object from the
- * parsed-session cache so its flattened form may be cached and replayed keyed by its identity
+ * set the user/claims information from the session in HTTP headers passed on to the application
  */
 void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char *claim_prefix,
 			       const char *claim_delimiter, oidc_appinfo_pass_in_t pass_in,
-			       oidc_appinfo_encoding_t encoding, apr_byte_t cacheable) {
-
-	apr_table_t *pairs = NULL;
-	const char *key = NULL;
+			       oidc_appinfo_encoding_t encoding) {
 
 	/* if not attributes are set, nothing needs to be done */
 	if (j_attrs == NULL) {
@@ -391,27 +254,11 @@ void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char 
 		return;
 	}
 
-	if ((cacheable == TRUE) && (_oidc_appinfo_cache != NULL)) {
-		key = oidc_util_appinfo_cache_key(r->pool, j_attrs, claim_prefix, claim_delimiter, encoding);
-		if (oidc_util_appinfo_cache_apply(r, j_attrs, key, pass_in) == TRUE)
-			return;
-		pairs = apr_table_make(r->pool, 16);
-	}
-
 	/* loop over the claims in the JSON structure */
 	void *iter = oidc_json_object_iter(j_attrs);
 	while (iter) {
 		oidc_util_appinfo_set_one(r, oidc_json_object_iter_key(iter), oidc_json_object_iter_value(iter),
-					  claim_prefix, claim_delimiter, pass_in, encoding, pairs);
+					  claim_prefix, claim_delimiter, pass_in, encoding);
 		iter = oidc_json_object_iter_next(j_attrs, iter);
-	}
-
-	if (pairs != NULL) {
-		/* apply the collected pairs and keep them for subsequent requests of this claims object */
-		const apr_array_header_t *arr = apr_table_elts(pairs);
-		const apr_table_entry_t *elts = (const apr_table_entry_t *)arr->elts;
-		for (int i = 0; i < arr->nelts; i++)
-			oidc_util_appinfo_pair_apply(r, elts[i].key, elts[i].val, pass_in);
-		oidc_util_appinfo_cache_store(j_attrs, key, pairs);
 	}
 }
