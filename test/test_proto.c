@@ -3652,12 +3652,13 @@ START_TEST(test_proto_jwks_uri_keys_selection_cached) {
 	force_refresh = FALSE;
 	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, cached, &force_refresh), TRUE);
 	ck_assert_int_eq(apr_hash_count(cached), 1);
-	/* NB: the entry handed back belongs to the cache, so it is not destroyed here - only the
-	 *     separately owned result of the first pass is */
+	/* the cache stores the selection serialized, so what comes back is this request's own copy,
+	 * parsed out of it and owned exactly like the first pass's result - destroyed the same way */
 	ck_assert_ptr_nonnull(apr_hash_get(cached, "k1", APR_HASH_KEY_STRING));
 
 	oidc_jwt_destroy(jwt);
 	oidc_jwk_list_destroy_hash(keys);
+	oidc_jwk_list_destroy_hash(cached);
 }
 END_TEST
 

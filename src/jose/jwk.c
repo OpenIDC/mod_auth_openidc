@@ -268,9 +268,7 @@ oidc_jwk_t *oidc_jwk_copy(apr_pool_t *pool, const oidc_jwk_t *src) {
  * destroy resources allocated for a JWK struct
  */
 void oidc_jwk_destroy(oidc_jwk_t *jwk) {
-	/* a shared (cached) key is owned by the process-lifetime cache: leave the backend key
-	 * object alone so its (non-atomic) refcount is never mutated from request context */
-	if (jwk && jwk->cjose_jwk && (jwk->shared == FALSE)) {
+	if (jwk && jwk->cjose_jwk) {
 		cjose_jwk_release(jwk->cjose_jwk);
 		jwk->cjose_jwk = NULL;
 	}
