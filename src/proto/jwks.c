@@ -71,6 +71,11 @@ static apr_array_header_t *_oidc_proto_jwks_cache_retired = NULL;
  * it) - retire them for release at pool cleanup; the entry itself lives in the cache pool */
 static void oidc_proto_jwks_cache_free(void *value) {
 	oidc_proto_jwks_cache_entry_t *entry = value;
+	/* the list has already been drained and reset by its cleanup, i.e. that cleanup ran before the
+	 * cache's own - see oidc_proto_jwks_cache_retired_cleanup on why it does not. The process is on
+	 * its way out at that point, so leave these keys to it rather than resurrecting the list */
+	if (_oidc_proto_jwks_cache_retired == NULL)
+		return;
 	for (int i = 0; i < entry->jwks->nelts; i++)
 		APR_ARRAY_PUSH(_oidc_proto_jwks_cache_retired, oidc_jwk_t *) =
 		    APR_ARRAY_IDX(entry->jwks, i, oidc_jwk_t *);
@@ -127,7 +132,19 @@ static void *oidc_proto_jwks_cache_build(apr_pool_t *pool, const char *key, void
 	return entry;
 }
 
-/* release the retired backend key objects once no request context is running (at pool cleanup) */
+/*
+ * release the retired backend key objects once no request context is running (at pool cleanup).
+ *
+ * This is a PRE-cleanup, because the oidc_jwk_t structs this list points at are allocated from the
+ * cache's own pool - a child of the pool registered on here - and a regular cleanup runs only after
+ * every child pool has been destroyed, i.e. after that memory has been handed back to the allocator.
+ *
+ * Ordering against the cache's own pre-cleanup (which is what moves the still-cached keys onto this
+ * list) is by APR running pre-cleanups in reverse registration order: oidc_proto_jwks_cache_init()
+ * registers this one first, so the cache's runs first and the list is complete by the time we get
+ * here. oidc_proto_jwks_cache_free() tolerates the reverse order, degrading to leaving the keys to
+ * process exit rather than touching a freed list.
+ */
 static apr_status_t oidc_proto_jwks_cache_retired_cleanup(void *data) {
 	if (_oidc_proto_jwks_cache_retired != NULL) {
 		for (int i = 0; i < _oidc_proto_jwks_cache_retired->nelts; i++) {
@@ -145,9 +162,9 @@ void oidc_proto_jwks_cache_init(apr_pool_t *pool, server_rec *s) {
 	if (_oidc_proto_jwks_cache != NULL)
 		return;
 	_oidc_proto_jwks_cache_retired = apr_array_make(pool, 8, sizeof(oidc_jwk_t *));
-	/* a regular (post-child) cleanup: it runs after the cache's own PRE-cleanup has retired every
-	 * still-cached key, so by the time it fires the retired list holds them all for release */
-	apr_pool_cleanup_register(pool, NULL, oidc_proto_jwks_cache_retired_cleanup, apr_pool_cleanup_null);
+	/* registered before the cache below so that it runs after the cache's own pre-cleanup has
+	 * retired every still-cached key; see oidc_proto_jwks_cache_retired_cleanup */
+	apr_pool_pre_cleanup_register(pool, NULL, oidc_proto_jwks_cache_retired_cleanup);
 	oidc_cache_local_create(&_oidc_proto_jwks_cache, pool, "proto-jwks", OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES, TRUE,
 				oidc_proto_jwks_cache_free, oidc_util_cache_local_warn, s);
 }

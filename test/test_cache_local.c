@@ -446,6 +446,67 @@ START_TEST(test_cache_local_subpool_entries_freed_on_cleanup) {
 END_TEST
 
 /*
+ * the teardown ordering the jwks cache depends on (see oidc_proto_jwks_cache_retired_cleanup): a
+ * free_value that cannot actually free - because in-flight requests still hold the value - instead
+ * hands it to a module-level list drained at teardown, and that list points into the cache's OWN
+ * pool. The cleanup draining it must therefore run after the cache has retired every entry but
+ * still before the cache pool is destroyed, which makes it a PRE-cleanup registered before
+ * oidc_cache_local_create: APR runs pre-cleanups in reverse registration order and destroys child
+ * pools only after all of them, so a regular cleanup would drain the list into freed memory.
+ *
+ * The trace records retire ('F'), drain ('D') and cache-pool-destroyed ('P'); a regular cleanup
+ * yields "FPD".
+ */
+static char _order_trace[8];
+static apr_size_t _order_len = 0;
+
+static void test_order_mark(char c) {
+	if (_order_len < sizeof(_order_trace) - 1)
+		_order_trace[_order_len++] = c;
+}
+
+/* registered from the build callback on the cache's own pool: fires when that pool goes away */
+static apr_status_t test_order_cache_pool_gone(void *data) {
+	test_order_mark('P');
+	return APR_SUCCESS;
+}
+
+/* retire rather than free, as the jwks cache does: the value stays allocated in the cache pool */
+static void test_order_free(void *value) {
+	test_order_mark('F');
+}
+
+static apr_status_t test_order_drain(void *data) {
+	test_order_mark('D');
+	return APR_SUCCESS;
+}
+
+static void *test_order_build(apr_pool_t *pool, const char *key, void *baton) {
+	/* `pool` is the cache's own pool - the one a retired pointer would be left dangling into */
+	apr_pool_cleanup_register(pool, NULL, test_order_cache_pool_gone, apr_pool_cleanup_null);
+	return apr_pcalloc(pool, sizeof(int));
+}
+
+START_TEST(test_cache_local_retired_drain_runs_before_pool_destroy) {
+	apr_pool_t *child = NULL;
+	apr_pool_create(&child, pool);
+	_order_len = 0;
+	memset(_order_trace, 0, sizeof(_order_trace));
+
+	/* registered first, so the cache's own pre-cleanup - registered below - runs before it */
+	apr_pool_pre_cleanup_register(child, NULL, test_order_drain);
+
+	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, child, "order", 8, 1, test_order_free, NULL, NULL);
+	ck_assert_ptr_nonnull(cache);
+	ck_assert_ptr_nonnull(oidc_cache_local_set_build(cache, "k", NULL, NULL, test_order_build, NULL));
+
+	apr_pool_destroy(child);
+
+	ck_assert_str_eq(_order_trace, "FDP");
+}
+END_TEST
+
+/*
  * churn far more distinct keys through a small, bounded cache than it can hold, so the internal
  * compaction (which re-interns the surviving keys and nodes into a fresh pool and drops the old one)
  * runs many times over. Everything the cache promises must survive that: the bound, exact free_value
@@ -569,6 +630,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_local_get_use_set_build);
 	tcase_add_test(core, test_cache_local_set_build_rechecks_under_lock);
 	tcase_add_test(core, test_cache_local_subpool_entries_freed_on_cleanup);
+	tcase_add_test(core, test_cache_local_retired_drain_runs_before_pool_destroy);
 	tcase_add_test(core, test_cache_local_survives_compaction);
 	tcase_add_test(core, test_cache_local_churn_does_not_grow_without_bound);
 
