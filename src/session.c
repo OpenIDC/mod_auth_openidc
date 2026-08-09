@@ -133,8 +133,8 @@ void oidc_session_cache_init(apr_pool_t *pool, server_rec *s) {
 	/* sharing parsed JSON across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
-	oidc_cache_local_create(&_oidc_session_cache, pool, "session", OIDC_SESSION_CACHE_MAX_ENTRIES, TRUE,
-				oidc_session_cache_free, oidc_util_cache_local_warn, s);
+	_oidc_session_cache = oidc_cache_local_create(pool, "session", OIDC_SESSION_CACHE_MAX_ENTRIES, TRUE,
+						      oidc_session_cache_free, oidc_util_cache_local_warn, s);
 }
 
 /* return a new reference to the cached parsed state when the raw session document is unchanged */

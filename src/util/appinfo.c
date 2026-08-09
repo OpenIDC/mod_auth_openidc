@@ -127,8 +127,8 @@ void oidc_util_appinfo_cache_init(apr_pool_t *pool, server_rec *s) {
 	/* pinning/sharing JSON objects across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
-	oidc_cache_local_create(&_oidc_appinfo_cache, pool, "appinfo", OIDC_APPINFO_CACHE_MAX_ENTRIES, TRUE,
-				oidc_util_appinfo_cache_free, oidc_util_cache_local_warn, s);
+	_oidc_appinfo_cache = oidc_cache_local_create(pool, "appinfo", OIDC_APPINFO_CACHE_MAX_ENTRIES, TRUE,
+						      oidc_util_appinfo_cache_free, oidc_util_cache_local_warn, s);
 }
 
 static const char *oidc_util_appinfo_cache_key(apr_pool_t *pool, const oidc_json_t *j_attrs, const char *claim_prefix,

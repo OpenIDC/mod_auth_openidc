@@ -67,7 +67,6 @@ struct oidc_cache_local_t {
 	apr_uint32_t evictions;
 	apr_uint32_t compact_at;
 	oidc_cache_local_free_fn free_value;
-	oidc_cache_local_t **owner;
 	oidc_cache_local_log_fn log_full;
 	void *log_ctx;
 	apr_time_t last_warn;
@@ -228,20 +227,12 @@ static apr_status_t oidc_cache_local_cleanup(void *data) {
 	/* free the values while the hash is still valid (this cleanup is registered on the cache's
 	 * own pool, so it runs before that pool's memory is released) */
 	oidc_cache_local_clear_unlocked(cache);
-	/* reset the owner's pointer so a subsequent (config-reload) create re-creates the cache in
-	 * the new pool instead of dereferencing this freed one */
-	if (cache->owner != NULL)
-		*(cache->owner) = NULL;
 	return APR_SUCCESS;
 }
 
-oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool_t *pool, const char *name,
-					    int max_entries, int evict_on_full, oidc_cache_local_free_fn free_value,
-					    oidc_cache_local_log_fn log_full, void *log_ctx) {
-	/* idempotent when an owner pointer is tracked: a second create is a no-op */
-	if ((owner != NULL) && (*owner != NULL))
-		return *owner;
-
+oidc_cache_local_t *oidc_cache_local_create(apr_pool_t *pool, const char *name, int max_entries, int evict_on_full,
+					    oidc_cache_local_free_fn free_value, oidc_cache_local_log_fn log_full,
+					    void *log_ctx) {
 	oidc_cache_local_t *cache = apr_pcalloc(pool, sizeof(oidc_cache_local_t));
 	apr_uint64_t compact_at = 0;
 
@@ -263,7 +254,6 @@ oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool
 	cache->max_entries = (max_entries > 0) ? max_entries : 1;
 	cache->evict_on_full = evict_on_full;
 	cache->free_value = free_value;
-	cache->owner = owner;
 	cache->log_full = log_full;
 	cache->log_ctx = log_ctx;
 
@@ -284,9 +274,6 @@ oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool
 	 * inside its values (children of this pool) - are still valid; a regular cleanup would run only
 	 * after those child subpools had already been destroyed (children go before regular cleanups) */
 	apr_pool_pre_cleanup_register(pool, cache, oidc_cache_local_cleanup);
-
-	if (owner != NULL)
-		*owner = cache;
 
 	return cache;
 }

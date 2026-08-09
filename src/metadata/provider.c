@@ -94,9 +94,9 @@ void oidc_metadata_provider_cache_init(apr_pool_t *pool, server_rec *s) {
 	/* sharing parsed JSON across threads is only safe with atomic reference counting */
 	if (oidc_json_refcount_threadsafe() == FALSE)
 		return;
-	oidc_cache_local_create(&_oidc_metadata_provider_cache, pool, "metadata-provider",
-				OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES, TRUE, oidc_metadata_provider_cache_free,
-				oidc_util_cache_local_warn, s);
+	_oidc_metadata_provider_cache =
+	    oidc_cache_local_create(pool, "metadata-provider", OIDC_METADATA_PROVIDER_CACHE_MAX_ENTRIES, TRUE,
+				    oidc_metadata_provider_cache_free, oidc_util_cache_local_warn, s);
 }
 
 /* return a new reference to the cached parsed document when the file is unchanged */

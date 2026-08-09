@@ -96,7 +96,7 @@ static void *test_compute(apr_pool_t *pool, const char *key, void *baton) {
 
 START_TEST(test_cache_local_basic_set_get) {
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "basic", 8, 0, NULL, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "basic", 8, 0, NULL, NULL, NULL);
 	ck_assert_ptr_nonnull(cache);
 
 	int a = 1, b = 2;
@@ -112,7 +112,7 @@ END_TEST
 START_TEST(test_cache_local_overwrite_frees_old) {
 
 	_free_count = 0;
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "ovr", 8, 0, test_free_value, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "ovr", 8, 0, test_free_value, NULL, NULL);
 
 	int *v1 = mkval(1);
 	int *v2 = mkval(2);
@@ -132,7 +132,7 @@ START_TEST(test_cache_local_get_or_compute_memoizes) {
 
 	int compute_count = 0;
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "goc", 8, 0, NULL, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "goc", 8, 0, NULL, NULL, NULL);
 
 	void *first = oidc_cache_local_get_or_compute(cache, "hello", test_compute, &compute_count);
 	ck_assert_ptr_nonnull(first);
@@ -154,7 +154,7 @@ START_TEST(test_cache_local_bound_stops_when_full) {
 	int compute_count = 0;
 
 	/* evict_on_full = 0: once full, new keys are not cached and compute is not called for them */
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "bound", 2, 0, NULL, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "bound", 2, 0, NULL, NULL, NULL);
 
 	ck_assert_ptr_nonnull(oidc_cache_local_get_or_compute(cache, "a", test_compute, &compute_count));
 	ck_assert_ptr_nonnull(oidc_cache_local_get_or_compute(cache, "b", test_compute, &compute_count));
@@ -176,7 +176,7 @@ START_TEST(test_cache_local_bound_evicts_one_when_full) {
 	_free_count = 0;
 
 	/* evict_on_full = 1: inserting past the bound evicts a single (LRU) entry, not the whole cache */
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "lru", 2, 1, test_free_value, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "lru", 2, 1, test_free_value, NULL, NULL);
 
 	oidc_cache_local_set(cache, "a", mkval(1));
 	oidc_cache_local_set(cache, "b", mkval(2));
@@ -206,7 +206,7 @@ START_TEST(test_cache_local_warns_on_young_eviction) {
 	_free_count = 0;
 	_warn_count = 0;
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "warn", 2, 1, test_free_value, test_warn, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "warn", 2, 1, test_free_value, test_warn, NULL);
 
 	oidc_cache_local_set(cache, "a", mkval(1));
 	oidc_cache_local_set(cache, "b", mkval(2));
@@ -228,7 +228,7 @@ START_TEST(test_cache_local_cleanup_frees_values) {
 	apr_pool_create(&child, parent);
 	_free_count = 0;
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, child, "cln", 8, 0, test_free_value, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(child, "cln", 8, 0, test_free_value, NULL, NULL);
 	oidc_cache_local_set(cache, "a", mkval(1));
 	oidc_cache_local_set(cache, "b", mkval(2));
 	oidc_cache_local_set(cache, "c", mkval(3));
@@ -242,7 +242,7 @@ END_TEST
 
 START_TEST(test_cache_local_null_safe) {
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "nul", 8, 0, NULL, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "nul", 8, 0, NULL, NULL, NULL);
 	int v = 1;
 
 	/* a NULL cache is tolerated everywhere */
@@ -257,43 +257,6 @@ START_TEST(test_cache_local_null_safe) {
 }
 END_TEST
 
-/* file-scope owner so the pool cleanup can reset it after the owning pool is destroyed */
-static oidc_cache_local_t *_owned_cache = NULL;
-
-START_TEST(test_cache_local_owner_reset_on_pool_cleanup) {
-	apr_pool_t *parent = pool;
-	apr_pool_t *first = NULL, *second = NULL;
-	apr_pool_create(&first, parent);
-
-	_owned_cache = NULL;
-	oidc_cache_local_t *c1 = oidc_cache_local_create(&_owned_cache, first, "owned", 8, 0, NULL, NULL, NULL);
-	ck_assert_ptr_nonnull(c1);
-	ck_assert_ptr_eq(_owned_cache, c1);
-
-	/* create with the same owner is idempotent */
-	ck_assert_ptr_eq(oidc_cache_local_create(&_owned_cache, first, "owned", 8, 0, NULL, NULL, NULL), c1);
-
-	/* destroying the owning pool resets the owner pointer, so a stale cache is never used */
-	apr_pool_destroy(first);
-	ck_assert_ptr_null(_owned_cache);
-
-	/* a reload (new pool) re-creates the cache and re-tracks the owner (NB: the new cache may
-	 * reuse the freed address of c1, so identity is verified via the owner pointer and a live
-	 * round-trip, not pointer inequality) */
-	(void)c1;
-	apr_pool_create(&second, parent);
-	oidc_cache_local_t *c2 = oidc_cache_local_create(&_owned_cache, second, "owned", 8, 0, NULL, NULL, NULL);
-	ck_assert_ptr_nonnull(c2);
-	ck_assert_ptr_eq(_owned_cache, c2);
-	int v = 7;
-	oidc_cache_local_set(c2, "k", &v);
-	ck_assert_ptr_eq(oidc_cache_local_get(c2, "k"), &v);
-
-	apr_pool_destroy(second);
-	ck_assert_ptr_null(_owned_cache);
-}
-END_TEST
-
 /*
  * get_or_compute hands the caller a cache-owned pointer and then drops the lock, which only holds
  * up while nothing can evict the entry underneath it. On an evicting cache it must therefore refuse
@@ -302,8 +265,8 @@ END_TEST
  */
 START_TEST(test_cache_local_get_or_compute_refuses_on_evicting_cache) {
 	int compute_count = 0;
-	oidc_cache_local_t *evicting = oidc_cache_local_create(NULL, pool, "evict", 8, 1, NULL, NULL, NULL);
-	oidc_cache_local_t *stable = oidc_cache_local_create(NULL, pool, "stable", 8, 0, NULL, NULL, NULL);
+	oidc_cache_local_t *evicting = oidc_cache_local_create(pool, "evict", 8, 1, NULL, NULL, NULL);
+	oidc_cache_local_t *stable = oidc_cache_local_create(pool, "stable", 8, 0, NULL, NULL, NULL);
 
 	/* refused, and `compute` is not even run */
 	ck_assert_ptr_null(oidc_cache_local_get_or_compute(evicting, "k", test_compute, &compute_count));
@@ -348,7 +311,7 @@ static void test_use(void *value, void *baton) {
 
 START_TEST(test_cache_local_get_use_set_build) {
 	_free_count = 0;
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "gusb", 8, 1, test_free_value, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "gusb", 8, 1, test_free_value, NULL, NULL);
 
 	/* build stores a fresh entry; get_use validates it fresh and hands out the payload */
 	struct test_build_ctx b1 = {.stamp = 1, .payload = 100};
@@ -392,7 +355,7 @@ END_TEST
  */
 START_TEST(test_cache_local_set_build_rechecks_under_lock) {
 	_free_count = 0;
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, pool, "recheck", 8, 1, test_free_value, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(pool, "recheck", 8, 1, test_free_value, NULL, NULL);
 
 	struct test_build_ctx b1 = {.stamp = 1, .payload = 100};
 	ck_assert(oidc_cache_local_set_build(cache, "k", NULL, NULL, test_build, &b1) == TRUE);
@@ -452,7 +415,7 @@ START_TEST(test_cache_local_subpool_entries_freed_on_cleanup) {
 	apr_pool_create(&child, pool);
 	_free_count = 0;
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, child, "pooled", 8, 1, test_pooled_free, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(child, "pooled", 8, 1, test_pooled_free, NULL, NULL);
 	ck_assert(oidc_cache_local_set_build(cache, "a", NULL, NULL, test_pooled_build, &v) == TRUE);
 	ck_assert(oidc_cache_local_set_build(cache, "b", NULL, NULL, test_pooled_build, &v) == TRUE);
 
@@ -518,7 +481,7 @@ START_TEST(test_cache_local_retired_drain_runs_before_pool_destroy) {
 	/* registered first, so the cache's own pre-cleanup - registered below - runs before it */
 	apr_pool_pre_cleanup_register(child, NULL, test_order_drain);
 
-	oidc_cache_local_t *cache = oidc_cache_local_create(NULL, child, "order", 8, 1, test_order_free, NULL, NULL);
+	oidc_cache_local_t *cache = oidc_cache_local_create(child, "order", 8, 1, test_order_free, NULL, NULL);
 	ck_assert_ptr_nonnull(cache);
 	ck_assert(oidc_cache_local_set_build(cache, "k", NULL, NULL, test_order_build, NULL) == TRUE);
 
@@ -542,7 +505,7 @@ START_TEST(test_cache_local_survives_compaction) {
 
 	_free_count = 0;
 	oidc_cache_local_t *cache =
-	    oidc_cache_local_create(NULL, pool, "compact", max_entries, 1, test_free_value, NULL, NULL);
+	    oidc_cache_local_create(pool, "compact", max_entries, 1, test_free_value, NULL, NULL);
 	ck_assert_ptr_nonnull(cache);
 
 	for (int i = 0; i < churn; i++) {
@@ -595,7 +558,7 @@ START_TEST(test_cache_local_churn_does_not_grow_without_bound) {
 	memset(key, 'k', key_len);
 
 	oidc_cache_local_t *cache =
-	    oidc_cache_local_create(NULL, pool, "growth", max_entries, 1, test_free_value, NULL, NULL);
+	    oidc_cache_local_create(pool, "growth", max_entries, 1, test_free_value, NULL, NULL);
 	ck_assert_ptr_nonnull(cache);
 
 	/* fill to capacity first, so the comparison below measures churn rather than the steady state */
@@ -649,7 +612,6 @@ int main(void) {
 	tcase_add_test(core, test_cache_local_warns_on_young_eviction);
 	tcase_add_test(core, test_cache_local_cleanup_frees_values);
 	tcase_add_test(core, test_cache_local_null_safe);
-	tcase_add_test(core, test_cache_local_owner_reset_on_pool_cleanup);
 	tcase_add_test(core, test_cache_local_get_use_set_build);
 	tcase_add_test(core, test_cache_local_set_build_rechecks_under_lock);
 	tcase_add_test(core, test_cache_local_subpool_entries_freed_on_cleanup);

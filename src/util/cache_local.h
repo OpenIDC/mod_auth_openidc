@@ -39,7 +39,7 @@
  * shm/redis/memcache (compiled regexes, parsed JSON, cjose keys, ...) and memoizes them for the
  * lifetime of the worker process. It centralizes the concurrency, bounding and teardown discipline
  * that would otherwise be re-implemented per cache (rwlock, write-lock-only pool allocation,
- * cleanup ordering, reload-safe owner-pointer reset).
+ * cleanup ordering, teardown).
  *
  * Values are owned by the cache; `free_value` (if given) is called for each value when it is
  * evicted or when the cache is torn down at pool cleanup. The cache never copies values.
@@ -79,17 +79,14 @@ typedef void (*oidc_cache_local_log_fn)(void *log_ctx, const char *name, int max
  * an entry that was accessed recently, so an operator can be warned the cache is undersized for the
  * concurrency; pass NULL to stay silent.
  *
- * `owner`, when non-NULL, is the address of the caller's cache pointer: `*owner` is set to the new
- * cache and reset to NULL at pool cleanup, so a config reload (new pool) re-creates the cache
- * instead of dereferencing a freed one; passing the same `owner` again is idempotent. Tests that
- * manage the cache on the stack pass NULL and use the return value.
- *
  * Returns the cache, or NULL on allocation failure (callers then operate without a cache; all
- * functions below tolerate a NULL cache).
+ * functions below tolerate a NULL cache). Callers keep it in a static and simply assign it again on
+ * a config reload: post-config runs against a fresh pool, and the cache built on the previous one
+ * went away with it - no request can be looking at either in between.
  */
-oidc_cache_local_t *oidc_cache_local_create(oidc_cache_local_t **owner, apr_pool_t *pool, const char *name,
-					    int max_entries, int evict_on_full, oidc_cache_local_free_fn free_value,
-					    oidc_cache_local_log_fn log_full, void *log_ctx);
+oidc_cache_local_t *oidc_cache_local_create(apr_pool_t *pool, const char *name, int max_entries, int evict_on_full,
+					    oidc_cache_local_free_fn free_value, oidc_cache_local_log_fn log_full,
+					    void *log_ctx);
 
 /* evict every entry (calling `free_value` for each) without tearing the cache down, e.g. to force a
  * full refresh; safe to call concurrently with lookups/stores (takes the write lock) */

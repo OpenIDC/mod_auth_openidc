@@ -141,8 +141,8 @@ static void *oidc_proto_jwks_cache_build(apr_pool_t *pool, const char *key, void
 }
 
 void oidc_proto_jwks_cache_init(apr_pool_t *pool, server_rec *s) {
-	oidc_cache_local_create(&_oidc_proto_jwks_cache, pool, "proto-jwks", OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES, TRUE,
-				oidc_proto_jwks_cache_free, oidc_util_cache_local_warn, s);
+	_oidc_proto_jwks_cache = oidc_cache_local_create(pool, "proto-jwks", OIDC_PROTO_JWKS_CACHE_MAX_ENTRIES, TRUE,
+							 oidc_proto_jwks_cache_free, oidc_util_cache_local_warn, s);
 }
 
 static void oidc_proto_jwks_cache_purge(void) {
