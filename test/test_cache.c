@@ -306,6 +306,54 @@ START_TEST(test_cache_shm_eviction_and_delete) {
 }
 END_TEST
 
+/*
+ * churn the shm cache well past its capacity with per-key distinguishable values, interleaving
+ * deletes and already-expired entries, and assert the only thing that must always hold: a key that
+ * is still present returns *its own* value. The segment indexes slots through in-shm bucket chains
+ * and a free list, so a mislinked chain, a slot on two lists at once, or a slot reused without
+ * being unlinked would surface here as one key answering with another's value.
+ */
+START_TEST(test_cache_shm_churn_never_crosses_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int nslots = oidc_cfg_cache_shm_size_max_get(cfg);
+	const int total = nslots * 5;
+	const apr_time_t future = apr_time_now() + apr_time_from_sec(3600);
+	const apr_time_t past = apr_time_now() - apr_time_from_sec(1);
+	int present = 0;
+	int i = 0;
+
+	for (i = 0; i < total; i++) {
+		const char *key = apr_psprintf(r->pool, "churn-%d", i);
+		/* every fifth entry is already expired on arrival, every seventh is deleted again */
+		ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, key,
+						apr_psprintf(r->pool, "value-for-%d", i),
+						((i % 5) == 0) ? past : future),
+				 TRUE);
+		if ((i % 7) == 0)
+			ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, key, NULL, future), TRUE);
+	}
+
+	for (i = 0; i < total; i++) {
+		char *value = NULL;
+		const char *key = apr_psprintf(r->pool, "churn-%d", i);
+		ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, key, &value), TRUE);
+		if (value == NULL)
+			continue;
+		present++;
+		/* an expired or deleted entry must never come back, and a live one must be its own */
+		ck_assert_msg((i % 5) != 0, "expired entry churn-%d was served: %s", i, value);
+		ck_assert_msg((i % 7) != 0, "deleted entry churn-%d was served: %s", i, value);
+		ck_assert_str_eq(value, apr_psprintf(r->pool, "value-for-%d", i));
+	}
+
+	/* the cache is bounded, so it cannot be holding more than its slot count */
+	ck_assert_msg(present <= nslots, "%d entries present in a cache of %d slots", present, nslots);
+	/* ... and after that much churn it should not have collapsed to (nearly) nothing either */
+	ck_assert_msg(present > 0, "no entry at all survived the churn");
+}
+END_TEST
+
 START_TEST(test_cache_shm_get_key_bounds_negative) {
 	request_rec *r = oidc_test_request_get();
 	char *value = NULL;
@@ -2218,6 +2266,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_status2str_success);
 	tcase_add_test(core, test_cache_second_passphrase_retry);
 	tcase_add_test(core, test_cache_shm_eviction_and_delete);
+	tcase_add_test(core, test_cache_shm_churn_never_crosses_keys);
 	tcase_add_test(core, test_cache_shm_get_key_bounds_negative);
 	tcase_add_test(core, test_cache_secret1_empty_secret2_fallback);
 	tcase_add_test(core, test_cache_backend_true_null_miss);
