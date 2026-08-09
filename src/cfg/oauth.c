@@ -99,8 +99,8 @@ struct oidc_oauth_t {
 /*
  * Body generators for the OAuth resource-server (oidc_oauth_t) accessors
  * declared in cfg/oauth.h: for member `foo` they emit oidc_cmd_oauth_foo_set(),
- * oidc_cfg_oauth_foo_set() and oidc_cfg_oauth_foo_get(). Indexed by
- * .ctags.d/mod_auth_openidc.ctags.
+ * oidc_cfg_oauth_foo_set() and oidc_cfg_oauth_foo_get(); those names are
+ * token-pasted here and so appear in no source line.
  */
 #define OIDC_OAUTH_MEMBER_FUNC_GET(member, type)                                                                       \
 	type oidc_cfg_oauth_##member##_get(const oidc_cfg_t *cfg) {                                                    \

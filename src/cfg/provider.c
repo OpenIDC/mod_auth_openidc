@@ -125,7 +125,7 @@ struct oidc_provider_t {
  * cfg/provider.h: for member `foo` they emit oidc_cmd_provider_foo_set(),
  * oidc_cfg_provider_foo_set() and oidc_cfg_provider_foo_get().
  * OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF is the common base the typed variants
- * build on. Indexed by .ctags.d/mod_auth_openidc.ctags.
+ * build on. The emitted names are token-pasted and so appear in no source line.
  */
 #define OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, type, def_val)                                                     \
                                                                                                                        \

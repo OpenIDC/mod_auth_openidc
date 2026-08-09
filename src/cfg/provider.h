@@ -136,8 +136,8 @@ typedef enum {
  *   <type>      oidc_cfg_provider_foo_get(const oidc_provider_t *);                -- getter (used everywhere)
  *
  * The matching bodies are generated in cfg/provider.c. Because the names are
- * token-pasted they are not findable by grepping for the literal symbol;
- * .ctags.d/mod_auth_openidc.ctags ships a ctags recipe that indexes them.
+ * token-pasted they are not findable by grepping for the literal symbol; only
+ * an index that preprocesses can resolve them.
  *
  * Layering is kept to two: every aggregate (STR/TYPE/INT/KEYS/INT_INT/STR_LIST)
  * expands directly to these atoms, never to another aggregate.

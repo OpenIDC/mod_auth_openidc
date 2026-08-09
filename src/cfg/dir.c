@@ -277,7 +277,8 @@ const char *oidc_cmd_dir_pass_cookies_set(cmd_parms *cmd, void *m, const char *a
 /*
  * Body generators for the per-directory (oidc_dir_cfg_t) accessors declared in
  * cfg/dir.h: for member `foo` they emit oidc_cmd_dir_foo_set() and
- * oidc_cfg_dir_foo_get(). Indexed by .ctags.d/mod_auth_openidc.ctags.
+ * oidc_cfg_dir_foo_get(); those names are token-pasted here and so appear in
+ * no source line.
  */
 #define OIDC_CFG_DIR_MEMBER_FUNC_GET(member, type, def_val, unset_val)                                                 \
 	type oidc_cfg_dir_##member##_get(request_rec *r) {                                                             \
