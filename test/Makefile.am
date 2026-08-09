@@ -142,6 +142,7 @@ EXTRA_DIST = \
 	post_restore.template \
 	fuzz/corpus \
 	fuzz/build.sh \
+	fuzz/oss-fuzz-build.sh \
 	fuzz/README.md
 
 clean-local:

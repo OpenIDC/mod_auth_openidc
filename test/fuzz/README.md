@@ -13,9 +13,9 @@ parser, reusing the libcheck test fixture (`test/util.c`) for a ready
 | `fuzz_jwt`    | `oidc_jwt_parse`                   | compact JWT/JWS/JWE structural parse              |
 | `fuzz_json`   | `oidc_json_decode_object`          | JSON decode (token / userinfo / metadata)         |
 
-## Two build modes
+## Three build modes
 
-Every target builds two ways from the same `fuzz_*.c`:
+Every target builds three ways from the same `fuzz_*.c`:
 
 1. **Regression (part of `make check`)** — the target is linked with
    `standalone.c` and the ordinary compiler. `run-fuzzers.sh` replays each
@@ -33,6 +33,23 @@ Every target builds two ways from the same `fuzz_*.c`:
    cd test/fuzz && ./build.sh
    ./build/fuzz_url -max_len=1024 corpus/url
    ```
+
+3. **OSS-Fuzz** — `oss-fuzz-build.sh` builds the same targets inside an OSS-Fuzz
+   `base-builder` container, against `$CC`/`$CFLAGS`/`$LIB_FUZZING_ENGINE`, and
+   ships each target's seeds as `$OUT/<target>_seed_corpus.zip` (`fuzz_url` also
+   gets the open-redirect payload list, one input per file). It lives here rather
+   than in `google/oss-fuzz` so that adding a target, a corpus or a dictionary is
+   a change in this tree and nowhere else; the project's build script there is one
+   line calling this one.
+
+   Three things it has to work around are documented inline, because none are
+   obvious and all three fail late: cjose commits autotools output from a newer
+   automake than the base image has (so always `autoreconf -fi`), `apxs` supplies
+   `-flto` flags that discard the sanitizer-coverage constructors (so `-fno-lto`),
+   and the runner image lacks the builder's distro libraries (so they are copied
+   to `$OUT/lib` behind an `$ORIGIN` rpath).
+
+   Verified locally with `infra/helper.py build_fuzzers` + `check_build`.
 
 ## Reproducing a crash
 
