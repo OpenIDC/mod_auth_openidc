@@ -54,6 +54,7 @@ build_dep() {
 	./configure --prefix="$prefix" --disable-shared --enable-static "$@" >/dev/null
 	make -j"$(nproc)" >/dev/null
 	make install >/dev/null
+	return 0
 }
 
 build_dep jansson
@@ -85,7 +86,7 @@ export CFLAGS="$CFLAGS -fno-lto"
 make -C src libauth_openidc.la -j"$(nproc)"
 
 lib="$root/src/.libs/libauth_openidc.a"
-[ -f "$lib" ] || { echo "error: $lib was not built" >&2; exit 1; }
+[[ -f "$lib" ]] || { echo "error: $lib was not built" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # targets
@@ -104,7 +105,7 @@ libs="$prefix/lib/libcjose.a $prefix/lib/libjansson.a \
 
 for t in base64 url jwt json; do
 	src="$root/test/fuzz/fuzz_$t.c"
-	[ -f "$src" ] || continue
+	[[ -f "$src" ]] || continue
 	echo "=== building fuzz_$t"
 	# shellcheck disable=SC2086
 	$CC $CFLAGS $inc -DFUZZING \
@@ -127,7 +128,7 @@ done
 # ---------------------------------------------------------------------------
 mkdir -p "$OUT/lib"
 for t in base64 url jwt json; do
-	[ -f "$OUT/fuzz_$t" ] || continue
+	[[ -f "$OUT/fuzz_$t" ]] || continue
 	ldd "$OUT/fuzz_$t" | awk '/=> \//{print $3}'
 done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc_s|ld-linux)[.-]' \
      | while read -r so; do cp -n "$so" "$OUT/lib/" 2>/dev/null || true; done
@@ -142,7 +143,7 @@ for t in base64 url jwt json; do
 	seed="$WORK/seed_$t"
 	rm -rf "$seed" && mkdir -p "$seed"
 	cp "$root"/test/fuzz/corpus/"$t"/* "$seed"/ 2>/dev/null || true
-	if [ "$t" = "url" ]; then
+	if [[ "$t" = "url" ]]; then
 		i=0
 		while IFS= read -r line; do
 			printf '%s' "$line" > "$seed/payload-$i"
@@ -153,7 +154,7 @@ for t in base64 url jwt json; do
 done
 
 for d in "$root"/test/fuzz/dict/*.dict; do
-	[ -f "$d" ] && cp "$d" "$OUT/fuzz_$(basename "$d" .dict).dict"
+	[[ -f "$d" ]] && cp "$d" "$OUT/fuzz_$(basename "$d" .dict).dict"
 done
 
 echo "built: $(ls "$OUT"/fuzz_* | tr '\n' ' ')"
