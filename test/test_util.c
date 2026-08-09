@@ -1275,8 +1275,11 @@ START_TEST(test_util_pcre_compile_failure_allocates_nothing) {
 	ck_assert_ptr_nonnull(err);
 	ck_assert_msg(_oidc_strstr(err, "not a valid regular expression") != NULL, "got: %s", err);
 
-	/* a pattern that does compile still yields a usable program */
-	ck_assert_ptr_nonnull(oidc_pcre_compile(p, "[a-z]+", NULL));
+	/* a pattern that does compile still yields a usable program; the compiled program itself is
+	 * malloc'ed by pcre2 rather than taken from the pool, so it needs the explicit free */
+	struct oidc_pcre *compiled = oidc_pcre_compile(p, "[a-z]+", NULL);
+	ck_assert_ptr_nonnull(compiled);
+	oidc_pcre_free(compiled);
 
 	apr_pool_destroy(p);
 }
