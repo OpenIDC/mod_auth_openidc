@@ -215,28 +215,46 @@ char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 	return rv;
 }
 
+/*
+ * compile a regular expression into a wrapper allocated from `pool`; `error_str` may be NULL when
+ * the caller has no use for the message.
+ *
+ * Nothing is allocated from `pool` unless the compile succeeds: APR pools cannot release individual
+ * allocations, so a caller that compiles the same invalid pattern repeatedly against a long-lived
+ * pool would otherwise retain the wrapper and the message from every attempt.
+ */
 struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
-	struct oidc_pcre *pcre = NULL;
-	if (regexp == NULL)
-		return NULL;
-	pcre = apr_pcalloc(pool, sizeof(struct oidc_pcre));
 #ifdef HAVE_LIBPCRE2
+	pcre2_code *preg = NULL;
 	int errorcode;
 	PCRE2_SIZE erroroffset;
-	pcre->preg = pcre2_compile((PCRE2_SPTR)regexp, _oidc_strlen(regexp), 0, &errorcode, &erroroffset, NULL);
 #else
+	pcre *preg = NULL;
 	const char *errorptr = NULL;
 	int erroffset;
-	pcre->preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
+#endif
+	struct oidc_pcre *rv = NULL;
+
+	if (regexp == NULL)
+		return NULL;
+
+#ifdef HAVE_LIBPCRE2
+	preg = pcre2_compile((PCRE2_SPTR)regexp, _oidc_strlen(regexp), 0, &errorcode, &erroroffset, NULL);
+#else
+	preg = pcre_compile(regexp, 0, &errorptr, &erroffset, NULL);
 #endif
 
-	if (pcre->preg == NULL) {
-		*error_str = apr_psprintf(pool, "pattern [%s] is not a valid regular expression", regexp);
-		pcre = NULL;
-	} else {
-		pcre->owns_preg = 1;
+	if (preg == NULL) {
+		if (error_str != NULL)
+			*error_str = apr_psprintf(pool, "pattern [%s] is not a valid regular expression", regexp);
+		return NULL;
 	}
-	return pcre;
+
+	rv = apr_pcalloc(pool, sizeof(struct oidc_pcre));
+	rv->preg = preg;
+	rv->owns_preg = 1;
+
+	return rv;
 }
 
 /*

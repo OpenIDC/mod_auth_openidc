@@ -1261,6 +1261,46 @@ END_TEST
 
 #endif /* HAVE_LIBPCRE2 */
 
+/*
+ * a pattern that does not compile must cost the pool nothing: APR pools cannot release individual
+ * allocations, so a caller that compiles an invalid pattern repeatedly against a long-lived pool
+ * would retain the wrapper and the error message from every attempt.
+ */
+START_TEST(test_util_pcre_compile_failure_allocates_nothing) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	apr_pool_t *p = NULL;
+	char *before = NULL;
+	char *after = NULL;
+	char *err = NULL;
+
+	ck_assert_int_eq(apr_pool_create(&p, pool), APR_SUCCESS);
+
+	/* error_str is optional: the cache's build callback has no use for the message */
+	ck_assert_ptr_null(oidc_pcre_compile(p, "[unterminated", NULL));
+
+	/* APR pools allocate by bumping a pointer, so two adjacent allocations of the same size are
+	 * exactly that size apart when nothing was allocated in between */
+	before = apr_palloc(p, 64);
+	for (int i = 0; i < 32; i++)
+		ck_assert_ptr_null(oidc_pcre_compile(p, "[unterminated", NULL));
+	after = apr_palloc(p, 64);
+	ck_assert_msg((after - before) == 64,
+		      "32 failing compiles allocated %d bytes from the pool; they must allocate none",
+		      (int)(after - before) - 64);
+
+	/* asking for the message does allocate it, which is right for the per-request caller that
+	 * logs it out of a request pool */
+	ck_assert_ptr_null(oidc_pcre_compile(p, "[unterminated", &err));
+	ck_assert_ptr_nonnull(err);
+	ck_assert_msg(_oidc_strstr(err, "not a valid regular expression") != NULL, "got: %s", err);
+
+	/* a pattern that does compile still yields a usable program */
+	ck_assert_ptr_nonnull(oidc_pcre_compile(p, "[a-z]+", NULL));
+
+	apr_pool_destroy(p);
+}
+END_TEST
+
 START_TEST(test_util_read_form_encoded_params) {
 	request_rec *r = oidc_test_request_get();
 	apr_table_t *t = apr_table_make(r->pool, 4);
@@ -1648,6 +1688,7 @@ int main(void) {
 #ifdef HAVE_LIBPCRE2
 	tcase_add_test(c, test_util_pcre_get_substring_error_arms);
 #endif
+	tcase_add_test(c, test_util_pcre_compile_failure_allocates_nothing);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("url-params");

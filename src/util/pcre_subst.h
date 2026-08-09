@@ -54,6 +54,9 @@ restrictions:
 
 struct oidc_pcre;
 
+/* compile `regexp`; `error_str` is optional (pass NULL to not have a failure message built). Nothing
+ * is allocated from `pool` unless the compile succeeds, so failing is free for a caller that hands
+ * in a long-lived pool */
 struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str);
 struct oidc_pcre *oidc_pcre_alias(apr_pool_t *pool, const struct oidc_pcre *src);
 char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *, const char *, int, const char *);
