@@ -352,6 +352,17 @@ void *oidc_cache_local_get_or_compute(oidc_cache_local_t *cache, const char *key
 	if ((cache == NULL) || (key == NULL) || (compute == NULL))
 		return NULL;
 
+	/*
+	 * this hands the caller the cache-owned value and then drops the lock, so it is only sound on
+	 * a cache that never evicts: on one that does, another thread can pick this very entry as its
+	 * LRU victim and run free_value on it while the caller is still holding the pointer. Refuse
+	 * rather than hand out a pointer that may not survive the return; the caller falls back to
+	 * computing per request, exactly as it does when the cache is full. Use
+	 * oidc_cache_local_get_use() to read from an evicting cache.
+	 */
+	if (cache->evict_on_full != 0)
+		return NULL;
+
 	oidc_cache_local_rdlock(cache);
 	node = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
 	if (node != NULL) {
@@ -399,13 +410,13 @@ apr_byte_t oidc_cache_local_get_use(oidc_cache_local_t *cache, const char *key, 
 	return rv;
 }
 
-void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
-				 const void *vctx, oidc_cache_local_compute_fn build, void *baton) {
+apr_byte_t oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oidc_cache_local_validate_fn validate,
+				      const void *vctx, oidc_cache_local_compute_fn build, void *baton) {
 	oidc_cache_local_node_t *existing = NULL;
 	void *value = NULL;
 
 	if ((cache == NULL) || (key == NULL) || (build == NULL))
-		return NULL;
+		return FALSE;
 
 	oidc_cache_local_wrlock(cache);
 	existing = apr_hash_get(cache->hash, key, APR_HASH_KEY_STRING);
@@ -444,5 +455,7 @@ void *oidc_cache_local_set_build(oidc_cache_local_t *cache, const char *key, oid
 	}
 	oidc_cache_local_unlock(cache);
 
-	return value;
+	/* deliberately not the value itself: it is owned by the cache and, on a cache that evicts,
+	 * another thread may free it the moment the lock above is released */
+	return (value != NULL) ? TRUE : FALSE;
 }
