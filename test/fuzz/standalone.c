@@ -19,6 +19,10 @@
  *   ./fuzz_xxx file1 file2 ...     each file is fed as one input
  *   ./fuzz_xxx --lines file        each line of the file is fed as one input
  *                                  (for newline-separated payload lists)
+ *
+ * Exits non-zero when an input could not be read, or when the run fed the
+ * target nothing at all: a corpus that moved, or a glob the shell left
+ * unexpanded because it matched no file, must not be reported as a pass.
  */
 
 #ifndef _GNU_SOURCE
@@ -30,11 +34,12 @@
 #include <string.h>
 #include <sys/types.h>
 
-static void run_file(const char *path) {
+/* returns the number of inputs fed to the target, or -1 if the file was unreadable */
+static long run_file(const char *path) {
 	FILE *f = fopen(path, "rb");
 	if (f == NULL) {
 		fprintf(stderr, "fuzz: cannot open %s\n", path);
-		return;
+		return -1;
 	}
 	fseek(f, 0, SEEK_END);
 	long sz = ftell(f);
@@ -46,34 +51,57 @@ static void run_file(const char *path) {
 	fclose(f);
 	LLVMFuzzerTestOneInput(buf, n);
 	free(buf);
+	return 1;
 }
 
-static void run_lines(const char *path) {
+/* returns the number of lines fed to the target, or -1 if the file was unreadable */
+static long run_lines(const char *path) {
 	FILE *f = fopen(path, "rb");
 	if (f == NULL) {
 		fprintf(stderr, "fuzz: cannot open %s\n", path);
-		return;
+		return -1;
 	}
 	char *line = NULL;
 	size_t cap = 0;
 	ssize_t len;
+	long fed = 0;
 	while ((len = getline(&line, &cap, f)) != -1) {
 		while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
 			len--;
 		LLVMFuzzerTestOneInput((const unsigned char *)line, (size_t)len);
+		fed++;
 	}
 	free(line);
 	fclose(f);
+	return fed;
 }
 
 int main(int argc, char **argv) {
 	int i = 1;
 	int lines = 0;
+	int unreadable = 0;
+	long fed = 0;
+
 	if (argc > 1 && strcmp(argv[1], "--lines") == 0) {
 		lines = 1;
 		i = 2;
 	}
-	for (; i < argc; i++)
-		lines ? run_lines(argv[i]) : run_file(argv[i]);
+	for (; i < argc; i++) {
+		long n = lines ? run_lines(argv[i]) : run_file(argv[i]);
+		if (n < 0)
+			unreadable = 1;
+		else
+			fed += n;
+	}
+
+	/* the "cannot open" reason has already been reported per path */
+	if (unreadable)
+		return 1;
+
+	if (fed == 0) {
+		fprintf(stderr, "fuzz: no input was replayed -- corpus missing, empty, or no arguments given\n");
+		return 1;
+	}
+
 	return 0;
 }

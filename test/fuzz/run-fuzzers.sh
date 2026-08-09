@@ -43,7 +43,7 @@ replay() {
 	# normal log and surface it only when a target actually crashes
 	errlog=$(mktemp)
 	if ! "./$bin" "$@" >/dev/null 2>"$errlog"; then
-		echo "CRASH: $bin exited non-zero on the corpus above"
+		echo "FAILED: $bin exited non-zero -- it crashed, or an input was unreadable"
 		cat "$errlog"
 		status=1
 	fi
@@ -68,7 +68,7 @@ fi
 if [ "$status" -eq 0 ]; then
 	echo "PASS: $replayed fuzz seed corpora replayed with no crashes"
 else
-	echo "FAIL: a fuzz target crashed -- reproduce with ./<target> <file>"
+	echo "FAIL: a fuzz target failed -- reproduce with ./<target> <file>"
 fi
 
 exit "$status"
