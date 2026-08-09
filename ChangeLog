@@ -10,7 +10,14 @@
   entry dropped by a declining rebuild towards the compaction that reclaims its key
 - reduce the process-local cache to two operations, get_use and set_build, both of which run the
   caller's callback under the lock, so that no cached pointer outlives it
-- release 2.4.20.1
+- only infer the OpenID Connect RP role from an OIDCRedirectURI that a vhost sets itself, not from
+  one it inherited from the base server: a server-level redirect URI lands in the merged config of
+  every vhost, including those that do no OpenID Connect at all (a static site, a health check, a
+  redirect-only vhost), and refusing to start over one of those would take down the whole server
+  for a configuration that worked before
+- name the (virtual) host in the messages of the post-config check: httpd does not record which
+  server_rec a startup message was logged against, so with more than one vhost neither the refusals
+  nor the warnings said which one to fix
 
 08/08/2026
 - do not lose an uncompressed payload whose first two bytes happen to look like a zlib header:

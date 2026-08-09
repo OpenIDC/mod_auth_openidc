@@ -40,11 +40,11 @@
  */
 
 #include "cfg/cfg_int.h"
-#include "util/request_state.h"
 #include "cfg/dir.h"
 #include "check_util.h"
 #include "mod_auth_openidc.h"
 #include "util.h"
+#include "util/request_state.h"
 #include "util/util.h"
 #include <mod_auth.h>
 
@@ -362,6 +362,70 @@ START_TEST(test_config_merged_vhosts) {
 }
 END_TEST
 
+/*
+ * a vhost that sets OIDCRedirectURI itself but configures no provider anywhere means to be an RP
+ * and is not one: refused at startup rather than failing every authentication at request time
+ */
+START_TEST(test_config_openidc_own_redirect_uri_without_provider) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	server_rec *s = oidc_test_server_create(pool, r->server);
+
+	ck_assert_ptr_null(oidc_cmd_redirect_uri_set(oidc_test_server_cmd(pool, s, OIDCRedirectURI), NULL,
+						     "https://www.example.com/protected/"));
+	ck_assert_int_eq(oidc_test_post_config(pool, s), HTTP_INTERNAL_SERVER_ERROR);
+}
+END_TEST
+
+/*
+ * ... but a vhost that only *inherits* OIDCRedirectURI from the base server says nothing about
+ * doing OpenID Connect at all: a server-level redirect URI plus a vhost that does no OIDC (a
+ * static site, a health check) must not take the whole server's startup down with it
+ */
+START_TEST(test_config_openidc_inherited_redirect_uri_without_provider) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	server_rec *base = oidc_test_server_create(pool, r->server);
+	server_rec *vhost = oidc_test_server_create(pool, r->server);
+	oidc_cfg_t *merged = NULL;
+
+	/* the redirect URI is set on the base server only ... */
+	ck_assert_ptr_null(oidc_cmd_redirect_uri_set(oidc_test_server_cmd(pool, base, OIDCRedirectURI), NULL,
+						     "https://www.example.com/protected/"));
+
+	/* ... and reaches the vhost the way httpd gets it there */
+	merged = oidc_cfg_server_merge(pool, oidc_test_server_cfg(base), oidc_test_server_cfg(vhost));
+	ap_set_module_config(vhost->module_config, &auth_openidc_module, merged);
+	ck_assert_str_eq(oidc_cfg_redirect_uri_get(merged), "https://www.example.com/protected/");
+	ck_assert_int_eq(oidc_cfg_redirect_uri_inherited_get(merged), 1);
+	base->next = vhost;
+
+	ck_assert_int_eq(oidc_test_post_config(pool, base), OK);
+}
+END_TEST
+
+/* a vhost that overrides the inherited OIDCRedirectURI is back to meaning it */
+START_TEST(test_config_openidc_overridden_redirect_uri_without_provider) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	server_rec *base = oidc_test_server_create(pool, r->server);
+	server_rec *vhost = oidc_test_server_create(pool, r->server);
+	oidc_cfg_t *merged = NULL;
+
+	ck_assert_ptr_null(oidc_cmd_redirect_uri_set(oidc_test_server_cmd(pool, base, OIDCRedirectURI), NULL,
+						     "https://www.example.com/protected/"));
+	ck_assert_ptr_null(oidc_cmd_redirect_uri_set(oidc_test_server_cmd(pool, vhost, OIDCRedirectURI), NULL,
+						     "https://vhost.example.com/protected/"));
+
+	merged = oidc_cfg_server_merge(pool, oidc_test_server_cfg(base), oidc_test_server_cfg(vhost));
+	ap_set_module_config(vhost->module_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_redirect_uri_inherited_get(merged), 0);
+	base->next = vhost;
+
+	ck_assert_int_eq(oidc_test_post_config(pool, base), HTTP_INTERNAL_SERVER_ERROR);
+}
+END_TEST
+
 /* a broken merged vhost fails the whole startup, not just its own config */
 START_TEST(test_config_merged_vhosts_one_broken) {
 	apr_pool_t *pool = oidc_test_pool_get();
@@ -563,6 +627,9 @@ int main(void) {
 	tcase_add_test(c, test_config_oauth_metadata_url_insecure_warns);
 	tcase_add_test(c, test_config_oauth_local_validation_without_audience);
 	tcase_add_test(c, test_config_oauth_introspection_and_local_validation);
+	tcase_add_test(c, test_config_openidc_own_redirect_uri_without_provider);
+	tcase_add_test(c, test_config_openidc_inherited_redirect_uri_without_provider);
+	tcase_add_test(c, test_config_openidc_overridden_redirect_uri_without_provider);
 	tcase_add_test(c, test_config_merged_vhosts);
 	tcase_add_test(c, test_config_merged_vhosts_one_broken);
 	tcase_add_test(c, test_config_child_init);

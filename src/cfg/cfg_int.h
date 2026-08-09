@@ -89,7 +89,7 @@ static inline apr_interval_time_t _oidc_cfg_merge_timeout(apr_interval_time_t ad
 	/* cache_type= memcache: hard maximum number of connections to each memcache server per process */             \
 	INT(int, memcache_hmax)                                                                                        \
 	/* cache_type= memcache: maximum time in microseconds a connection to a memcache server can be idle before     \
-	 * being closed */                                                                                                             \
+	 * being closed */                                                                                             \
 	TIMEOUT(memcache_ttl)
 #else
 #define OIDC_CACHE_CFG_MEMCACHE_MEMBERS(PTR, INT, TIMEOUT)
@@ -227,6 +227,11 @@ struct oidc_cfg_t {
 
 	/* indicates whether this is a derived config, merged from a base one */
 	unsigned int merged;
+	/* indicates whether redirect_uri was inherited from the base server rather than set in this
+	 * server's own configuration section; the merged value alone cannot tell the two apart, and
+	 * only a deliberately configured one expresses the intent to act as an OpenID Connect RP
+	 * (see oidc_config_check_vhost_config) */
+	unsigned int redirect_uri_inherited;
 };
 
 #define OIDC_CONFIG_DIR_RV(cmd, rv)                                                                                    \

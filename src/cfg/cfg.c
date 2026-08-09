@@ -868,6 +868,8 @@ void *oidc_cfg_server_create(apr_pool_t *pool, server_rec *svr) {
 	c->svr = svr;
 
 	c->merged = FALSE;
+	/* nothing to inherit from: whatever OIDCRedirectURI this config ends up with is its own */
+	c->redirect_uri_inherited = FALSE;
 
 	OIDC_SVR_CFG_SIMPLE_MEMBERS(OIDC_SVR_M_CREATE_PTR, OIDC_SVR_M_CREATE_INT)
 	c->public_keys = NULL;
@@ -981,6 +983,9 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	c->oauth = oidc_cfg_oauth_create(pool);
 
 	c->merged = TRUE;
+	/* record where the merged redirect_uri came from while "add" (this vhost's own config) and
+	 * "base" can still be told apart: the merge below collapses them into a single value */
+	c->redirect_uri_inherited = (add->redirect_uri == NULL) && (base->redirect_uri != NULL);
 
 	oidc_cfg_provider_merge(pool, c->provider, base->provider, add->provider);
 	oidc_cfg_oauth_merge(pool, c->oauth, base->oauth, add->oauth);
@@ -1044,6 +1049,10 @@ oidc_provider_t *oidc_cfg_provider_get(oidc_cfg_t *cfg) {
 
 int oidc_cfg_merged_get(const oidc_cfg_t *cfg) {
 	return cfg->merged;
+}
+
+int oidc_cfg_redirect_uri_inherited_get(const oidc_cfg_t *cfg) {
+	return cfg->redirect_uri_inherited;
 }
 
 static oidc_cache_mutex_t *_oidc_refresh_mutex = NULL;

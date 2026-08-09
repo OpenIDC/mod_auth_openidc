@@ -61,11 +61,31 @@
 
 #include <apr_hash.h>
 #include <apr_strings.h>
+
+/*
+ * identify the (virtual) host that a message below applies to: httpd does not record which
+ * server_rec a post_config message was logged against, so in a configuration with more than one
+ * vhost the message on its own does not say which one needs fixing - and a single offending vhost
+ * aborts the startup of the whole server
+ */
+static const char *oidc_check_config_vhost(const server_rec *s) {
+	apr_pool_t *pool = s->process->pconf;
+	const char *name = (s->server_hostname != NULL) ? s->server_hostname : "(no ServerName)";
+	if (s->defn_name == NULL)
+		return name;
+	if (s->defn_line_number == 0)
+		return apr_psprintf(pool, "%s (%s)", name, s->defn_name);
+	return apr_psprintf(pool, "%s (%s:%u)", name, s->defn_name, s->defn_line_number);
+}
+
+#define oidc_check_serror(s, fmt, ...) oidc_serror(s, "[%s] " fmt, oidc_check_config_vhost(s), ##__VA_ARGS__)
+#define oidc_check_swarn(s, fmt, ...) oidc_swarn(s, "[%s] " fmt, oidc_check_config_vhost(s), ##__VA_ARGS__)
+
 /*
  * report a config error
  */
 static int oidc_check_config_error(server_rec *s, const char *config_str) {
-	oidc_serror(s, "mandatory parameter '%s' is not set", config_str);
+	oidc_check_serror(s, "mandatory parameter '%s' is not set", config_str);
 	return HTTP_INTERNAL_SERVER_ERROR;
 }
 
@@ -75,8 +95,8 @@ static int oidc_check_config_error(server_rec *s, const char *config_str) {
 static int oidc_check_config_openid_openidc_provider(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
 	if (oidc_cfg_metadata_dir_get(c) != NULL) {
 		if (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) != NULL) {
-			oidc_serror(s,
-				    "only one of '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir "' should be set");
+			oidc_check_serror(s, "only one of '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir
+					     "' should be set");
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 		return OK;
@@ -91,10 +111,10 @@ static int oidc_check_config_openid_openidc_provider(apr_pool_t *pool, server_re
 		apr_uri_t r_uri;
 		apr_uri_parse(pool, oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)), &r_uri);
 		if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
-			oidc_swarn(s,
-				   "the URL scheme (%s) of the configured " OIDCProviderMetadataURL
-				   " SHOULD be \"https\" for security reasons!",
-				   r_uri.scheme);
+			oidc_check_swarn(s,
+					 "the URL scheme (%s) of the configured " OIDCProviderMetadataURL
+					 " SHOULD be \"https\" for security reasons!",
+					 r_uri.scheme);
 		}
 	}
 
@@ -113,17 +133,17 @@ static int oidc_check_config_openid_openidc_cookie_domain(server_rec *s, const o
 		return OK;
 
 	if (redirect_uri_is_relative) {
-		oidc_swarn(s,
-			   "if the configured " OIDCRedirectURI " is relative, " OIDCCookieDomain " SHOULD be empty");
+		oidc_check_swarn(s, "if the configured " OIDCRedirectURI " is relative, " OIDCCookieDomain
+				    " SHOULD be empty");
 		return OK;
 	}
 
 	if (!oidc_util_cookie_domain_valid(r_uri->hostname, oidc_cfg_cookie_domain_get(c))) {
-		oidc_serror(s,
-			    "the domain (%s) configured in " OIDCCookieDomain
-			    " does not match the URL hostname (%s) of the configured " OIDCRedirectURI
-			    " (%s): setting \"state\" and \"session\" cookies will not work!",
-			    oidc_cfg_cookie_domain_get(c), r_uri->hostname, oidc_cfg_redirect_uri_get(c));
+		oidc_check_serror(s,
+				  "the domain (%s) configured in " OIDCCookieDomain
+				  " does not match the URL hostname (%s) of the configured " OIDCRedirectURI
+				  " (%s): setting \"state\" and \"session\" cookies will not work!",
+				  oidc_cfg_cookie_domain_get(c), r_uri->hostname, oidc_cfg_redirect_uri_get(c));
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -138,8 +158,8 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 	if ((oidc_cfg_metadata_dir_get(c) == NULL) &&
 	    (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(c)) == NULL) &&
 	    (oidc_cfg_provider_metadata_url_get(oidc_cfg_provider_get(c)) == NULL)) {
-		oidc_serror(s, "one of '" OIDCProviderIssuer "', '" OIDCProviderMetadataURL "' or '" OIDCMetadataDir
-			       "' must be set");
+		oidc_check_serror(s, "one of '" OIDCProviderIssuer "', '" OIDCProviderMetadataURL
+				     "' or '" OIDCMetadataDir "' must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -155,11 +175,11 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 	apr_uri_parse(pool, oidc_cfg_redirect_uri_get(c), &r_uri);
 
 	if (!redirect_uri_is_relative && (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
-		oidc_swarn(s,
-			   "the URL scheme (%s) of the configured " OIDCRedirectURI
-			   " SHOULD be \"https\" for security reasons (moreover: some Providers may reject "
-			   "non-HTTPS URLs)",
-			   r_uri.scheme);
+		oidc_check_swarn(s,
+				 "the URL scheme (%s) of the configured " OIDCRedirectURI
+				 " SHOULD be \"https\" for security reasons (moreover: some Providers may reject "
+				 "non-HTTPS URLs)",
+				 r_uri.scheme);
 	}
 
 	rc = oidc_check_config_openid_openidc_cookie_domain(s, c, &r_uri, redirect_uri_is_relative);
@@ -168,8 +188,8 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 
 	if ((oidc_proto_profile_dpop_mode_get(oidc_cfg_provider_get(c)) != OIDC_DPOP_MODE_OFF) &&
 	    (oidc_util_key_list_first(oidc_cfg_private_keys_get(c), -1, OIDC_JOSE_JWK_SIG_STR) == NULL)) {
-		oidc_serror(s, "'" OIDCDPoPMode "' is configured but the required signing keys have not been "
-			       "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
+		oidc_check_serror(s, "'" OIDCDPoPMode "' is configured but the required signing keys have not been "
+				     "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -183,16 +203,17 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
 
 	apr_uri_t r_uri;
 
-	oidc_swarn(s, "The OAuth 2.0 Resource Server functionality is deprecated and superseded by a new module, see: "
-		      "https://github.com/OpenIDC/mod_oauth2!");
+	oidc_check_swarn(
+	    s, "The OAuth 2.0 Resource Server functionality is deprecated and superseded by a new module, see: "
+	       "https://github.com/OpenIDC/mod_oauth2!");
 
 	if (oidc_cfg_oauth_metadata_url_get(c) != NULL) {
 		apr_uri_parse(pool, oidc_cfg_oauth_metadata_url_get(c), &r_uri);
 		if ((r_uri.scheme == NULL) || (_oidc_strnatcasecmp(r_uri.scheme, "https") != 0)) {
-			oidc_swarn(s,
-				   "the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL
-				   " SHOULD be \"https\" for security reasons!",
-				   r_uri.scheme);
+			oidc_check_swarn(s,
+					 "the URL scheme (%s) of the configured " OIDCOAuthServerMetadataURL
+					 " SHOULD be \"https\" for security reasons!",
+					 r_uri.scheme);
 		}
 		return OK;
 	}
@@ -202,25 +223,25 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
 		if ((oidc_cfg_oauth_verify_jwks_uri_get(c) == NULL) &&
 		    (oidc_cfg_oauth_verify_public_keys_get(c) == NULL) &&
 		    (oidc_cfg_oauth_verify_shared_keys_get(c) == NULL)) {
-			oidc_serror(s, "one of '" OIDCOAuthServerMetadataURL "', '" OIDCOAuthIntrospectionEndpoint
-				       "', '" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys
-				       "' or '" OIDCOAuthVerifyCertFiles "' must be set");
+			oidc_check_serror(s, "one of '" OIDCOAuthServerMetadataURL "', '" OIDCOAuthIntrospectionEndpoint
+					     "', '" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys
+					     "' or '" OIDCOAuthVerifyCertFiles "' must be set");
 			return HTTP_INTERNAL_SERVER_ERROR;
 		}
 
 		if (oidc_cfg_oauth_verify_aud_values_get(c) == NULL)
-			oidc_swarn(s,
-				   "JWT access tokens are validated locally but '" OIDCOAuthVerifyAudience
-				   "' is not set, so any token signed by the configured key(s) is accepted, "
-				   "including one issued for a different resource server; set '" OIDCOAuthVerifyAudience
-				   "' to the identifier(s) of this resource server");
+			oidc_check_swarn(
+			    s, "JWT access tokens are validated locally but '" OIDCOAuthVerifyAudience
+			       "' is not set, so any token signed by the configured key(s) is accepted, "
+			       "including one issued for a different resource server; set '" OIDCOAuthVerifyAudience
+			       "' to the identifier(s) of this resource server");
 
 	} else if ((oidc_cfg_oauth_verify_jwks_uri_get(c) != NULL) ||
 		   (oidc_cfg_oauth_verify_public_keys_get(c) != NULL) ||
 		   (oidc_cfg_oauth_verify_shared_keys_get(c) != NULL)) {
-		oidc_serror(s, "only '" OIDCOAuthIntrospectionEndpoint
-			       "' OR one (or more) out of ('" OIDCOAuthVerifyJwksUri "', '" OIDCOAuthVerifySharedKeys
-			       "' or '" OIDCOAuthVerifyCertFiles "') must be set");
+		oidc_check_serror(
+		    s, "only '" OIDCOAuthIntrospectionEndpoint "' OR one (or more) out of ('" OIDCOAuthVerifyJwksUri
+		       "', '" OIDCOAuthVerifySharedKeys "' or '" OIDCOAuthVerifyCertFiles "') must be set");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -256,7 +277,7 @@ static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, 
 	}
 
 	if (oidc_cfg_crypto_passphrase_derive_keys_cached(s->process->pool, kdf_cache, cfg) == FALSE) {
-		oidc_serror(s, "oidc_cfg_crypto_passphrase_derive_keys_cached failed");
+		oidc_check_serror(s, "oidc_cfg_crypto_passphrase_derive_keys_cached failed");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -285,11 +306,19 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s, apr_h
 	    (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) || (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
 	    (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL);
 
-	/* a vhost that sets OIDCRedirectURI without any OAuth 2.0 RS settings intends to act as an
-	 * OpenID Connect RP: run the RP check even when no provider source is configured, so that
-	 * omission is a startup error instead of a request-time authentication/discovery failure */
-	if ((openidc_configured || ((oidc_cfg_redirect_uri_get(cfg) != NULL) && (!oauth_configured))) &&
-	    (oidc_check_config_openid_openidc(pool, s, cfg) != OK))
+	/* a vhost that sets OIDCRedirectURI *itself* without any OAuth 2.0 RS settings intends to act
+	 * as an OpenID Connect RP: run the RP check even when no provider source is configured, so
+	 * that omission is a startup error instead of a request-time authentication/discovery failure.
+	 *
+	 * an inherited one says nothing about this vhost's intent: OIDCRedirectURI is commonly set
+	 * once at server level, from where it lands in the merged config of every vhost - including
+	 * those that do no OpenID Connect at all (a static site, a health check, a redirect-only
+	 * vhost). Inferring RP intent there would refuse to start the whole server over a vhost that
+	 * never asked for an RP in the first place */
+	const int rp_intent = (oidc_cfg_redirect_uri_get(cfg) != NULL) && (!oidc_cfg_redirect_uri_inherited_get(cfg)) &&
+			      (!oauth_configured);
+
+	if ((openidc_configured || rp_intent) && (oidc_check_config_openid_openidc(pool, s, cfg) != OK))
 		return HTTP_INTERNAL_SERVER_ERROR;
 
 	if (oauth_configured && (oidc_check_config_oauth(pool, s, cfg) != OK))

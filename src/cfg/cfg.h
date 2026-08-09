@@ -159,6 +159,8 @@ const char *oidc_cfg_remote_user_claim_name_get(const oidc_cfg_t *cfg);
 
 oidc_provider_t *oidc_cfg_provider_get(oidc_cfg_t *);
 int oidc_cfg_merged_get(const oidc_cfg_t *cfg);
+/* whether OIDCRedirectURI was inherited from the base server instead of set on this server itself */
+int oidc_cfg_redirect_uri_inherited_get(const oidc_cfg_t *cfg);
 
 void oidc_pre_config_init(void);
 
