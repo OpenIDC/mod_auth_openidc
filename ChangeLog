@@ -6,6 +6,8 @@
 - cache/file: report an expired entry as a miss without unlinking it, leaving that to the cleaning
   cycle; a writer's rename could land in between and the unlink then threw away the entry that had
   just replaced it
+- cache/file: have the cleaning cycle confirm an entry is still the file it inspected before
+  removing it, so it cannot unlink an entry a writer replaced in the meantime either
 - cache/shm: compute the per-slot value size limit signed, so it cannot wrap into a huge limit when
   the configured slot size is smaller than the entry header
 - do not strand a failed regular-expression compile in the pool it was handed: oidc_pcre_compile

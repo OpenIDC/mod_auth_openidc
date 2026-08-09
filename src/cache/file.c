@@ -289,6 +289,36 @@ static apr_byte_t oidc_cache_file_clean_due(request_rec *r, const oidc_cfg_t *cf
 }
 
 /*
+ * whether `path` still refers to the file that `ident` was taken from.
+ *
+ * A writer replaces a cache entry by renaming a freshly written temp file over its path and takes
+ * no lock on that path, so an entry can be replaced between being inspected here and being removed
+ * - and the removal would then throw away the fresh entry rather than the expired one. Confirming
+ * the identity immediately before the unlink leaves only the two syscalls between as a window,
+ * instead of everything from the header read onwards.
+ *
+ * `have_ident` is FALSE on a platform that cannot report a device/inode pair, where the caller gets
+ * the unconditional removal it had before: refusing to remove would leave expired entries behind
+ * for good, which is worse than the race this narrows.
+ */
+static apr_byte_t oidc_cache_file_is_same(request_rec *r, const char *path, const apr_finfo_t *ident,
+					  apr_byte_t have_ident) {
+	apr_finfo_t current;
+
+	if (have_ident == FALSE)
+		return TRUE;
+
+	/* gone already (another cleaner, or a delete): nothing of ours left to remove */
+	if (apr_stat(&current, path, APR_FINFO_IDENT, r->pool) != APR_SUCCESS)
+		return FALSE;
+
+	if ((current.valid & APR_FINFO_IDENT) != APR_FINFO_IDENT)
+		return TRUE;
+
+	return ((current.device == ident->device) && (current.inode == ident->inode)) ? TRUE : FALSE;
+}
+
+/*
  * process a single cache directory entry: remove the file if it expired or its header is corrupt
  */
 static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const char *metadata_filename,
@@ -296,6 +326,8 @@ static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const c
 	apr_file_t *fd = NULL;
 	apr_status_t rc;
 	oidc_cache_file_info_t info;
+	apr_finfo_t ident;
+	apr_byte_t have_ident = FALSE;
 	char s_err[128];
 
 	/* skip non-cache entries, cq. the ".", ".." and the metadata file */
@@ -310,10 +342,17 @@ static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const c
 		return;
 	}
 
+	/* note which file this actually is, so that only this one can be removed below */
+	have_ident = ((apr_file_info_get(&ident, APR_FINFO_IDENT, fd) == APR_SUCCESS) &&
+		      ((ident.valid & APR_FINFO_IDENT) == APR_FINFO_IDENT))
+			 ? TRUE
+			 : FALSE;
+
 	/* read the header with cache metadata info */
 	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
 	rc = oidc_cache_file_read(r, path, fd, &info, sizeof(oidc_cache_file_info_t));
 	apr_file_unlock(fd);
+	/* close before removing: Windows will not unlink a file this process still holds open */
 	apr_file_close(fd);
 
 	if (rc != APR_SUCCESS) {
@@ -324,6 +363,13 @@ static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const c
 		return;
 	} else {
 		oidc_debug(r, "cache entry (%s) expired, removing file \"%s\")", fi->name, path);
+	}
+
+	/* a writer may have replaced the entry since it was read; only remove the file inspected above */
+	if (oidc_cache_file_is_same(r, path, &ident, have_ident) == FALSE) {
+		oidc_debug(r, "cache entry (%s) is no longer the file that was inspected, leaving it alone",
+			   fi->name);
+		return;
 	}
 
 	/* delete the cache file */
