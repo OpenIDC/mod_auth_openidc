@@ -1846,6 +1846,43 @@ START_TEST(test_proto_token_endpoint_request_dpop_required_but_bearer) {
 }
 END_TEST
 
+/* OIDCDPoPMode required: a token-endpoint response that omits token_type entirely must be
+ * rejected too, and without handing a NULL token_type to the error log's "%s" */
+START_TEST(test_proto_token_endpoint_request_dpop_required_but_missing_token_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"access_token\":\"AT-1\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(r->pool, provider, "required"));
+	/* a private key so the DPoP proof for the token request can be created
+	 * and the request actually reaches the (token_type-less-answering) endpoint */
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	ck_assert_ptr_null(
+	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop-tk#%s/private.pem", dir)));
+
+	apr_table_t *params = apr_table_make(r->pool, 4);
+	apr_table_setn(params, OIDC_PROTO_GRANT_TYPE, OIDC_PROTO_GRANT_TYPE_AUTHZ_CODE);
+	apr_table_setn(params, OIDC_PROTO_CODE, "the-code");
+
+	char *id_token = NULL, *access_token = NULL, *token_type = NULL, *refresh_token = NULL, *scope = NULL;
+	int expires_in = -1;
+	ck_assert_int_eq(oidc_proto_token_endpoint_request(r, c, provider, params, &id_token, &access_token,
+							   &token_type, &expires_in, &refresh_token, &scope),
+			 FALSE);
+	ck_assert_ptr_null(token_type);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
 /* the value of a single x-www-form-urlencoded parameter in a captured request body,
  * plus the number of times that parameter occurs in it */
 static const char *e2e_form_param(apr_pool_t *pool, const char *body, const char *name, int *count) {
@@ -4192,6 +4229,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_token_refresh_request_success);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_unsupported_token_type);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_required_but_bearer);
+	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_required_but_missing_token_type);
 	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_nonce_retry_new_assertion);
 	tcase_add_test(e2e, test_proto_response_code_missing_access_token);
 	tcase_add_test(e2e, test_proto_response_code_idtoken_happy);
