@@ -681,9 +681,11 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
 
 	/* session management: if the user in the new response is not equal to the old one, error out;
-	 * NB: this compares the (possibly claim/regexp-derived) remote user rather than the "sub" claim */
+	 * NB: this compares the (possibly claim/regexp-derived) remote user rather than the "sub" claim;
+	 * skip when there is no prior remote_user (no loaded session) so a successful prompt=none
+	 * response can establish a session instead of being rejected as "User changed!" */
 	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0) &&
-	    (_oidc_strcmp(session->remote_user, r->user) != 0)) {
+	    (session->remote_user != NULL) && (_oidc_strcmp(session->remote_user, r->user) != 0)) {
 		oidc_warn(r, "user set from new id_token is different from current one");
 		rc = oidc_response_authorization_error(r, c, proto_state, "User changed!", NULL);
 		goto end;
