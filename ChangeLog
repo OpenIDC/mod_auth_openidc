@@ -1,4 +1,18 @@
 08/10/2026
+- http: bound the trailing CRLF strip on a captured response header value to the value's length, so
+  an empty header value cannot read (and, if the adjacent byte happens to match, write) before the
+  start of the buffer
+- http: return NULL instead of a truncated prefix when a chunked cookie is missing one of its
+  chunks, so a broken cookie set falls back to re-authentication instead of failing session decode
+  with a value that keeps getting resubmitted
+- revocation: require the remove_at_cache parameter before looking up the access token cache,
+  matching revoke_session's existing check, instead of probing the cache with a NULL key
+- session: skip the prompt=none "user changed" check when there is no prior remote_user, so a first
+  prompt=none response can establish a session instead of being rejected outright
+- DPoP: reject an omitted token_type explicitly when DPoP is required, and log a placeholder instead
+  of passing NULL to the error message
+
+08/10/2026
 - remove the process-local derived-object cache tier (util/cache_local) and the five caches on it:
   parsed session state, appinfo claim pairs, provider metadata, JWKs selection and compiled
   Require-claim regexes. It was worth 24-34% of the module's own CPU, nearly all of that the
