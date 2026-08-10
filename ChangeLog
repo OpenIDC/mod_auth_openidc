@@ -15,6 +15,7 @@
   the configured slot size is smaller than the entry header
 - do not strand a failed regular-expression compile in the pool it was handed: oidc_pcre_compile
   now allocates nothing unless the compile succeeds, and takes a NULL error_str
+- release 2.4.20.2
 
 08/09/2026
 - store the process-local JWKS selection cache serialized and give each request its own parsed
