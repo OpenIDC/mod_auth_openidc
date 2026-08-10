@@ -67,6 +67,8 @@ int oidc_revoke_session(request_rec *r, const oidc_cfg_t *c) {
 int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c) {
 	char *access_token = NULL;
 	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
+	if (access_token == NULL)
+		return HTTP_BAD_REQUEST;
 
 	char *cache_entry = NULL;
 	oidc_cache_get_access_token(r, access_token, &cache_entry);
