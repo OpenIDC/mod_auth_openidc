@@ -1151,6 +1151,32 @@ START_TEST(test_metadata_disk_get_full) {
 }
 END_TEST
 
+START_TEST(test_metadata_disk_list_preserves_http_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+	const char *issuer = "http://idp.example.com";
+	const char *metadata = apr_psprintf(r->pool,
+					    "{\"issuer\":\"%s\","
+					    "\"authorization_endpoint\":\"%s/authorize\","
+					    "\"token_endpoint\":\"%s/token\","
+					    "\"jwks_uri\":\"%s/jwks\","
+					    "\"response_types_supported\":[\"code\"],"
+					    "\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}",
+					    issuer, issuer, issuer, issuer);
+
+	/* The legacy filename is identical for the HTTP and HTTPS forms. */
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), metadata);
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}");
+
+	apr_array_header_t *list = NULL;
+	ck_assert_int_eq(oidc_metadata_list(r, c, &list), TRUE);
+	ck_assert_int_eq(list->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(list, 0, const char *), issuer);
+}
+END_TEST
+
 /* with OIDCDefaultLoggedOutURL set, the dynamic-registration request carries
  * a post_logout_redirect_uris array with the absolute logged-out URL */
 START_TEST(test_metadata_disk_dyn_registration_post_logout_redirect_uris) {
@@ -2329,6 +2355,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_get_provider_only);
 	tcase_add_test(disk, test_metadata_disk_list_skips_provider_without_client);
 	tcase_add_test(disk, test_metadata_disk_get_full);
+	tcase_add_test(disk, test_metadata_disk_list_preserves_http_issuer);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_post_logout_redirect_uris);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_not_advertised);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_explicitly_set);

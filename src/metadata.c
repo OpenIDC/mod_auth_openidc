@@ -136,6 +136,18 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg_t *cfg, apr_array_header_
 
 		/* get the issuer from the filename */
 		const char *issuer = oidc_metadata_filename_to_issuer(r, fi.name);
+		/* The legacy filename format strips the scheme, so use the issuer from
+		 * the provider document when it is available. This preserves HTTP
+		 * issuers while retaining the filename-derived fallback for malformed
+		 * entries, which will be rejected by the normal metadata validation. */
+		const char *provider_path = apr_psprintf(r->pool, "%s/%s", oidc_cfg_metadata_dir_get(cfg), fi.name);
+		oidc_json_t *j_provider = NULL;
+		char *metadata_issuer = NULL;
+		if ((oidc_metadata_file_read_json(r, provider_path, &j_provider) == TRUE) &&
+		    (oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &metadata_issuer, NULL) == TRUE))
+			issuer = metadata_issuer;
+		if (j_provider != NULL)
+			oidc_json_decref(j_provider);
 
 		/* get the provider and client metadata, do all checks and registration if possible */
 		oidc_provider_t *provider = NULL;

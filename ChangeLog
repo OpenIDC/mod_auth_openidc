@@ -13,6 +13,8 @@
   of passing NULL to the error message
 - util/file, cache/file: reject symlinks/non-regular files and cap read size before loading a
   metadata file or cached value into memory; metadata writes are now atomic (temp file + rename)
+- metadata: preserve the issuer's scheme when listing providers, instead of assuming https and
+  silently dropping HTTP-only providers from the list
 
 08/10/2026
 - remove the process-local derived-object cache tier (util/cache_local) and the five caches on it:
