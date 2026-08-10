@@ -174,7 +174,24 @@ CODE_COVERAGE_GENHTML_OPTIONS = --ignore-errors inconsistent --rc branch_coverag
 # containers); override via the environment to point elsewhere.
 check-code-coverage: export OIDC_TEST_REDIS_SERVER ?= localhost:6379
 check-code-coverage: export OIDC_TEST_MEMCACHE_SERVER ?= localhost:11211
+coverage-check: export OIDC_TEST_REDIS_SERVER ?= localhost:6379
+coverage-check: export OIDC_TEST_MEMCACHE_SERVER ?= localhost:11211
 valgrind: export OIDC_TEST_REDIS_SERVER ?= localhost:6379
 valgrind: export OIDC_TEST_MEMCACHE_SERVER ?= localhost:11211
+
+# AX_CODE_COVERAGE's own check-code-coverage recipe runs the suite as "-$(MAKE) -k check": the
+# leading "-" tells make to ignore its exit status, so a failing suite produces no error anywhere
+# and surfaces only as lower coverage. That is how a transient failure of the live redis/memcache
+# tests silently cost ~95 lines of coverage and published an understated figure.
+#
+# Run the suite strictly here and capture only if it passed. The two targets below are the same
+# two steps AX_CODE_COVERAGE performs, minus the "-"; the exports above are repeated for this
+# target because they are target-specific, and without them the live-backend tests would be
+# skipped rather than run -- which would understate coverage by the same lines for the opposite
+# reason.
+.PHONY: coverage-check
+coverage-check:
+	$(MAKE) $(AM_MAKEFLAGS) check
+	$(MAKE) $(AM_MAKEFLAGS) code-coverage-capture
 
 @CODE_COVERAGE_RULES@
