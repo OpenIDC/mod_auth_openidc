@@ -660,6 +660,23 @@ START_TEST(test_response_header_captures_requested_only) {
 }
 END_TEST
 
+START_TEST(test_response_header_empty_value) {
+	request_rec *r = oidc_test_request_get();
+	apr_hash_t *hdrs = apr_hash_make(r->pool);
+	apr_hash_set(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
+	oidc_curl_resp_hdr_ctx_t ctx = {r, hdrs};
+
+	/* empty value after the colon must not under-run the trim loop */
+	const char *wire = "DPoP-Nonce:\r\n";
+	size_t n = oidc_http_response_header((char *)wire, 1, _oidc_strlen(wire), &ctx);
+	ck_assert_msg(n == _oidc_strlen(wire), "empty-value header fully consumed");
+
+	const char *got = apr_hash_get(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING);
+	ck_assert_ptr_nonnull(got);
+	ck_assert_msg(_oidc_strcmp(got, "") == 0, "empty header value stored as empty string");
+}
+END_TEST
+
 START_TEST(test_response_header_no_wanted_headers) {
 	request_rec *r = oidc_test_request_get();
 	oidc_curl_resp_hdr_ctx_t ctx_null = {r, NULL};
@@ -1361,6 +1378,7 @@ int main(void) {
 	tcase_add_test(curl_helpers, test_response_data_accumulates);
 	tcase_add_test(curl_helpers, test_response_data_rejects_oversize);
 	tcase_add_test(curl_helpers, test_response_header_captures_requested_only);
+	tcase_add_test(curl_helpers, test_response_header_empty_value);
 	tcase_add_test(curl_helpers, test_response_header_no_wanted_headers);
 	tcase_add_test(curl_helpers, test_build_header_list_bearer_and_content_type);
 	tcase_add_test(curl_helpers, test_build_header_list_dpop_switches_scheme_and_adds_header);

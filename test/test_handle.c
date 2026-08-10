@@ -1870,6 +1870,33 @@ START_TEST(test_handle_response_prompt_none_user_changed) {
 }
 END_TEST
 
+/* prompt=none with no prior session user must establish the new identity, not reject as changed */
+START_TEST(test_handle_response_prompt_none_no_prior_user) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->remote_user = NULL;
+
+	const char *secret = "prompt-none-no-prior-secret-long-enough";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN, "nonce-pn0",
+						OIDC_PROTO_PROMPT_NONE, NULL, NULL);
+	char *id_token =
+	    e2e_sign_idtoken_hs256(r, "https://idp.example.com", "client_id", "alice", "nonce-pn0", secret);
+	r->args = apr_psprintf(r->pool, "state=%s&id_token=%s", oidc_http_url_encode(r, state),
+			       oidc_http_url_encode(r, id_token));
+
+	int rc = oidc_response_authorization_redirect(r, c, session);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	ck_assert_str_eq(session->remote_user, "alice@idp.example.com");
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /* an issuer without an https:// prefix is appended verbatim to the remote user */
 START_TEST(test_handle_response_non_https_issuer_postfix) {
 	request_rec *r = oidc_test_request_get();
@@ -3998,6 +4025,17 @@ START_TEST(test_handle_revoke_session_server_cache) {
 	int rc = oidc_revoke_session(r, c);
 	ck_assert_int_eq(rc, OK);
 	ck_assert_str_eq(r->user, "");
+}
+END_TEST
+
+START_TEST(test_handle_revoke_at_cache_remove_no_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* no ?remove_at_cache= value => BAD_REQUEST (same as revoke_session with no id) */
+	r->args = "";
+	int rc = oidc_revoke_at_cache_remove(r, c);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
 }
 END_TEST
 
@@ -6692,6 +6730,7 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_code_flow_no_idtoken);
 	tcase_add_test(response, test_handle_response_remote_user_claim_missing);
 	tcase_add_test(response, test_handle_response_prompt_none_user_changed);
+	tcase_add_test(response, test_handle_response_prompt_none_no_prior_user);
 	tcase_add_test(response, test_handle_response_non_https_issuer_postfix);
 	tcase_add_test(response, test_handle_response_post_restore_template);
 	tcase_add_test(response, test_handle_response_post_preserve_javascript_legs);
@@ -6879,6 +6918,7 @@ int main(void) {
 	tcase_add_checked_fixture(revoke, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(revoke, test_handle_revoke_session_no_id);
 	tcase_add_test(revoke, test_handle_revoke_session_server_cache);
+	tcase_add_test(revoke, test_handle_revoke_at_cache_remove_no_token);
 	tcase_add_test(revoke, test_handle_revoke_at_cache_remove_not_cached);
 	tcase_add_test(revoke, test_handle_revoke_at_cache_remove_cached);
 
