@@ -182,10 +182,12 @@ static apr_byte_t oidc_proto_token_endpoint_response_parse(request_rec *r, const
 	oidc_json_object_get_string(r->pool, j_result, OIDC_PROTO_TOKEN_TYPE, token_type, NULL);
 
 	/* check if DPoP is required */
-	if ((oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) &&
-	    (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
-		oidc_error(r, "access token type is \"%s\" but \"%s\" is required", *token_type, OIDC_PROTO_DPOP);
-		return FALSE;
+	if (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_REQUIRED) {
+		if ((*token_type == NULL) || (_oidc_strnatcasecmp(*token_type, OIDC_PROTO_DPOP) != 0)) {
+			oidc_error(r, "access token type is \"%s\" but \"%s\" is required",
+				   *token_type ? *token_type : "(null)", OIDC_PROTO_DPOP);
+			return FALSE;
+		}
 	}
 
 	/* check the new token type */
