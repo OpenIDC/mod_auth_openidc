@@ -1440,8 +1440,10 @@ char *oidc_http_get_chunked_cookie(request_rec *r, const char *cookieName, int c
 	for (int i = 0; i < chunkCount; i++) {
 		chunkValue = oidc_http_get_cookie(r, oidc_http_get_chunk_cookie_name(r, cookieName, i));
 		if (chunkValue == NULL) {
+			/* refuse a partial assembly: a truncated value would fail session decode (or worse)
+			 * and leave the browser stuck resubmitting the broken cookie set */
 			oidc_warn(r, "could not find chunk %d; aborting", i);
-			break;
+			return NULL;
 		}
 		cookieValue = apr_psprintf(r->pool, "%s%s", cookieValue ? cookieValue : "", chunkValue);
 	}

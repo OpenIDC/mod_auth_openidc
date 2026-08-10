@@ -534,10 +534,10 @@ START_TEST(test_get_chunked_cookie_negatives) {
 	apr_table_set(r->headers_in, "Cookie", "big_chunks=200; big_0=AA");
 	ck_assert_ptr_null(oidc_http_get_chunked_cookie(r, "big", 5));
 
-	/* a missing chunk aborts the reassembly */
+	/* a missing chunk aborts the reassembly: must not return a truncated prefix */
 	apr_table_set(r->headers_in, "Cookie", "big_chunks=2; big_0=AA");
 	v = oidc_http_get_chunked_cookie(r, "big", 5);
-	ck_assert_msg((v == NULL) || (_oidc_strcmp(v, "AA") == 0), "missing chunk aborts reassembly");
+	ck_assert_ptr_null(v);
 }
 END_TEST
 
