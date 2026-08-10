@@ -868,6 +868,27 @@ START_TEST(test_cache_file_truncated_entry_is_an_error) {
 }
 END_TEST
 
+START_TEST(test_cache_file_rejects_oversized_value_length) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
+	const char *path = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "oversized");
+	struct {
+		apr_size_t len;
+		apr_time_t expire;
+	} header = {
+	    .len = (apr_size_t)(16 * 1024 * 1024 + 1),
+	    .expire = apr_time_now() + apr_time_from_sec(60),
+	};
+	char *value = NULL;
+
+	e2e_file_write_raw(r, path, (const char *)&header, sizeof(header));
+	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "oversized", &value), FALSE);
+	ck_assert_ptr_null(value);
+
+	e2e_restore_cache_backend(prev);
+}
+END_TEST
+
 /*
  * reading an expired entry reports a miss and leaves the file where it is.
  *
@@ -2295,6 +2316,7 @@ int main(void) {
 	tcase_add_test(file, test_cache_file_overwrite_and_delete);
 	tcase_add_test(file, test_cache_file_default_tmp_dir);
 	tcase_add_test(file, test_cache_file_truncated_entry_is_an_error);
+	tcase_add_test(file, test_cache_file_rejects_oversized_value_length);
 	tcase_add_test(file, test_cache_file_expired_entry_left_for_cleaner);
 	tcase_add_test(file, test_cache_file_clean_cycle_handles_junk);
 	tcase_add_test(file, test_cache_file_clean_cycle_unreadable_dir);

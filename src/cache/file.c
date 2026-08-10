@@ -160,10 +160,21 @@ static apr_status_t oidc_cache_file_write(request_rec *r, const char *path, apr_
 static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const char *key, char **value) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
+	apr_finfo_t finfo;
 	char s_err[128];
 
 	/* get the fully qualified path to the cache file based on the key name */
 	const char *path = oidc_cache_file_path(r, section, key);
+
+	/* reject links and non-regular files before opening the cache entry; the cache directory must be private */
+	if (oidc_util_file_is_regular(r->pool, path, &finfo) == FALSE) {
+		if (finfo.filetype == APR_NOFILE) {
+			oidc_debug(r, "cache miss for key \"%s\"", key);
+		} else {
+			oidc_warn(r, "ignoring non-regular cache file \"%s\"", path);
+		}
+		return TRUE;
+	}
 
 	/* open the cache file if it exists, otherwise we just have a "regular" cache miss */
 	if (apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
@@ -180,6 +191,14 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 	/* move the read pointer to the very start of the cache file */
 	apr_off_t begin = 0;
 	apr_file_seek(fd, APR_SET, &begin);
+	if ((rc = apr_file_info_get(&finfo, APR_FINFO_SIZE, fd)) != APR_SUCCESS)
+		goto error_close;
+	if ((finfo.size < (apr_off_t)sizeof(oidc_cache_file_info_t)) ||
+	    (finfo.size - (apr_off_t)sizeof(oidc_cache_file_info_t) > (apr_off_t)OIDC_UTIL_FILE_SIZE_MAX)) {
+		oidc_error(r, "cache file \"%s\" has an invalid size (%" APR_OFF_T_FMT ")", path, finfo.size);
+		rc = APR_EGENERAL;
+		goto error_close;
+	}
 
 	/* read a header with metadata */
 	oidc_cache_file_info_t info;
@@ -207,6 +226,12 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 
 		/* nothing strange happened really */
 		return TRUE;
+	}
+	if ((info.len == 0) || (info.len > OIDC_UTIL_FILE_SIZE_MAX) ||
+	    ((apr_off_t)info.len > finfo.size - (apr_off_t)sizeof(oidc_cache_file_info_t))) {
+		oidc_error(r, "cache file \"%s\" has an invalid value length (%" APR_SIZE_T_FMT ")", path, info.len);
+		rc = APR_EGENERAL;
+		goto error_close;
 	}
 
 	/* allocate space for the actual value based on the data size info in the header (+1 for \0 termination) */

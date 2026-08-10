@@ -11,6 +11,8 @@
   prompt=none response can establish a session instead of being rejected outright
 - DPoP: reject an omitted token_type explicitly when DPoP is required, and log a placeholder instead
   of passing NULL to the error message
+- util/file, cache/file: reject symlinks/non-regular files and cap read size before loading a
+  metadata file or cached value into memory; metadata writes are now atomic (temp file + rename)
 
 08/10/2026
 - remove the process-local derived-object cache tier (util/cache_local) and the five caches on it:

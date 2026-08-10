@@ -43,32 +43,67 @@
 #include "util/util.h"
 
 /*
- * read a file from a path on disk
+ * true if path exists and is a regular file (as opposed to a symlink or other special
+ * file); finfo->filetype is always well-defined on return: APR_NOFILE when the path
+ * could not be stat-ed at all (typically: missing), the actual (non-regular) type
+ * otherwise, letting callers tell "absent" apart from "present but wrong type"
  */
-apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result) {
+apr_byte_t oidc_util_file_is_regular(apr_pool_t *pool, const char *path, apr_finfo_t *finfo) {
+	finfo->filetype = APR_NOFILE;
+	if (apr_stat(finfo, path, APR_FINFO_TYPE | APR_FINFO_LINK, pool) != APR_SUCCESS)
+		return FALSE;
+	return (finfo->filetype == APR_REG) ? TRUE : FALSE;
+}
+
+typedef enum {
+	OIDC_UTIL_FILE_READ_OK = 0,
+	OIDC_UTIL_FILE_READ_NOT_FOUND,	 /* missing, or could not be stat-ed/opened */
+	OIDC_UTIL_FILE_READ_NOT_REGULAR, /* exists but is a symlink or other special file */
+	OIDC_UTIL_FILE_READ_IO_ERROR,	 /* stat/open succeeded but a later step failed */
+} oidc_util_file_read_rc_t;
+
+/*
+ * hardened whole-file read shared by the request- and server-scoped wrappers below: rejects
+ * symlinks/non-regular files and caps the size of what gets allocated into memory; the caller
+ * is responsible for logging, since the request/server logging macros are not interchangeable
+ */
+static oidc_util_file_read_rc_t oidc_util_file_read_core(apr_pool_t *pool, const char *path, char **result, char *s_err,
+							 apr_size_t s_err_len) {
 	apr_file_t *fd = NULL;
 	apr_status_t rc = APR_SUCCESS;
-	char s_err[128];
 	apr_finfo_t finfo;
 
-	/* open the file if it exists */
-	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED, APR_OS_DEFAULT, r->pool)) !=
-	    APR_SUCCESS) {
-		oidc_warn(r, "no file found at: \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
-		return FALSE;
+	if (oidc_util_file_is_regular(pool, path, &finfo) == FALSE) {
+		if (finfo.filetype == APR_NOFILE) {
+			apr_cpystrn(s_err, "no such file", s_err_len);
+			return OIDC_UTIL_FILE_READ_NOT_FOUND;
+		}
+		apr_cpystrn(s_err, "not a regular file", s_err_len);
+		return OIDC_UTIL_FILE_READ_NOT_REGULAR;
+	}
+
+	/* open the file */
+	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED, APR_OS_DEFAULT, pool)) != APR_SUCCESS) {
+		apr_strerror(rc, s_err, s_err_len);
+		return OIDC_UTIL_FILE_READ_NOT_FOUND;
 	}
 
 	/* the file exists, now lock it */
 	apr_file_lock(fd, APR_FLOCK_EXCLUSIVE);
 
-	/* move the read pointer to the very start of the cache file */
+	/* move the read pointer to the very start of the file */
 	apr_off_t begin = 0;
 	apr_file_seek(fd, APR_SET, &begin);
 
 	/* get the file info so we know its size */
 	if ((rc = apr_file_info_get(&finfo, APR_FINFO_SIZE, fd)) != APR_SUCCESS) {
-		oidc_error(r, "error calling apr_file_info_get on file: \"%s\" (%s)", path,
-			   apr_strerror(rc, s_err, sizeof(s_err)));
+		apr_strerror(rc, s_err, s_err_len);
+		goto error_close;
+	}
+
+	/* refuse untrusted on-disk sizes before allocating memory for the contents */
+	if ((finfo.size < 0) || (finfo.size > (apr_off_t)OIDC_UTIL_FILE_SIZE_MAX)) {
+		apr_snprintf(s_err, s_err_len, "file too large (%" APR_OFF_T_FMT " bytes)", finfo.size);
 		goto error_close;
 	}
 
@@ -78,8 +113,7 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *poo
 	/* read the file in to the buffer */
 	apr_size_t bytes_read = 0;
 	if ((rc = apr_file_read_full(fd, *result, finfo.size, &bytes_read)) != APR_SUCCESS) {
-		oidc_error(r, "apr_file_read_full on (%s) returned an error: %s", path,
-			   apr_strerror(rc, s_err, sizeof(s_err)));
+		apr_strerror(rc, s_err, s_err_len);
 		goto error_close;
 	}
 
@@ -88,10 +122,8 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *poo
 
 	/* check that we've got all of it */
 	if ((apr_off_t)bytes_read != finfo.size) {
-		oidc_error(r,
-			   "apr_file_read_full on (%s) returned less bytes (%" APR_SIZE_T_FMT
-			   ") than expected: (%" APR_OFF_T_FMT ")",
-			   path, bytes_read, finfo.size);
+		apr_snprintf(s_err, s_err_len, "read %" APR_SIZE_T_FMT " bytes, expected %" APR_OFF_T_FMT, bytes_read,
+			     finfo.size);
 		goto error_close;
 	}
 
@@ -99,19 +131,61 @@ apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *poo
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	/* log successful content retrieval */
-	oidc_debug(r, "file read successfully \"%s\"", path);
-
-	return TRUE;
+	return OIDC_UTIL_FILE_READ_OK;
 
 error_close:
 
 	apr_file_unlock(fd);
 	apr_file_close(fd);
 
-	oidc_error(r, "return error");
+	return OIDC_UTIL_FILE_READ_IO_ERROR;
+}
 
-	return FALSE;
+/*
+ * read a file from a path on disk, for use at request time
+ */
+apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result) {
+	char s_err[128];
+	oidc_util_file_read_rc_t rc = oidc_util_file_read_core(pool, path, result, s_err, sizeof(s_err));
+
+	switch (rc) {
+	case OIDC_UTIL_FILE_READ_OK:
+		oidc_debug(r, "file read successfully \"%s\"", path);
+		return TRUE;
+	case OIDC_UTIL_FILE_READ_NOT_FOUND:
+		oidc_warn(r, "no file found at: \"%s\" (%s)", path, s_err);
+		return FALSE;
+	case OIDC_UTIL_FILE_READ_NOT_REGULAR:
+		oidc_warn(r, "refusing to read non-regular file: \"%s\"", path);
+		return FALSE;
+	default:
+		oidc_error(r, "reading \"%s\" failed: %s", path, s_err);
+		return FALSE;
+	}
+}
+
+/*
+ * read a file from a path on disk, for use at server startup (e.g. config/license checks)
+ * where there is no request_rec to log against or allocate from
+ */
+apr_byte_t oidc_util_file_read_server(server_rec *s, const char *path, apr_pool_t *pool, char **result) {
+	char s_err[128];
+	oidc_util_file_read_rc_t rc = oidc_util_file_read_core(pool, path, result, s_err, sizeof(s_err));
+
+	switch (rc) {
+	case OIDC_UTIL_FILE_READ_OK:
+		oidc_sdebug(s, "file read successfully \"%s\"", path);
+		return TRUE;
+	case OIDC_UTIL_FILE_READ_NOT_FOUND:
+		oidc_swarn(s, "no file found at: \"%s\" (%s)", path, s_err);
+		return FALSE;
+	case OIDC_UTIL_FILE_READ_NOT_REGULAR:
+		oidc_swarn(s, "refusing to read non-regular file: \"%s\"", path);
+		return FALSE;
+	default:
+		oidc_serror(s, "reading \"%s\" failed: %s", path, s_err);
+		return FALSE;
+	}
 }
 
 /*
@@ -123,13 +197,20 @@ apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *da
 	apr_status_t rc = APR_SUCCESS;
 	apr_size_t bytes_written = 0;
 	char s_err[128];
+	char *rnd = NULL;
+	const char *tmp_path = NULL;
+
+	if (oidc_util_rand_str(r, &rnd, 12) == FALSE)
+		return FALSE;
+	tmp_path = apr_psprintf(r->pool, "%s.%s.tmp", path, rnd);
 
 	/* try to open the metadata file for writing, creating it if it does not exist; some of
 	 * these files hold secrets (e.g. a dynamically registered client_secret), so restrict
 	 * the permissions to the owner only rather than falling back to the process umask */
-	if ((rc = apr_file_open(&fd, path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE),
+	if ((rc = apr_file_open(&fd, tmp_path, (APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_EXCL),
 				(APR_FPROT_UREAD | APR_FPROT_UWRITE), r->pool)) != APR_SUCCESS) {
-		oidc_error(r, "file \"%s\" could not be opened (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
+		oidc_error(r, "file \"%s\" could not be opened for atomic update (%s)", tmp_path,
+			   apr_strerror(rc, s_err, sizeof(s_err)));
 		return FALSE;
 	}
 
@@ -147,6 +228,9 @@ apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *da
 	/* check for a system error */
 	if (rc != APR_SUCCESS) {
 		oidc_error(r, "could not write to: \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
+		apr_file_unlock(fd);
+		apr_file_close(fd);
+		apr_file_remove(tmp_path, r->pool);
 		return FALSE;
 	}
 
@@ -156,12 +240,21 @@ apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *da
 			   "could not write enough bytes to: \"%s\", bytes_written (%" APR_SIZE_T_FMT
 			   ") != len (%" APR_SIZE_T_FMT ")",
 			   path, bytes_written, len);
+		apr_file_unlock(fd);
+		apr_file_close(fd);
+		apr_file_remove(tmp_path, r->pool);
 		return FALSE;
 	}
 
 	/* unlock and close the written file */
 	apr_file_unlock(fd);
 	apr_file_close(fd);
+	if ((rc = apr_file_rename(tmp_path, path, r->pool)) != APR_SUCCESS) {
+		oidc_error(r, "file \"%s\" could not be atomically renamed to \"%s\" (%s)", tmp_path, path,
+			   apr_strerror(rc, s_err, sizeof(s_err)));
+		apr_file_remove(tmp_path, r->pool);
+		return FALSE;
+	}
 
 	oidc_debug(r, "file \"%s\" written; number of bytes (%" APR_SIZE_T_FMT ")", path, len);
 
