@@ -640,6 +640,53 @@ static const char *_oidc_http_sensitive_json_members[] = {OIDC_PROTO_ACCESS_TOKE
  * response), and it runs off the back of a network round trip so the scan is free by
  * comparison. Tokens do not contain a quote, so the closing quote ends the value.
  */
+/*
+ * redact every quoted string value of the member `needle` in `data`, returning the result; the
+ * scan-and-skip rules are the ones oidc_http_redact_json_for_log documents
+ */
+static char *oidc_http_redact_json_member(apr_pool_t *pool, char *data, const char *needle) {
+	const apr_size_t needle_len = _oidc_strlen(needle);
+	apr_size_t offset = 0;
+
+	for (;;) {
+		const char *pos = _oidc_strstr(data + offset, needle);
+		if (pos == NULL)
+			break;
+		/* step over the member name and expect ": " then a quoted value; anything
+		 * else (a non-string value, a member name appearing inside a value) is
+		 * skipped rather than guessed at */
+		const char *p = pos + needle_len;
+		while ((*p == ' ') || (*p == '\t'))
+			p++;
+		if (*p != OIDC_CHAR_COLON) {
+			offset = (pos - data) + needle_len;
+			continue;
+		}
+		p++;
+		while ((*p == ' ') || (*p == '\t'))
+			p++;
+		if (*p != OIDC_CHAR_DQUOTE) {
+			offset = (pos - data) + needle_len;
+			continue;
+		}
+		p++;
+		/*
+		 * keep everything up to and including the opening quote, then "***". A
+		 * truncated body has no closing quote, in which case everything from here on
+		 * is masked: the alternative is to leave the value alone and log the partial
+		 * token it starts with. Masking to the end also leaves this loop a single
+		 * exit, taken when there is nothing left to find.
+		 */
+		const char *value_end = strchr(p, OIDC_CHAR_DQUOTE);
+		const apr_size_t prefix_len = p - data;
+		data = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, data, value_end ? value_end : "");
+		/* resume just after the "***" that replaced the value */
+		offset = prefix_len + 3;
+	}
+
+	return data;
+}
+
 const char *oidc_http_redact_json_for_log(request_rec *r, const char *data) {
 	char *result = NULL;
 	apr_pool_t *pool = (r != NULL) ? r->pool : NULL;
@@ -651,46 +698,9 @@ const char *oidc_http_redact_json_for_log(request_rec *r, const char *data) {
 		return data;
 
 	result = apr_pstrdup(pool, data);
-
-	for (int i = 0; _oidc_http_sensitive_json_members[i] != NULL; i++) {
-		const char *needle = apr_pstrcat(pool, "\"", _oidc_http_sensitive_json_members[i], "\"", NULL);
-		apr_size_t offset = 0;
-		for (;;) {
-			const char *pos = _oidc_strstr(result + offset, needle);
-			if (pos == NULL)
-				break;
-			/* step over the member name and expect ": " then a quoted value; anything
-			 * else (a non-string value, a member name appearing inside a value) is
-			 * skipped rather than guessed at */
-			const char *p = pos + _oidc_strlen(needle);
-			while ((*p == ' ') || (*p == '\t'))
-				p++;
-			if (*p != OIDC_CHAR_COLON) {
-				offset = (pos - result) + _oidc_strlen(needle);
-				continue;
-			}
-			p++;
-			while ((*p == ' ') || (*p == '\t'))
-				p++;
-			if (*p != OIDC_CHAR_DQUOTE) {
-				offset = (pos - result) + _oidc_strlen(needle);
-				continue;
-			}
-			p++;
-			/*
-			 * keep everything up to and including the opening quote, then "***". A
-			 * truncated body has no closing quote, in which case everything from here on
-			 * is masked: the alternative is to leave the value alone and log the partial
-			 * token it starts with. Masking to the end also leaves this loop a single
-			 * exit, taken when there is nothing left to find.
-			 */
-			const char *value_end = strchr(p, OIDC_CHAR_DQUOTE);
-			const apr_size_t prefix_len = p - result;
-			result = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, result, value_end ? value_end : "");
-			/* resume just after the "***" that replaced the value */
-			offset = prefix_len + 3;
-		}
-	}
+	for (int i = 0; _oidc_http_sensitive_json_members[i] != NULL; i++)
+		result = oidc_http_redact_json_member(
+		    pool, result, apr_pstrcat(pool, "\"", _oidc_http_sensitive_json_members[i], "\"", NULL));
 
 	return result;
 }

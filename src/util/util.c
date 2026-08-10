@@ -429,7 +429,7 @@ char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigne
  * location section
  */
 apr_byte_t oidc_util_log_mask_secrets(request_rec *r) {
-	oidc_cfg_t *cfg = NULL;
+	const oidc_cfg_t *cfg = NULL;
 	if (r == NULL)
 		return TRUE;
 	cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
