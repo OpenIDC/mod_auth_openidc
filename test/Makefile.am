@@ -128,6 +128,23 @@ endif
 # .sh handler drives the script-based tests, the non-programs in TESTS.
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = $(SHELL)
+
+# libcheck aborts a test that outruns its per-test timeout, which defaults to 4 seconds. That is
+# ample on an idle machine and not ample at all inside a distro package build: the SUSE spec runs
+# "make check %{?_smp_mflags}", so suites run concurrently on a builder that is already compiling,
+# and the PBKDF2 derivation in test_util_jwt_passphrase_rotation outran it on sles12 during the
+# 2.4.20.2 release matrix. It surfaced as "(after this point) Test timeout expired" -- a red build
+# from a slow machine, not from a wrong result, and it took the other nine licensed targets of
+# that flavour down with it because make stops scheduling after a failure.
+#
+# Raise the default so a loaded builder does not manufacture failures, while keeping a ceiling low
+# enough to still catch a genuine hang. CK_DEFAULT_TIMEOUT is honoured by every libcheck the
+# supported distros ship, including the 0.9.x on el7 and sles12, and it applies only in fork mode,
+# so the CK_FORK=no valgrind runs are unaffected. A value already in the environment wins, so CI
+# or a developer can still tighten it for a single run.
+# NB: the "export" is load-bearing. am__check_pre ends with $(AM_TESTS_ENVIRONMENT) followed by
+# the log driver, so a bare "VAR=value;" is a shell assignment the test binary never inherits.
+AM_TESTS_ENVIRONMENT = CK_DEFAULT_TIMEOUT=$${CK_DEFAULT_TIMEOUT:-60}; export CK_DEFAULT_TIMEOUT;
 dist_check_SCRIPTS = check_registration.sh check_directives.sh check_conf_reference.sh fuzz/run-fuzzers.sh
 
 EXTRA_DIST = \
