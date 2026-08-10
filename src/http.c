@@ -528,7 +528,7 @@ size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems,
 			value++;
 		/* remove trailing /r/n */
 		i = (int)_oidc_strlen(value) - 1;
-		while ((value[i] == '\r') || (value[i] == '\n'))
+		while ((i >= 0) && ((value[i] == '\r') || (value[i] == '\n')))
 			value[i--] = '\0';
 	}
 
