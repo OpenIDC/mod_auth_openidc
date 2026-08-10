@@ -155,7 +155,7 @@ START_TEST(test_redact_body_for_log) {
 	// match inside "authorization_code" or "code_verifier"
 	ck_assert_str_eq(
 	    oidc_http_redact_body_for_log(r, "grant_type=authorization_code&code=abc123&client_secret=verysecret&"
-						   "code_verifier=xyz789&redirect_uri=https%3A%2F%2Fexample.org"),
+					     "code_verifier=xyz789&redirect_uri=https%3A%2F%2Fexample.org"),
 	    "grant_type=authorization_code&code=***&client_secret=***&"
 	    "code_verifier=***&redirect_uri=https%3A%2F%2Fexample.org");
 
@@ -192,15 +192,15 @@ START_TEST(test_redact_json_for_log) {
 	ck_assert_str_eq(oidc_http_redact_json_for_log(r, plain), plain);
 
 	// a token endpoint response: every credential masked, everything else kept verbatim
-	ck_assert_str_eq(oidc_http_redact_json_for_log(
-			     r, "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
-				      "\"refresh_token\":\"RT-1\",\"id_token\":\"eyJ.a.b\"}"),
-			 "{\"access_token\":\"***\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
-			 "\"refresh_token\":\"***\",\"id_token\":\"***\"}");
+	ck_assert_str_eq(
+	    oidc_http_redact_json_for_log(r, "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+					     "\"refresh_token\":\"RT-1\",\"id_token\":\"eyJ.a.b\"}"),
+	    "{\"access_token\":\"***\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+	    "\"refresh_token\":\"***\",\"id_token\":\"***\"}");
 
 	// a dynamic client registration response
 	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"client_id\":\"c1\",\"client_secret\":\"s3cr3t\","
-								"\"registration_access_token\":\"RAT-1\"}"),
+							  "\"registration_access_token\":\"RAT-1\"}"),
 			 "{\"client_id\":\"c1\",\"client_secret\":\"***\","
 			 "\"registration_access_token\":\"***\"}");
 
@@ -221,12 +221,11 @@ START_TEST(test_redact_json_for_log) {
 
 	// a truncated body whose value never closes is masked to the end, so that the partial
 	// token it starts with does not reach the log
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"access_token\":\"AT-trunc"),
-			 "{\"access_token\":\"***");
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"access_token\":\"AT-trunc"), "{\"access_token\":\"***");
 
 	// more than one occurrence is masked, not just the first
 	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"a\":{\"access_token\":\"1\"},"
-								"\"b\":{\"access_token\":\"2\"}}"),
+							  "\"b\":{\"access_token\":\"2\"}}"),
 			 "{\"a\":{\"access_token\":\"***\"},\"b\":{\"access_token\":\"***\"}}");
 }
 END_TEST

@@ -52,7 +52,6 @@
 #define OIDC_AUTH_TYPE_OPENID_OAUTH20 "oauth20"
 #define OIDC_AUTH_TYPE_OPENID_BOTH "auth-openidc"
 
-
 /* parameter name of the original method in the discovery response */
 #define OIDC_DISC_RM_PARAM "method"
 

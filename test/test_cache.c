@@ -960,9 +960,9 @@ START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	    oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "stale", "v", apr_time_now() - apr_time_from_sec(60)),
 	    TRUE);
 	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "keep2", "v2", future), TRUE);
-	ck_assert_int_ne(apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "stale"), APR_FINFO_TYPE,
-				  r->pool),
-			 APR_SUCCESS);
+	ck_assert_int_ne(
+	    apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "stale"), APR_FINFO_TYPE, r->pool),
+	    APR_SUCCESS);
 	ck_assert_int_eq(
 	    apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "keep"), APR_FINFO_TYPE, r->pool),
 	    APR_SUCCESS);
@@ -991,9 +991,9 @@ START_TEST(test_cache_file_clean_cycle_unreadable_dir) {
 	cfg->cache.file_clean_interval = 0;
 	ck_assert_int_eq(apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UWRITE | APR_FPROT_UEXECUTE), APR_SUCCESS);
 	apr_byte_t rv = oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "after", "v2", future);
-	ck_assert_int_eq(apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE |
-								    APR_FPROT_UEXECUTE),
-			 APR_SUCCESS);
+	ck_assert_int_eq(
+	    apr_file_perms_set(cfg->cache.file_dir, APR_FPROT_UREAD | APR_FPROT_UWRITE | APR_FPROT_UEXECUTE),
+	    APR_SUCCESS);
 	ck_assert_int_eq(rv, TRUE);
 
 	char *value = NULL;
@@ -1076,9 +1076,9 @@ START_TEST(test_cache_file_short_write_fails_the_set) {
 	/* create the "last cleaned" marker while writing still works, so that the limit below only
 	 * affects the entry being written, and measure the header from a real entry */
 	ck_assert_int_eq(oidc_cache_file.set(r, OIDC_CACHE_SECTION_SESSION, "primer", value_written, future), TRUE);
-	ck_assert_int_eq(apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "primer"), APR_FINFO_SIZE,
-				  r->pool),
-			 APR_SUCCESS);
+	ck_assert_int_eq(
+	    apr_stat(&fi, e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "primer"), APR_FINFO_SIZE, r->pool),
+	    APR_SUCCESS);
 	header_len = (apr_size_t)fi.size - (_oidc_strlen(value_written) + 1);
 
 	ck_assert_int_eq(getrlimit(RLIMIT_FSIZE, &saved), 0);

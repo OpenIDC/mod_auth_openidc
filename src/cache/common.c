@@ -362,8 +362,8 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 	apr_byte_t use_secondary = FALSE;
 	const char *s_section = oidc_cache_section_get(r, section);
 
-	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", oidc_util_mask_value(r, key), s_section,
-		   encrypted, cfg->cache.impl->name);
+	oidc_debug(r, "enter: %s (section=%s, decrypt=%d, type=%s)", oidc_util_mask_value(r, key), s_section, encrypted,
+		   cfg->cache.impl->name);
 
 	s_secret = oidc_cfg_crypto_passphrase_secret1_get(cfg);
 	if (oidc_cache_get_key(r, key, s_secret, encrypted, &s_key) == FALSE)

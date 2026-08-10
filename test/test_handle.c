@@ -2876,7 +2876,8 @@ static const char *e2e_dpop_response_proof(request_rec *r) {
 	ck_assert_ptr_nonnull(body);
 	oidc_json_t *json = NULL;
 	ck_assert_int_eq(oidc_json_decode_object(r, body, &json), TRUE);
-	const char *proof = apr_pstrdup(r->pool, oidc_json_string_value(oidc_json_object_get(json, OIDC_HTTP_HDR_DPOP)));
+	const char *proof =
+	    apr_pstrdup(r->pool, oidc_json_string_value(oidc_json_object_get(json, OIDC_HTTP_HDR_DPOP)));
 	oidc_json_decref(json);
 	ck_assert_ptr_nonnull((void *)proof);
 	return proof;
@@ -2891,8 +2892,7 @@ START_TEST(test_handle_dpop_returns_proof) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
-	const char *kerr =
-	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir));
+	const char *kerr = oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir));
 	ck_assert_msg(kerr == NULL, "could not load private key: %s", kerr);
 
 	e2e_dpop_enable(r, c);

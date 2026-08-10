@@ -2120,9 +2120,8 @@ START_TEST(test_metadata_disk_dyn_registration_failures) {
 	const char *dir = e2e_make_metadata_dir(r);
 
 	/* an OP that answers the registration POST with an OAuth error object */
-	oidc_test_http_response_t resp = {.status_code = 400,
-					  .content_type = "application/json",
-					  .body = "{\"error\":\"invalid_client_metadata\"}"};
+	oidc_test_http_response_t resp = {
+	    .status_code = 400, .content_type = "application/json", .body = "{\"error\":\"invalid_client_metadata\"}"};
 	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
 	ck_assert_ptr_nonnull(srv);
 

@@ -1031,11 +1031,10 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		   "request_timeout=%d, connect_timeout=%d, retries=%d, retry_interval=%d, outgoing_proxy=%s:%s:%d, "
 		   "pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
 		   url, oidc_http_redact_body_for_log(r, data), content_type, basic_auth ? "****" : "null",
-		   oidc_util_mask_value(r, access_token), dpop, ssl_validate_server,
-		   http_timeout->request_timeout, http_timeout->connect_timeout, http_timeout->retries,
-		   http_timeout->retry_interval, outgoing_proxy->host_port,
-		   outgoing_proxy->username_password ? "****" : "(null)", (int)outgoing_proxy->auth_type, pass_cookies,
-		   ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
+		   oidc_util_mask_value(r, access_token), dpop, ssl_validate_server, http_timeout->request_timeout,
+		   http_timeout->connect_timeout, http_timeout->retries, http_timeout->retry_interval,
+		   outgoing_proxy->host_port, outgoing_proxy->username_password ? "****" : "(null)",
+		   (int)outgoing_proxy->auth_type, pass_cookies, ssl_cert, ssl_key, ssl_key_pwd ? "****" : "(null)");
 
 	curl = oidc_http_curl_acquire();
 	if (curl == NULL) {

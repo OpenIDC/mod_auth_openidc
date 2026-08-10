@@ -367,8 +367,7 @@ static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const c
 
 	/* a writer may have replaced the entry since it was read; only remove the file inspected above */
 	if (oidc_cache_file_is_same(r, path, &ident, have_ident) == FALSE) {
-		oidc_debug(r, "cache entry (%s) is no longer the file that was inspected, leaving it alone",
-			   fi->name);
+		oidc_debug(r, "cache entry (%s) is no longer the file that was inspected, leaving it alone", fi->name);
 		return;
 	}
 

@@ -166,7 +166,6 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 		oidc_json_decref(z->state);
 		z->state = NULL;
 	}
-
 }
 
 /*

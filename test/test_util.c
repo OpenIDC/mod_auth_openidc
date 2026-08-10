@@ -201,7 +201,8 @@ START_TEST(test_util_appinfo_array_delimiter_escape) {
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins\\,OU=Groups,plain");
 
 	/* a multi-character delimiter is matched and escaped as a unit (no delimiter present => unchanged) */
-	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS, OIDC_APPINFO_ENCODING_NONE);
+	oidc_util_appinfo_set_all(r, claims, "OIDC_CLAIM_", "::", OIDC_APPINFO_PASS_HEADERS,
+				  OIDC_APPINFO_ENCODING_NONE);
 	ck_assert_table_str(r->headers_in, "OIDC_CLAIM_dns", "CN=Admins,OU=Groups::plain");
 
 	oidc_json_decref(claims);
@@ -388,13 +389,13 @@ START_TEST(test_util_html_escape) {
 	/* every entry of the JavaScript escape table in one go: quote, double quote, backslash,
 	 * forward slash, CR, LF, and the angle brackets that would otherwise close a <script> */
 	ck_assert_str_eq(oidc_util_html_javascript_escape(pool, "'"
-							       "\""
-							       "\\"
-							       "/"
-							       "\r"
-							       "\n"
-							       "<"
-							       ">"),
+								"\""
+								"\\"
+								"/"
+								"\r"
+								"\n"
+								"<"
+								">"),
 			 "\\'"
 			 "\\\""
 			 "\\\\"
@@ -746,7 +747,6 @@ START_TEST(test_util_jwt_without_subprocess_env) {
 	ck_assert_str_eq(payload, str);
 }
 END_TEST
-
 
 /*
  * regression: the decompressor decides from the payload's first two bytes, and that test has

@@ -3260,9 +3260,8 @@ static const char *e2e_request_object_location(request_rec *r, oidc_cfg_t *c, oi
 					       const char *request_object_config, const char *state) {
 	oidc_cfg_provider_request_object_set(r->pool, provider, request_object_config);
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc =
-	    oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", state, ps, NULL, NULL, NULL,
-			      NULL);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", state, ps, NULL, NULL,
+				   NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -3292,15 +3291,14 @@ START_TEST(test_proto_request_auth_request_object_type) {
 	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL, "request_uri= must appear: %s", loc);
 
 	/* not a string */
-	loc = e2e_request_object_location(r, c, provider,
-					  "{\"request_object_type\":42,\"crypto\":{\"sign_alg\":\"none\"}}",
-					  "state-rot-3");
+	loc = e2e_request_object_location(
+	    r, c, provider, "{\"request_object_type\":42,\"crypto\":{\"sign_alg\":\"none\"}}", "state-rot-3");
 	ck_assert_msg(_oidc_strstr(loc, "request") == NULL, "no request object may be attached: %s", loc);
 
 	/* a string, but not one of the two accepted values */
-	loc = e2e_request_object_location(
-	    r, c, provider, "{\"request_object_type\":\"telepathy\",\"crypto\":{\"sign_alg\":\"none\"}}",
-	    "state-rot-4");
+	loc = e2e_request_object_location(r, c, provider,
+					  "{\"request_object_type\":\"telepathy\",\"crypto\":{\"sign_alg\":\"none\"}}",
+					  "state-rot-4");
 	ck_assert_msg(_oidc_strstr(loc, "request") == NULL, "no request object may be attached: %s", loc);
 }
 END_TEST
@@ -3564,8 +3562,8 @@ START_TEST(test_proto_request_auth_par_failures) {
 	    r->pool, provider, oidc_test_http_server_url(srv, r->pool)));
 
 	ps = e2e_make_proto_state(r);
-	rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-par-2", ps, NULL, NULL,
-			       NULL, NULL);
+	rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-par-2", ps, NULL,
+			       NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);

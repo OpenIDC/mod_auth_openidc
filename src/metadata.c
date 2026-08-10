@@ -30,7 +30,6 @@
 
 #include "metadata/internal.h"
 
-
 #include <apr_file_io.h>
 
 /*
