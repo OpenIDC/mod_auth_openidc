@@ -169,6 +169,11 @@ const command_rec oidc_cfg_cmds[] = {
 		"OpenID Connect session storage type."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
+		OIDCDebugMaskSecrets,
+		debug_mask_secrets,
+		"Mask secrets and tokens written to the debug log. Defaults to On; turning it Off writes credentials to the log in the clear and is intended for short-lived troubleshooting only."),
+	OIDC_CFG_CMD(
+		AP_INIT_TAKE1,
 		OIDCSessionCacheFallbackToCookie,
 		session_cache_fallback_to_cookie,
 		"Fallback to client-side cookie session storage when server side cache fails."),

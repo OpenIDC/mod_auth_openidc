@@ -154,6 +154,8 @@ struct oidc_cfg_cache_t {
 	PTR(char *, post_restore_template)                                                                             \
 	/* type of session management/storage */                                                                       \
 	INT(session_type)                                                                                              \
+	/* whether secrets/tokens are masked in the debug log */                                                       \
+	INT(debug_mask_secrets)                                                                                        \
 	INT(session_cache_fallback_to_cookie)                                                                          \
 	/* session cookie or persistent cookie */                                                                      \
 	INT(persistent_session_cookie)                                                                                 \

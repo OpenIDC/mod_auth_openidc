@@ -423,14 +423,32 @@ char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigne
  * length so log lines can still be correlated across requests without exposing the
  * value itself
  */
-const char *oidc_util_mask_value(apr_pool_t *pool, const char *value) {
+/*
+ * whether secrets are masked in the log for this request's server; OIDCDebugMaskSecrets is
+ * RSRC_CONF, so this is a per-virtual-host answer and cannot be relaxed from a directory or
+ * location section
+ */
+apr_byte_t oidc_util_log_mask_secrets(request_rec *r) {
+	oidc_cfg_t *cfg = NULL;
+	if (r == NULL)
+		return TRUE;
+	cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	if (cfg == NULL)
+		return TRUE;
+	return (oidc_cfg_debug_mask_secrets_get(cfg) != 0) ? TRUE : FALSE;
+}
+
+const char *oidc_util_mask_value(request_rec *r, const char *value) {
 	apr_size_t len = 0;
 	if (value == NULL)
 		return "(null)";
+	/* OIDCDebugMaskSecrets Off: hand back the value itself, which is the whole point of it */
+	if (oidc_util_log_mask_secrets(r) == FALSE)
+		return value;
 	len = _oidc_strlen(value);
 	if (len <= OIDC_UTIL_MASK_VALUE_PREFIX_LEN)
 		return "***";
-	return apr_psprintf(pool, "%.*s...(%" APR_SIZE_T_FMT " chars)", OIDC_UTIL_MASK_VALUE_PREFIX_LEN, value, len);
+	return apr_psprintf(r->pool, "%.*s...(%" APR_SIZE_T_FMT " chars)", OIDC_UTIL_MASK_VALUE_PREFIX_LEN, value, len);
 }
 
 /*

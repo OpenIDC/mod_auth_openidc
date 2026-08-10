@@ -578,11 +578,15 @@ apr_byte_t oidc_http_param_is_sensitive(const char *key) {
  * purposes; JSON request bodies do not carry these parameters in this codebase and
  * are therefore left untouched
  */
-const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data) {
+const char *oidc_http_redact_body_for_log(request_rec *r, const char *data) {
 	char *result = NULL;
+	apr_pool_t *pool = (r != NULL) ? r->pool : NULL;
 
 	if (data == NULL)
 		return NULL;
+	/* OIDCDebugMaskSecrets Off */
+	if (oidc_util_log_mask_secrets(r) == FALSE)
+		return data;
 
 	result = apr_pstrdup(pool, data);
 
@@ -636,11 +640,15 @@ static const char *_oidc_http_sensitive_json_members[] = {OIDC_PROTO_ACCESS_TOKE
  * response), and it runs off the back of a network round trip so the scan is free by
  * comparison. Tokens do not contain a quote, so the closing quote ends the value.
  */
-const char *oidc_http_redact_json_for_log(apr_pool_t *pool, const char *data) {
+const char *oidc_http_redact_json_for_log(request_rec *r, const char *data) {
 	char *result = NULL;
+	apr_pool_t *pool = (r != NULL) ? r->pool : NULL;
 
 	if (data == NULL)
 		return NULL;
+	/* OIDCDebugMaskSecrets Off */
+	if (oidc_util_log_mask_secrets(r) == FALSE)
+		return data;
 
 	result = apr_pstrdup(pool, data);
 
@@ -1012,8 +1020,8 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 		   "url=%s, data=%s, content_type=%s, basic_auth=%s, access_token=%s, dpop=%s, ssl_validate_server=%d, "
 		   "request_timeout=%d, connect_timeout=%d, retries=%d, retry_interval=%d, outgoing_proxy=%s:%s:%d, "
 		   "pass_cookies=%pp, ssl_cert=%s, ssl_key=%s, ssl_key_pwd=%s",
-		   url, oidc_http_redact_body_for_log(r->pool, data), content_type, basic_auth ? "****" : "null",
-		   oidc_util_mask_value(r->pool, access_token), dpop, ssl_validate_server,
+		   url, oidc_http_redact_body_for_log(r, data), content_type, basic_auth ? "****" : "null",
+		   oidc_util_mask_value(r, access_token), dpop, ssl_validate_server,
 		   http_timeout->request_timeout, http_timeout->connect_timeout, http_timeout->retries,
 		   http_timeout->retry_interval, outgoing_proxy->host_port,
 		   outgoing_proxy->username_password ? "****" : "(null)", (int)outgoing_proxy->auth_type, pass_cookies,
@@ -1140,7 +1148,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 
 	/* set and log the response; the token, introspection and registration responses carry
 	 * credentials, so redact them the way the request body above already is */
-	oidc_debug(r, "response=%s", oidc_http_redact_json_for_log(r->pool, *response ? *response : ""));
+	oidc_debug(r, "response=%s", oidc_http_redact_json_for_log(r, *response ? *response : ""));
 
 end:
 
@@ -1366,7 +1374,7 @@ char *oidc_http_get_cookie(request_rec *r, const char *cookieName) {
 	/* log what we've found */
 	/* in client-cookie session mode the value is the whole session credential */
 	oidc_debug(r, "returning \"%s\" = %s", cookieName,
-		   rv ? apr_psprintf(r->pool, "\"%s\"", oidc_util_mask_value(r->pool, rv)) : "<null>");
+		   rv ? apr_psprintf(r->pool, "\"%s\"", oidc_util_mask_value(r, rv)) : "<null>");
 
 	return rv;
 }

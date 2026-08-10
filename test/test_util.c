@@ -1146,19 +1146,36 @@ START_TEST(test_util_table_and_hash_clear_and_openssl) {
 END_TEST
 
 START_TEST(test_util_mask_value) {
-	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDebugMaskSecrets);
+
+	// masking is the default
+	ck_assert_int_eq(oidc_util_log_mask_secrets(r), TRUE);
 
 	// NULL values are represented as "(null)"
-	ck_assert_str_eq(oidc_util_mask_value(pool, NULL), "(null)");
+	ck_assert_str_eq(oidc_util_mask_value(r, NULL), "(null)");
 
 	// values up to the prefix length are masked entirely so nothing of a short secret leaks
-	ck_assert_str_eq(oidc_util_mask_value(pool, ""), "***");
-	ck_assert_str_eq(oidc_util_mask_value(pool, "abc"), "***");
-	ck_assert_str_eq(oidc_util_mask_value(pool, "abcd"), "***");
+	ck_assert_str_eq(oidc_util_mask_value(r, ""), "***");
+	ck_assert_str_eq(oidc_util_mask_value(r, "abc"), "***");
+	ck_assert_str_eq(oidc_util_mask_value(r, "abcd"), "***");
 
 	// longer values keep a 4-char prefix plus the length, for log correlation without disclosure
-	ck_assert_str_eq(oidc_util_mask_value(pool, "abcde"), "abcd...(5 chars)");
-	ck_assert_str_eq(oidc_util_mask_value(pool, "eyJhbGciOiJSUzI1NiJ9"), "eyJh...(20 chars)");
+	ck_assert_str_eq(oidc_util_mask_value(r, "abcde"), "abcd...(5 chars)");
+	ck_assert_str_eq(oidc_util_mask_value(r, "eyJhbGciOiJSUzI1NiJ9"), "eyJh...(20 chars)");
+
+	// OIDCDebugMaskSecrets Off hands back the value itself, which is the point of the directive
+	ck_assert_ptr_null(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "Off"));
+	ck_assert_int_eq(oidc_util_log_mask_secrets(r), FALSE);
+	ck_assert_str_eq(oidc_util_mask_value(r, "eyJhbGciOiJSUzI1NiJ9"), "eyJhbGciOiJSUzI1NiJ9");
+	ck_assert_str_eq(oidc_util_mask_value(r, "abc"), "abc");
+	// ... but a NULL is still reported as such rather than dereferenced
+	ck_assert_str_eq(oidc_util_mask_value(r, NULL), "(null)");
+
+	// and back on again
+	ck_assert_ptr_null(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "On"));
+	ck_assert_int_eq(oidc_util_log_mask_secrets(r), TRUE);
+	ck_assert_str_eq(oidc_util_mask_value(r, "eyJhbGciOiJSUzI1NiJ9"), "eyJh...(20 chars)");
 }
 END_TEST
 

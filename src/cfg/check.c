@@ -292,6 +292,20 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s, apr_h
 
 	oidc_sdebug(s, "enter");
 
+	/*
+	 * turning the masking off is a deliberate, temporary troubleshooting step, so say so on every
+	 * start: it is the one setting whose whole effect is to write credentials - access, refresh and
+	 * ID tokens, client secrets, authorization codes - to the error log in the clear, where the log
+	 * shipper and everyone with read access to it will pick them up. A warning here is what keeps it
+	 * from being switched on for an incident and quietly left on afterwards.
+	 */
+	if (oidc_cfg_debug_mask_secrets_get(cfg) == 0)
+		oidc_check_swarn(s,
+				 "%s is Off: secrets and tokens are written to the log unmasked whenever LogLevel is "
+				 "debug or higher. Intended for short-lived troubleshooting only - turn it back On, and "
+				 "treat any log written meanwhile as containing live credentials",
+				 OIDCDebugMaskSecrets);
+
 	if (oidc_config_ensure_crypto_passphrase(s, cfg, TRUE, kdf_cache) != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
 

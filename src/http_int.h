@@ -90,8 +90,8 @@ struct curl_slist *oidc_http_request_build_header_list(request_rec *r, const oid
 const char *oidc_http_user_agent(request_rec *r);
 
 /* mask well-known sensitive parameter values inside a URL-form-encoded body for debug-log purposes */
-const char *oidc_http_redact_body_for_log(apr_pool_t *pool, const char *data);
-const char *oidc_http_redact_json_for_log(apr_pool_t *pool, const char *data);
+const char *oidc_http_redact_body_for_log(request_rec *r, const char *data);
+const char *oidc_http_redact_json_for_log(request_rec *r, const char *data);
 
 /* return the configured local interface (CURLOPT_INTERFACE) or NULL if unset */
 const char *oidc_http_interface(const request_rec *r);

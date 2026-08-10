@@ -93,6 +93,7 @@
 #define OIDCXForwardedHeaders "OIDCXForwardedHeaders"
 #define OIDCFilterClaimsExpr "OIDCFilterClaimsExpr"
 #define OIDCTraceParent "OIDCTraceParent"
+#define OIDCDebugMaskSecrets "OIDCDebugMaskSecrets"
 #define OIDCPrivateKeyFiles "OIDCPrivateKeyFiles"
 #define OIDCRedirectURI "OIDCRedirectURI"
 #define OIDCDefaultURL "OIDCDefaultURL"

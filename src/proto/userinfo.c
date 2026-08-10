@@ -45,6 +45,7 @@
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
 
 /*
  * parse a JWT response from the userinfo endpoint: at this point the response is not a JSON object
@@ -388,7 +389,7 @@ apr_byte_t oidc_proto_userinfo_request(request_rec *r, oidc_cfg_t *cfg, const oi
 	    oidc_cfg_provider_userinfo_token_method_get(provider) == OIDC_USER_INFO_TOKEN_METHOD_POST ? "POST" : "GET";
 
 	oidc_debug(r, "enter, endpoint=%s, access_token=%s, token_type=%s",
-		   oidc_cfg_provider_userinfo_endpoint_url_get(provider), oidc_util_mask_value(r->pool, access_token),
+		   oidc_cfg_provider_userinfo_endpoint_url_get(provider), oidc_util_mask_value(r, access_token),
 		   access_token_type);
 
 	if ((_oidc_strnatcasecmp(access_token_type, OIDC_PROTO_DPOP) == 0) &&

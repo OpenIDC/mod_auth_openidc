@@ -3,6 +3,9 @@
   parsed session state, appinfo claim pairs, provider metadata, JWKs selection and compiled
   Require-claim regexes. It was worth 24-34% of the module's own CPU, nearly all of that the
   session cache alone, which does not pay for the concurrency and teardown surface it added
+- add OIDCDebugMaskSecrets, a server-level directive that turns off the masking of secrets and
+  tokens in the debug log for short-lived troubleshooting; it defaults to On and warns at startup
+  for as long as it is Off
 - cache/file: report an expired entry as a miss without unlinking it, leaving that to the cleaning
   cycle; a writer's rename could land in between and the unlink then threw away the entry that had
   just replaced it

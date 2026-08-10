@@ -742,6 +742,10 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_discovery_csrf, oidc_samesite_coo
 #define OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE 0
 OIDC_CFG_MEMBER_FUNCS_BOOL(session_cache_fallback_to_cookie, OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE)
 
+/* masking secrets in the debug log is the default; turning it off is a deliberate, logged choice */
+#define OIDC_DEFAULT_DEBUG_MASK_SECRETS 1
+OIDC_CFG_MEMBER_FUNCS_BOOL(debug_mask_secrets, OIDC_DEFAULT_DEBUG_MASK_SECRETS)
+
 #define OIDC_DEFAULT_CLAIM_DELIMITER ","
 OIDC_CFG_MEMBER_FUNCS_STR_DEF(claim_delimiter, NULL, OIDC_DEFAULT_CLAIM_DELIMITER)
 

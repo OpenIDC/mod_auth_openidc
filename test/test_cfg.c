@@ -1409,6 +1409,20 @@ START_TEST(test_cmd_cookie_http_only) {
 }
 END_TEST
 
+START_TEST(test_cmd_debug_mask_secrets) {
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDebugMaskSecrets);
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	/* masking is the default, so an unset config must report On */
+	ck_assert_int_eq(oidc_cfg_debug_mask_secrets_get(cfg), 1);
+	ck_assert_ptr_null(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "Off"));
+	ck_assert_int_eq(oidc_cfg_debug_mask_secrets_get(cfg), 0);
+	ck_assert_ptr_null(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "On"));
+	ck_assert_int_eq(oidc_cfg_debug_mask_secrets_get(cfg), 1);
+	ck_assert_ptr_nonnull(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "Sometimes"));
+}
+END_TEST
+
 START_TEST(test_cmd_session_cache_fallback_to_cookie) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCSessionCacheFallbackToCookie);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -2456,6 +2470,7 @@ int main(void) {
 	tcase_add_test(core, test_cmd_post_preserve_templates);
 	tcase_add_test(core, test_cmd_ca_bundle_path);
 	tcase_add_test(core, test_cmd_cookie_http_only);
+	tcase_add_test(core, test_cmd_debug_mask_secrets);
 	tcase_add_test(core, test_cmd_session_cache_fallback_to_cookie);
 	tcase_add_test(core, test_cmd_claim_delimiter);
 	tcase_add_test(core, test_cmd_metrics_path);

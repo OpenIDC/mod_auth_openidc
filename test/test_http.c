@@ -145,38 +145,38 @@ START_TEST(test_redact_body_for_log) {
 	request_rec *r = oidc_test_request_get();
 
 	// NULL body passes through as NULL
-	ck_assert_ptr_null(oidc_http_redact_body_for_log(r->pool, NULL));
+	ck_assert_ptr_null(oidc_http_redact_body_for_log(r, NULL));
 
 	// a body without sensitive parameters is left untouched
 	const char *plain = "grant_type=client_credentials&scope=openid";
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, plain), plain);
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, plain), plain);
 
 	// each well-known sensitive parameter value is masked; the "code=" needle must not
 	// match inside "authorization_code" or "code_verifier"
 	ck_assert_str_eq(
-	    oidc_http_redact_body_for_log(r->pool, "grant_type=authorization_code&code=abc123&client_secret=verysecret&"
+	    oidc_http_redact_body_for_log(r, "grant_type=authorization_code&code=abc123&client_secret=verysecret&"
 						   "code_verifier=xyz789&redirect_uri=https%3A%2F%2Fexample.org"),
 	    "grant_type=authorization_code&code=***&client_secret=***&"
 	    "code_verifier=***&redirect_uri=https%3A%2F%2Fexample.org");
 
 	// a sensitive value at the end of the body (no trailing separator) is masked too
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "refresh_token=rt-1&access_token=at-1"),
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "refresh_token=rt-1&access_token=at-1"),
 			 "refresh_token=***&access_token=***");
 
 	// client_assertion values (private_key_jwt) are masked
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "client_assertion=eyJhbGciOi.abc.def&scope=openid"),
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "client_assertion=eyJhbGciOi.abc.def&scope=openid"),
 			 "client_assertion=***&scope=openid");
 
 	// a parameter that occurs more than once is masked at every occurrence, not just the first
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "code=first&scope=openid&code=second&code=third"),
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "code=first&scope=openid&code=second&code=third"),
 			 "code=***&scope=openid&code=***&code=***");
 
 	// the needle only matches at a parameter boundary: a parameter whose name merely ends in a
 	// sensitive one keeps its value
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "xcode=keepme&code=hideme"), "xcode=keepme&code=***");
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "xcode=keepme&code=hideme"), "xcode=keepme&code=***");
 
 	// ... including as the very first parameter of the body
-	ck_assert_str_eq(oidc_http_redact_body_for_log(r->pool, "my_access_token=keepme&scope=openid"),
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "my_access_token=keepme&scope=openid"),
 			 "my_access_token=keepme&scope=openid");
 }
 END_TEST
@@ -185,47 +185,47 @@ START_TEST(test_redact_json_for_log) {
 	request_rec *r = oidc_test_request_get();
 
 	// NULL body passes through as NULL
-	ck_assert_ptr_null(oidc_http_redact_json_for_log(r->pool, NULL));
+	ck_assert_ptr_null(oidc_http_redact_json_for_log(r, NULL));
 
 	// a response without credentials is left untouched
 	const char *plain = "{\"active\":true,\"sub\":\"joe\",\"scope\":\"openid\"}";
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, plain), plain);
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, plain), plain);
 
 	// a token endpoint response: every credential masked, everything else kept verbatim
 	ck_assert_str_eq(oidc_http_redact_json_for_log(
-			     r->pool, "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
+			     r, "{\"access_token\":\"AT-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
 				      "\"refresh_token\":\"RT-1\",\"id_token\":\"eyJ.a.b\"}"),
 			 "{\"access_token\":\"***\",\"token_type\":\"Bearer\",\"expires_in\":3600,"
 			 "\"refresh_token\":\"***\",\"id_token\":\"***\"}");
 
 	// a dynamic client registration response
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"client_id\":\"c1\",\"client_secret\":\"s3cr3t\","
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"client_id\":\"c1\",\"client_secret\":\"s3cr3t\","
 								"\"registration_access_token\":\"RAT-1\"}"),
 			 "{\"client_id\":\"c1\",\"client_secret\":\"***\","
 			 "\"registration_access_token\":\"***\"}");
 
 	// whitespace between the member name, the colon and the value is tolerated
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{ \"access_token\" : \"AT-1\" }"),
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{ \"access_token\" : \"AT-1\" }"),
 			 "{ \"access_token\" : \"***\" }");
 
 	// a non-string value is left alone rather than guessed at
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"access_token\":null}"), "{\"access_token\":null}");
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"access_token\":null}"), "{\"access_token\":null}");
 
 	// a member whose name merely ends in a sensitive one keeps its value
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"my_access_token\":\"keepme\"}"),
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"my_access_token\":\"keepme\"}"),
 			 "{\"my_access_token\":\"keepme\"}");
 
 	// a body that is not JSON at all must pass through unchanged
 	const char *html = "<html><body>Internal Server Error</body></html>";
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, html), html);
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, html), html);
 
 	// a truncated body whose value never closes is masked to the end, so that the partial
 	// token it starts with does not reach the log
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"access_token\":\"AT-trunc"),
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"access_token\":\"AT-trunc"),
 			 "{\"access_token\":\"***");
 
 	// more than one occurrence is masked, not just the first
-	ck_assert_str_eq(oidc_http_redact_json_for_log(r->pool, "{\"a\":{\"access_token\":\"1\"},"
+	ck_assert_str_eq(oidc_http_redact_json_for_log(r, "{\"a\":{\"access_token\":\"1\"},"
 								"\"b\":{\"access_token\":\"2\"}}"),
 			 "{\"a\":{\"access_token\":\"***\"},\"b\":{\"access_token\":\"***\"}}");
 }
