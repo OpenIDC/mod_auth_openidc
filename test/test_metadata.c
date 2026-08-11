@@ -1010,6 +1010,61 @@ START_TEST(test_metadata_oauth_provider_parse) {
 }
 END_TEST
 
+/* a malformed introspection_endpoint / jwks_uri (wrong URL scheme) is rejected by the setter and
+ * only logged, not fatal: the overall parse still succeeds and the rejected fields are left unset */
+START_TEST(test_metadata_oauth_provider_parse_invalid_urls) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_json_t *j = json_pack("{s:s,s:s,s:s}", "issuer", "https://as.example.com", "introspection_endpoint",
+				   "ftp://as.example.com/introspect", "jwks_uri", "not-a-url");
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
+
+	ck_assert_ptr_null(oidc_cfg_oauth_introspection_endpoint_url_get(c));
+	ck_assert_ptr_null(oidc_cfg_oauth_verify_jwks_uri_get(c));
+
+	oidc_json_decref(j);
+}
+END_TEST
+
+/* introspection_endpoint_auth_methods_supported that names only unrecognized methods leaves
+ * oidc_metadata_endpoint_auth_select unable to pick one, which is fatal for the whole parse */
+START_TEST(test_metadata_oauth_provider_parse_no_supported_auth_method) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	oidc_json_t *j = json_pack("{s:s,s:s,s:[s]}", "issuer", "https://as.example.com", "introspection_endpoint",
+				   "https://as.example.com/introspect", "introspection_endpoint_auth_methods_supported",
+				   "telepathy_auth");
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), FALSE);
+
+	oidc_json_decref(j);
+}
+END_TEST
+
+/* under mutual-TLS client auth, a malformed "mtls_endpoint_aliases" introspection_endpoint is
+ * rejected by the setter and only logged: the mTLS URL is simply left unset (there is no
+ * conventional introspection_endpoint here to fall back to) */
+START_TEST(test_metadata_oauth_provider_parse_mtls_invalid_alias_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointCert);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_cert_set(
+	    cmd, NULL, apr_psprintf(r->pool, "%s/certificate.pem", dir)));
+
+	oidc_json_t *j = json_pack("{s:s,s:[s],s:{s:s}}", "issuer", "https://as.example.com",
+				   "introspection_endpoint_auth_methods_supported", "tls_client_auth",
+				   "mtls_endpoint_aliases", "introspection_endpoint", "not-a-url");
+	ck_assert_int_eq(oidc_oauth_metadata_provider_parse(r, c, j), TRUE);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(c), "tls_client_auth");
+	ck_assert_ptr_null(oidc_cfg_oauth_introspection_endpoint_url_get(c));
+
+	oidc_json_decref(j);
+}
+END_TEST
+
 START_TEST(test_metadata_oauth_provider_parse_mtls) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -2318,6 +2373,9 @@ int main(void) {
 	tcase_add_test(parse, test_metadata_parse_mtls_explicit_endpoint_wins);
 	tcase_add_test(parse, test_metadata_parse_mtls_aliases_private_key_jwt);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse);
+	tcase_add_test(parse, test_metadata_oauth_provider_parse_invalid_urls);
+	tcase_add_test(parse, test_metadata_oauth_provider_parse_no_supported_auth_method);
+	tcase_add_test(parse, test_metadata_oauth_provider_parse_mtls_invalid_alias_url);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse_mtls);
 
 	TCase *retrieve = tcase_create("retrieve");

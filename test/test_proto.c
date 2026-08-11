@@ -781,6 +781,84 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
 }
 END_TEST
 
+/* a per-client signing key (client_keys) takes precedence over the module-wide configured
+ * private keys (oidc_proto_endpoint_auth_pick_signing_key's client_keys != empty branch) */
+START_TEST(test_proto_token_endpoint_auth_private_key_jwt_client_keys) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	char *priv_path = apr_psprintf(r->pool, "%s/private.pem", dir);
+	ck_assert_msg(oidc_jwk_parse_pem_private_key(r->pool, "client-1", priv_path, &jwk, &err) == TRUE,
+		      "parse private pem failed");
+
+	apr_array_header_t *client_keys = apr_array_make(r->pool, 1, sizeof(oidc_jwk_t *));
+	APR_ARRAY_PUSH(client_keys, oidc_jwk_t *) = jwk;
+
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
+							client_keys, "https://idp.example.com/token", params, NULL,
+							&basic, &bearer),
+			 TRUE);
+	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	char *kid = NULL;
+	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, assertion, NULL, NULL, &kid));
+	ck_assert_str_eq(kid, "client-1");
+}
+END_TEST
+
+/* an empty (but non-NULL) client_secret bypasses the dispatcher's "no secret configured" short
+ * circuit yet still cannot be turned into an HMAC key: cjose_jwk_create_oct_spec rejects the
+ * zero-length key, so oidc_proto_endpoint_auth_client_secret_jwt's jwk-creation-failed branch fires */
+START_TEST(test_proto_token_endpoint_auth_client_secret_jwt_empty_secret) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_JWT, NULL, "myclient", "", NULL,
+							"https://idp.example.com/token", params, NULL, &basic, &bearer),
+			 FALSE);
+	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
+}
+END_TEST
+
+/* a client_keys entry that isn't RSA/EC (e.g. an OCT key, which oidc_util_key_list_first still
+ * matches since it has no "use" set) is picked, but oidc_jwk_default_jws_alg has no default alg
+ * for it, so private_key_jwt without an explicit token_endpoint_auth_alg must fail */
+START_TEST(test_proto_token_endpoint_auth_private_key_jwt_unsupported_key_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_jose_error_t err;
+
+	unsigned char key[16];
+	for (int i = 0; i < 16; i++)
+		key[i] = (unsigned char)(i + 1);
+	oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(r->pool, "sym-1", key, 16, TRUE, &err);
+	ck_assert_ptr_nonnull(sym);
+
+	apr_array_header_t *client_keys = apr_array_make(r->pool, 1, sizeof(oidc_jwk_t *));
+	APR_ARRAY_PUSH(client_keys, oidc_jwk_t *) = sym;
+
+	apr_table_t *params = apr_table_make(r->pool, 1);
+	char *basic = NULL;
+	char *bearer = NULL;
+
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
+							client_keys, "https://idp.example.com/token", params, NULL,
+							&basic, &bearer),
+			 FALSE);
+	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
+}
+END_TEST
+
 /* number of entries in a table for a given key, i.e. including duplicates that apr_table_get hides */
 static int e2e_table_count(const apr_table_t *table, const char *key) {
 	const apr_array_header_t *arr = apr_table_elts(table);
@@ -3777,6 +3855,140 @@ START_TEST(test_proto_jwks_uri_keys_http_failure) {
 }
 END_TEST
 
+/* no kid in the JWT and no "kid" on the matching JWKS entry either: oidc_proto_jwks_key_include_any
+ * falls back to indexing the result hash by the entry's ordinal position */
+START_TEST(test_proto_jwks_uri_keys_no_kid_no_kid_field) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks = "{\"keys\":[{\"kty\":\"oct\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", NULL);
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	/* indexed by ordinal "0" since neither the JWT nor the JWK entry carries a kid */
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "0", APR_HASH_KEY_STRING));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
+/* a JWKS entry that fails to parse (no recognizable "kty") must be skipped rather than aborting
+ * the whole lookup; the well-formed sibling entry is still found */
+START_TEST(test_proto_jwks_uri_keys_malformed_entry_skipped) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks = "{\"keys\":["
+			   "{\"kid\":\"bad1\"},"
+			   "{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}"
+			   "]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k1");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "k1", APR_HASH_KEY_STRING));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
+/* a JWKS entry whose key type cannot match the JWT's algorithm at all (RS256 => RSA, but the
+ * entry is oct) is skipped by the kty guard before the kid is ever compared */
+START_TEST(test_proto_jwks_uri_keys_kty_mismatch) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks =
+	    "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	/* alg=RS256 => the JWT wants an RSA key, but the only JWKS entry is oct */
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "RS256", "k1");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 0);
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+/* a JWT that carries an x5t thumbprint instead of a kid is matched against the JWKS entries'
+ * "x5t" fields once the kid comparison fails to find anything */
+START_TEST(test_proto_jwks_uri_keys_x5t_match) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"x5t\":\"thumb-1\","
+			   "\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	/* no kid on the JWT, only an x5t that matches the JWKS entry's "x5t" field; oidc_jwt_hdr_get
+	 * (unlike the kid comparison, which reads the plain struct field) reads back from the cjose
+	 * protected header, so the x5t must actually be signed in rather than just set on the struct */
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", NULL);
+	jwt->header.x5t = apr_pstrdup(r->pool, "thumb-1");
+	oidc_jose_error_t sign_err;
+	unsigned char sign_key[32];
+	for (int i = 0; i < 32; i++)
+		sign_key[i] = (unsigned char)(i + 1);
+	oidc_jwk_t *sign_jwk = oidc_jwk_create_symmetric_key(r->pool, NULL, sign_key, 32, FALSE, &sign_err);
+	ck_assert_ptr_nonnull(sign_jwk);
+	ck_assert_msg(oidc_jwt_sign(r->pool, jwt, sign_jwk, FALSE, &sign_err) == TRUE, "oidc_jwt_sign failed: %s",
+		      oidc_jose_e2s(r->pool, sign_err));
+	oidc_jwk_destroy(sign_jwk);
+
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "thumb-1", APR_HASH_KEY_STRING));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
 START_TEST(test_proto_supported_flows_exhaustive) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	/* every documented flow round-trips through flow_is_supported */
@@ -4168,6 +4380,9 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_no_keys);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);
+	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_client_keys);
+	tcase_add_test(core, test_proto_token_endpoint_auth_client_secret_jwt_empty_secret);
+	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_unsupported_key_type);
 	tcase_add_test(core, test_proto_token_endpoint_auth_idempotent);
 	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
 	tcase_add_test(core, test_proto_idtoken_parse_error_paths);
@@ -4284,6 +4499,10 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_include_matching_kty);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_match_after_refresh);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_http_failure);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_no_kid_field);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_malformed_entry_skipped);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_kty_mismatch);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_x5t_match);
 
 	Suite *s = suite_create("proto");
 	suite_add_tcase(s, core);

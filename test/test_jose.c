@@ -639,6 +639,106 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 }
 END_TEST
 
+/* shared helper: encrypt "this is a secret" to *out_pub's kid (RSA-OAEP/A128CBC-HS256) and
+ * hand back the matching pub/priv key pair so decrypt-path tests can craft a keys hash around it */
+static char *_jose_test_build_jwe(apr_pool_t *pool, oidc_jwk_t **out_pub, oidc_jwk_t **out_priv) {
+	oidc_jose_error_t err;
+	const char *src_file = __FILE__;
+	char *dir = NULL;
+	const char *slash = strrchr(src_file, '/');
+	if (slash)
+		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
+	else
+		dir = apr_pstrdup(pool, ".");
+	char *pub_path = apr_psprintf(pool, "%s/public.pem", dir);
+	char *priv_path = apr_psprintf(pool, "%s/private.pem", dir);
+
+	oidc_jwk_t *pub = NULL;
+	ck_assert_msg(oidc_jwk_parse_pem_public_key(pool, NULL, pub_path, &pub, &err) == TRUE,
+		      "parse public pem failed");
+	oidc_jwk_t *priv = NULL;
+	ck_assert_msg(oidc_jwk_parse_pem_private_key(pool, NULL, priv_path, &priv, &err) == TRUE,
+		      "parse private pem failed");
+
+	oidc_jwt_t *jwe = oidc_jwt_new(pool, 1, 0);
+	jwe->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_RSA_OAEP);
+	jwe->header.enc = apr_pstrdup(pool, CJOSE_HDR_ENC_A128CBC_HS256);
+	jwe->header.kid = apr_pstrdup(pool, pub->kid);
+
+	char *serialized = NULL;
+	const char *payload = "this is a secret";
+	ck_assert_msg(oidc_jwt_encrypt(pool, jwe, pub, payload, (int)_oidc_strlen(payload), &serialized, &err) == TRUE,
+		      "oidc_jwt_encrypt failed");
+	oidc_jwt_destroy(jwe);
+
+	*out_pub = pub;
+	*out_priv = priv;
+	return serialized;
+}
+
+START_TEST(test_jwe_decrypt_kid_not_found) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *pub = NULL, *priv = NULL;
+	char *serialized = _jose_test_build_jwe(pool, &pub, &priv);
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, "some-other-kid", APR_HASH_KEY_STRING, priv);
+	char *plaintext = NULL;
+	int plaintext_len = 0;
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+}
+END_TEST
+
+START_TEST(test_jwe_decrypt_kty_mismatch) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *pub = NULL, *priv = NULL;
+	char *serialized = _jose_test_build_jwe(pool, &pub, &priv);
+
+	/* same kid, but a key type that cannot possibly match the JWE's "alg": RSA-OAEP */
+	oidc_jwk_t *wrong_type = apr_pcalloc(pool, sizeof(oidc_jwk_t));
+	wrong_type->kty = CJOSE_JWK_KTY_OCT;
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, priv->kid, APR_HASH_KEY_STRING, wrong_type);
+	char *plaintext = NULL;
+	int plaintext_len = 0;
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+}
+END_TEST
+
+START_TEST(test_jwe_decrypt_use_mismatch) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *pub = NULL, *priv = NULL;
+	char *serialized = _jose_test_build_jwe(pool, &pub, &priv);
+
+	priv->use = apr_pstrdup(pool, OIDC_JOSE_JWK_SIG_STR);
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, priv->kid, APR_HASH_KEY_STRING, priv);
+	char *plaintext = NULL;
+	int plaintext_len = 0;
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+}
+END_TEST
+
+START_TEST(test_jwe_decrypt_no_keys_configured) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *pub = NULL, *priv = NULL;
+	char *serialized = _jose_test_build_jwe(pool, &pub, &priv);
+
+	char *plaintext = NULL;
+	int plaintext_len = 0;
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, NULL, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+
+	apr_hash_t *empty_keys = apr_hash_make(pool);
+	plaintext = NULL;
+	plaintext_len = 0;
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, empty_keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+}
+END_TEST
+
 START_TEST(test_jose_hash_bytes) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	unsigned char *out = NULL;
@@ -1657,6 +1757,10 @@ int main(void) {
 	tcase_add_test(core, test_jwt_verify_kid_not_found);
 	tcase_add_test(core, test_jwt_verify_kty_mismatch);
 	tcase_add_test(core, test_jwt_sign_verify_and_encrypt_decrypt);
+	tcase_add_test(core, test_jwe_decrypt_kid_not_found);
+	tcase_add_test(core, test_jwe_decrypt_kty_mismatch);
+	tcase_add_test(core, test_jwe_decrypt_use_mismatch);
+	tcase_add_test(core, test_jwe_decrypt_no_keys_configured);
 	tcase_add_test(core, test_jose_hash_bytes);
 	tcase_add_test(core, test_jwk_json_parse_and_jwks);
 	tcase_add_test(core, test_jwk_list_destroy);
