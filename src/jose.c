@@ -50,7 +50,8 @@
 #ifdef USE_LIBBROTLI
 #include <brotli/decode.h>
 #include <brotli/encode.h>
-#elif defined(USE_ZLIB)
+#endif
+#ifdef USE_ZLIB
 #include <zlib.h>
 #endif
 
@@ -278,7 +279,9 @@ static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *inpu
 	return TRUE;
 }
 
-#elif defined(USE_ZLIB)
+#endif
+
+#ifdef USE_ZLIB
 
 /*
  * deflate using zlib
@@ -486,15 +489,19 @@ apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_l
 	}
 
 #ifdef USE_LIBBROTLI
-	/* brotli has no header to recognize, so anything not zlib-framed is assumed to be brotli
-	 * when this build produces brotli; an uncompressed payload fails here as it did before */
-	return oidc_jose_brotli_uncompress(pool, input, input_len, output, output_len, err);
-#else
+	/* brotli has no header to recognize, so try it first: it is what this build writes. A failed
+	 * decode is not corruption - the input came out of a decrypted JWE or a JWS this module
+	 * signed - but a payload that was never compressed: written under
+	 * OIDC_JWT_INTERNAL_NO_COMPRESS, or by a writer built without brotli. Fall through to the
+	 * passthrough a build without compression support always applied; if the bytes really are
+	 * garbage the JSON parse after us rejects them, with the same net result as failing here. */
+	if (oidc_jose_brotli_uncompress(pool, input, input_len, output, output_len, err) == TRUE)
+		return TRUE;
+#endif
 	/* not compressed, or compressed by an algorithm this build does not have */
 	*output = apr_pmemdup(pool, input, input_len);
 	*output_len = input_len;
 	return TRUE;
-#endif
 }
 
 #if (OPENSSL_VERSION_NUMBER < 0x10100000) || defined(LIBRESSL_VERSION_NUMBER)

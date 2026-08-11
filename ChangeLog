@@ -1,4 +1,9 @@
 08/11/2026
+- jose: pass a payload that brotli cannot decode through instead of failing the read: a libbrotli
+  build assumed every non-zlib-framed payload was brotli, so a payload written uncompressed
+  (OIDC_JWT_INTERNAL_NO_COMPRESS, or a writer built without brotli) made every session, state and
+  encrypted-cache read fail; also make the zlib helpers available alongside brotli so a build
+  defining both macros compiles
 - http: use ceil division for the chunked-cookie chunk count: a value whose length is an exact
   multiple of OIDCSessionCookieChunkSize advertised a trailing empty chunk that set_cookie turns
   into a delete, so the browser stored one chunk fewer than the counter claimed and the reader
