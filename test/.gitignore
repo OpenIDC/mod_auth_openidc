@@ -40,6 +40,9 @@
 /fuzz_url
 /fuzz_jwt
 /fuzz_json
+/fuzz_cookie
+/fuzz_response_header
+/fuzz_form_params
 /fuzz/*.o
 /fuzz/.deps/
 /fuzz/.dirstamp

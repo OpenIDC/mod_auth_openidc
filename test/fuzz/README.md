@@ -72,3 +72,6 @@ cd test && ./fuzz_url crash-file          # one input per file
 2. Add `fuzz_<name>` to `oidc_fuzz_targets` and a `fuzz_<name>_SOURCES` line in
    `test/Makefile.am`, and a `replay` line in `run-fuzzers.sh`.
 3. Drop a few seed inputs in `corpus/<name>/`.
+4. Add `/fuzz_<name>` to `test/.gitignore` (it lists each built binary
+   individually rather than by a glob) so the standalone binary `make check`
+   produces does not show up as untracked.
