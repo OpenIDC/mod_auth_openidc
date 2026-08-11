@@ -343,6 +343,60 @@ START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
 }
 END_TEST
 
+/* reset=true walks oidc_metrics_reset_server's "counters" object and recurses into any entry
+ * that is itself a nested object (oidc_metrics_reset_integer_tree's object arm) -- a value-indexed
+ * counter is exactly that shape, but only once it is real shm-committed data (the "lifecycle"
+ * tcase's reset=true test resets before ever flushing, so the shm side is still empty there and
+ * this recursive arm is never reached) */
+START_TEST(test_metrics_handle_request_flushed_reset_nested_counter) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+	apr_sleep(apr_time_from_msec(300));
+
+	r->args = "format=json&reset=true";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+
+	/* the value-indexed sub-counter must have been zeroed, not left at its pre-reset value */
+	r->args = "format=status&server_name=www.example.com&counter=provider.http.response.code&value=200";
+	rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "OK: 0") != NULL, "expected the reset counter to read back as 0, got: %s",
+		      body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+/* a flush clears the local hashtable entry (oidc_metrics_cache_flush's "reset the
+ * local hashtables"), so every other test's repeated INC calls always recreate a
+ * fresh entry (count<=0 branch). Incrementing the same value-indexed counter twice
+ * back-to-back, with no flush in between, is what reaches oidc_metrics_counter_inc's
+ * "existing counter" else-branch (the overflow check + count++) instead */
+START_TEST(test_metrics_handle_request_flushed_counter_inc_twice_before_flush) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+	apr_sleep(apr_time_from_msec(300));
+
+	r->args = "format=status&server_name=www.example.com&counter=provider.http.response.code&value=200";
+	int rc = oidc_metrics_handle_request(r);
+	ck_assert_int_eq(rc, OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "OK: 2") != NULL, "expected the twice-incremented counter to read back as 2, got: %s",
+		      body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 /* poll the JSON formatter (non-destructively: reset=false) until the
  * asynchronously-flushed data contains the needle (instrumented/valgrind runs
  * can outlast a single fixed sleep) */
@@ -591,6 +645,8 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_selector);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_with_value);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_reset_nested_counter);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_counter_inc_twice_before_flush);
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);

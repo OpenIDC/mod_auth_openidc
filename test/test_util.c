@@ -49,7 +49,11 @@
 #include "util/request_state.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
+#include <fcntl.h>	  /* open()/close() for the EMFILE fd-exhaustion trick below */
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
+#include <signal.h>	  /* SIGXFSZ for the RLIMIT_FSIZE trick below */
+#include <sys/resource.h> /* getrlimit()/setrlimit(RLIMIT_NOFILE/RLIMIT_FSIZE) for the same tricks */
+#include <unistd.h>
 
 #ifdef HAVE_LIBPCRE2
 #define PCRE2_CODE_UNIT_WIDTH 8
@@ -371,6 +375,190 @@ START_TEST(test_util_file) {
 	ck_assert_msg(rc == TRUE, "oidc_util_file_read returned FALSE");
 	ck_assert_ptr_nonnull(read);
 	ck_assert_str_eq(read, text);
+}
+END_TEST
+
+/* stat succeeds (it is a regular, readable file) but the subsequent open() fails. A mode-0000 file
+ * would not exercise this when the suite runs as root, which permission checks do not apply to; a
+ * file descriptor table exhausted down to exactly the fd the open() would need returns EMFILE
+ * regardless of privilege, and stat(2) itself needs no fd so the preceding check is unaffected. */
+START_TEST(test_util_file_read_open_fails_after_stat) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *path = NULL;
+	char *read = NULL;
+	apr_byte_t rc;
+	struct rlimit rl_orig, rl_low;
+
+	apr_temp_dir_get(&dir, r->pool);
+	path = apr_psprintf(r->pool, "%s/test-emfile.tmp", dir);
+	ck_assert_int_eq(oidc_util_file_write(r, path, "content"), TRUE);
+
+	int probe_fd = open("/dev/null", O_RDONLY);
+	ck_assert_int_ge(probe_fd, 0);
+	close(probe_fd);
+
+	ck_assert_int_eq(getrlimit(RLIMIT_NOFILE, &rl_orig), 0);
+	rl_low.rlim_cur = probe_fd;
+	rl_low.rlim_max = rl_orig.rlim_max;
+	ck_assert_int_eq(setrlimit(RLIMIT_NOFILE, &rl_low), 0);
+
+	rc = oidc_util_file_read(r, path, r->pool, &read);
+
+	/* restore before asserting, so a failed assertion cannot starve the rest of the suite of fds */
+	ck_assert_int_eq(setrlimit(RLIMIT_NOFILE, &rl_orig), 0);
+
+	ck_assert_int_eq(rc, FALSE);
+	ck_assert_ptr_null(read);
+
+	apr_file_remove(path, r->pool);
+}
+END_TEST
+
+/* a file larger than OIDC_UTIL_FILE_SIZE_MAX (16MB) is rejected before its contents are read; a
+ * sparse file (seek past the cap, write one byte) gets it reported as that large without actually
+ * writing 16MB to disk */
+START_TEST(test_util_file_read_too_large) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *path = NULL;
+	char *read = NULL;
+	apr_file_t *fd = NULL;
+	apr_off_t offset = (apr_off_t)(16 * 1024 * 1024) + 1;
+	apr_size_t nbytes = 1;
+
+	apr_temp_dir_get(&dir, r->pool);
+	path = apr_psprintf(r->pool, "%s/test-too-large.tmp", dir);
+
+	ck_assert_int_eq(apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+					APR_OS_DEFAULT, r->pool),
+			 APR_SUCCESS);
+	ck_assert_int_eq(apr_file_seek(fd, APR_SET, &offset), APR_SUCCESS);
+	ck_assert_int_eq(apr_file_write(fd, "x", &nbytes), APR_SUCCESS);
+	apr_file_close(fd);
+
+	ck_assert_int_eq(oidc_util_file_read(r, path, r->pool, &read), FALSE);
+	ck_assert_ptr_null(read);
+
+	apr_file_remove(path, r->pool);
+}
+END_TEST
+
+/* oidc_util_file_read_server is the server-scoped (no request_rec) twin of oidc_util_file_read,
+ * used at startup where there is no request yet; nothing in this (open-source) module calls it --
+ * only the commercial license check does -- so exercise all four outcomes directly */
+START_TEST(test_util_file_read_server) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *path = NULL;
+	char *read = NULL;
+	apr_file_t *fd = NULL;
+	apr_off_t offset = (apr_off_t)(16 * 1024 * 1024) + 1;
+	apr_size_t nbytes = 1;
+
+	apr_temp_dir_get(&dir, r->pool);
+
+	/* OK */
+	path = apr_psprintf(r->pool, "%s/test-server-ok.tmp", dir);
+	ck_assert_int_eq(oidc_util_file_write(r, path, "server-scoped"), TRUE);
+	ck_assert_int_eq(oidc_util_file_read_server(r->server, path, r->pool, &read), TRUE);
+	ck_assert_str_eq(read, "server-scoped");
+	apr_file_remove(path, r->pool);
+
+	/* NOT_FOUND */
+	read = NULL;
+	ck_assert_int_eq(
+	    oidc_util_file_read_server(r->server, apr_psprintf(r->pool, "%s/bogus-server.tmp", dir), r->pool, &read),
+	    FALSE);
+	ck_assert_ptr_null(read);
+
+	/* NOT_REGULAR: a directory */
+	read = NULL;
+	ck_assert_int_eq(oidc_util_file_read_server(r->server, dir, r->pool, &read), FALSE);
+	ck_assert_ptr_null(read);
+
+	/* the default/error arm (IO_ERROR): the same oversized-file trick as above */
+	path = apr_psprintf(r->pool, "%s/test-server-too-large.tmp", dir);
+	ck_assert_int_eq(apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
+					APR_OS_DEFAULT, r->pool),
+			 APR_SUCCESS);
+	ck_assert_int_eq(apr_file_seek(fd, APR_SET, &offset), APR_SUCCESS);
+	ck_assert_int_eq(apr_file_write(fd, "x", &nbytes), APR_SUCCESS);
+	apr_file_close(fd);
+	read = NULL;
+	ck_assert_int_eq(oidc_util_file_read_server(r->server, path, r->pool, &read), FALSE);
+	ck_assert_ptr_null(read);
+	apr_file_remove(path, r->pool);
+}
+END_TEST
+
+/* the final atomic rename() can itself fail -- e.g. the destination path already exists as a
+ * non-empty directory, which rename(2) refuses to replace with a regular file -- and the temp
+ * file must not be left behind dangling next to it when that happens */
+START_TEST(test_util_file_write_rename_fails) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *target_dir = NULL;
+	apr_dir_t *d = NULL;
+	apr_finfo_t fi;
+	int count = 0;
+
+	apr_temp_dir_get(&dir, r->pool);
+	target_dir = apr_psprintf(r->pool, "%s/test-rename-target-dir", dir);
+	apr_dir_remove(target_dir, r->pool); /* in case a previous run left it behind */
+	ck_assert_int_eq(apr_dir_make(target_dir, APR_OS_DEFAULT, r->pool), APR_SUCCESS);
+
+	ck_assert_int_eq(oidc_util_file_write(r, target_dir, "data"), FALSE);
+
+	/* the directory itself must still be there, and empty: the tmp file failed to replace it and
+	 * must have been cleaned up rather than left behind alongside it */
+	ck_assert_int_eq(apr_stat(&fi, target_dir, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(fi.filetype, APR_DIR);
+
+	ck_assert_int_eq(apr_dir_open(&d, target_dir, r->pool), APR_SUCCESS);
+	while (apr_dir_read(&fi, APR_FINFO_NAME, d) == APR_SUCCESS) {
+		if ((_oidc_strcmp(fi.name, ".") == 0) || (_oidc_strcmp(fi.name, "..") == 0))
+			continue;
+		count++;
+	}
+	apr_dir_close(d);
+	ck_assert_int_eq(count, 0);
+
+	apr_dir_remove(target_dir, r->pool);
+}
+END_TEST
+
+/* apr_file_write_full surfaces a hard error (rather than a silent short write) as soon as the
+ * underlying write(2) cannot make progress; RLIMIT_FSIZE, with SIGXFSZ ignored so the process is
+ * not killed, gets there deterministically once the cap is exceeded, without needing a full disk */
+START_TEST(test_util_file_write_hard_failure) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *path = NULL;
+	apr_byte_t rc;
+	apr_finfo_t fi;
+	struct rlimit rl_orig, rl_low;
+	void (*prev_handler)(int);
+
+	apr_temp_dir_get(&dir, r->pool);
+	path = apr_psprintf(r->pool, "%s/test-write-hard-failure.tmp", dir);
+	apr_file_remove(path, r->pool); /* in case a previous run left it behind */
+
+	prev_handler = signal(SIGXFSZ, SIG_IGN);
+	ck_assert_int_eq(getrlimit(RLIMIT_FSIZE, &rl_orig), 0);
+	rl_low.rlim_cur = 4;
+	rl_low.rlim_max = rl_orig.rlim_max;
+	ck_assert_int_eq(setrlimit(RLIMIT_FSIZE, &rl_low), 0);
+
+	rc = oidc_util_file_write(r, path, "this string is longer than the 4-byte cap above");
+
+	/* restore before asserting, so a failed assertion cannot leave the rest of the suite capped */
+	ck_assert_int_eq(setrlimit(RLIMIT_FSIZE, &rl_orig), 0);
+	signal(SIGXFSZ, prev_handler);
+
+	ck_assert_int_eq(rc, FALSE);
+	/* the write failed before the rename, so the destination must not exist either */
+	ck_assert_int_ne(apr_stat(&fi, path, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
 }
 END_TEST
 
@@ -1619,6 +1807,11 @@ int main(void) {
 	c = tcase_create("file");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_file);
+	tcase_add_test(c, test_util_file_read_open_fails_after_stat);
+	tcase_add_test(c, test_util_file_read_too_large);
+	tcase_add_test(c, test_util_file_read_server);
+	tcase_add_test(c, test_util_file_write_rename_fails);
+	tcase_add_test(c, test_util_file_write_hard_failure);
 	suite_add_tcase(s, c);
 
 	c = tcase_create("html");

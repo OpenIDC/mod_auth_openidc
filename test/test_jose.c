@@ -456,6 +456,89 @@ START_TEST(test_jwk_parse_x5c_malformed) {
 }
 END_TEST
 
+START_TEST(test_jwt_hdr_set_json_malformed) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, 1, 0);
+
+	ck_assert_int_eq(oidc_jwt_hdr_set_json(jwt, "x5c", "not-valid-json{{{", &err), FALSE);
+
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+START_TEST(test_jwt_parse_payload_not_object) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	oidc_jwt_t *jwt = NULL;
+	/* {"alg":"none"} . [1,2,3] . (empty sig) -- a structurally valid unsigned JWT (RFC 7519 draft-20
+	 * ~6.1 shape) whose payload decodes to a JSON array rather than an object */
+	char *s = apr_pstrdup(pool, "eyJhbGciOiJub25lIn0.WzEsMiwzXQ.");
+
+	ck_assert_int_eq(oidc_jwt_parse(pool, s, &jwt, NULL, FALSE, &err), FALSE);
+
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+START_TEST(test_jwt_verify_kid_not_found) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	unsigned char key[32];
+	for (int i = 0; i < 32; i++)
+		key[i] = (unsigned char)(i + 1);
+	oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(pool, "real-kid", key, 32, TRUE, &err);
+	ck_assert_ptr_nonnull(sym);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, 1, 1);
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("unit-test"));
+	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_HS256);
+	/* oidc_jwt_verify's kid-lookup branch reads this struct field directly, not a re-parse of the
+	 * signature, so it does not matter here whether signing itself also embeds a "kid" header */
+	jwt->header.kid = apr_pstrdup(pool, "real-kid");
+	ck_assert_msg(oidc_jwt_sign(pool, jwt, sym, FALSE, &err) == TRUE, "oidc_jwt_sign failed");
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, "some-other-kid", APR_HASH_KEY_STRING, sym);
+
+	ck_assert_int_eq(oidc_jwt_verify(pool, jwt, keys, &err), FALSE);
+
+	oidc_jwk_destroy(sym);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
+START_TEST(test_jwt_verify_kty_mismatch) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	unsigned char key[32];
+	for (int i = 0; i < 32; i++)
+		key[i] = (unsigned char)(i + 1);
+	oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(pool, "k1", key, 32, TRUE, &err);
+	ck_assert_ptr_nonnull(sym);
+
+	oidc_jwt_t *jwt = oidc_jwt_new(pool, 1, 1);
+	oidc_json_object_set_new(jwt->payload.value.json, "iss", oidc_json_string("unit-test"));
+	jwt->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_HS256);
+	jwt->header.kid = apr_pstrdup(pool, "k1");
+	ck_assert_msg(oidc_jwt_sign(pool, jwt, sym, FALSE, &err) == TRUE, "oidc_jwt_sign failed");
+
+	/* a key under the matching kid, but of the wrong type for HS256/oct -- kty is checked as
+	 * defense in depth against key/algorithm confusion, not merely whether some key was found
+	 * under that name; only .kty is set since a mismatch is caught before the key is ever used */
+	oidc_jwk_t *wrong_type = apr_pcalloc(pool, sizeof(oidc_jwk_t));
+	wrong_type->kty = CJOSE_JWK_KTY_RSA;
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, "k1", APR_HASH_KEY_STRING, wrong_type);
+
+	ck_assert_int_eq(oidc_jwt_verify(pool, jwt, keys, &err), FALSE);
+
+	oidc_jwk_destroy(sym);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
 START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -1569,6 +1652,10 @@ int main(void) {
 	tcase_add_test(core, test_jose_jwe_decrypt_plaintext);
 	tcase_add_test(core, test_jwt_sign_parse_compressed);
 	tcase_add_test(core, test_jwk_parse_x5c_malformed);
+	tcase_add_test(core, test_jwt_hdr_set_json_malformed);
+	tcase_add_test(core, test_jwt_parse_payload_not_object);
+	tcase_add_test(core, test_jwt_verify_kid_not_found);
+	tcase_add_test(core, test_jwt_verify_kty_mismatch);
 	tcase_add_test(core, test_jwt_sign_verify_and_encrypt_decrypt);
 	tcase_add_test(core, test_jose_hash_bytes);
 	tcase_add_test(core, test_jwk_json_parse_and_jwks);
