@@ -13,6 +13,7 @@ parser, reusing the libcheck test fixture (`test/util.c`) for a ready
 | `fuzz_jwt`    | `oidc_jwt_parse`                   | compact JWT/JWS/JWE structural parse              |
 | `fuzz_json`   | `oidc_json_decode_object`          | JSON decode (token / userinfo / metadata)         |
 | `fuzz_cookie` | `oidc_http_get_cookie`             | raw `Cookie` request header tokenizing            |
+| `fuzz_response_header` | `oidc_http_response_header` | raw OP response header line parsing (curl callback) |
 
 ## Three build modes
 
