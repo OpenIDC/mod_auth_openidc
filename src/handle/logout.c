@@ -139,6 +139,11 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 	oidc_session_t session;
 	apr_byte_t loaded = FALSE;
 
+	/* zeroed because the cache load below reports a missing session entry as success without
+	 * touching the struct: a sid/sub index entry can outlive the session it points to (superseded
+	 * login, eviction) and extract must then see a NULL state, not indeterminate stack memory */
+	_oidc_memset(&session, 0, sizeof(oidc_session_t));
+
 	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, oidc_cfg_provider_issuer_get(provider));
 
 	/*

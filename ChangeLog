@@ -1,4 +1,8 @@
 08/11/2026
+- logout: zero the stack session struct in the back-channel/front-channel cleanup: the session
+  cache load reports a sid/sub index entry whose session entry is gone (superseded login,
+  eviction) as success without touching the struct, so the token-revocation step read
+  uninitialized memory as a session
 - metadata: actually fall back to the filename-derived issuer when a provider file carries no
   "issuer" string: the JSON getter reports an absent key as success with a NULL value, so checking
   its return code passed a NULL issuer onward and crashed in the issuer-to-filename conversion

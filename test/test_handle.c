@@ -4813,6 +4813,44 @@ START_TEST(test_handle_logout_backchannel_happy_path) {
 }
 END_TEST
 
+/* a sid/sub index entry can outlive the session entry it points to (superseded login, cache
+ * eviction): a back-channel logout for it must still succeed and clear the index, and must not
+ * hand an untouched (uninitialized) session struct to oidc_session_extract */
+START_TEST(test_handle_logout_backchannel_dangling_sid_index) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	/* index "alice" to a session uuid that has no entry behind it */
+	const char *sid = oidc_response_make_sid_iss_unique(r, "alice", "https://idp.example.com");
+	ck_assert_int_eq(oidc_cache_set_sid(r, sid, "no-such-session-uuid", apr_time_now() + apr_time_from_sec(60)),
+			 TRUE);
+
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							   "jti-dangling", TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	int rc = oidc_logout(r, c, session);
+	ck_assert_int_eq(rc, OK);
+
+	/* the dangling index entry must be gone */
+	char *uuid = NULL;
+	oidc_cache_get_sid(r, sid, &uuid);
+	ck_assert_ptr_null(uuid);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /* a logout token missing a claim that OpenID Connect Back-Channel Logout 1.0 section 2.4
  * makes REQUIRED must be rejected: "iat" is what bounds replay, and "jti" is what makes a
  * replay detectable at all */
@@ -6837,6 +6875,7 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_request_frontchannel_img);
 	tcase_add_test(logout, test_handle_logout_backchannel_no_token);
 	tcase_add_test(logout, test_handle_logout_backchannel_happy_path);
+	tcase_add_test(logout, test_handle_logout_backchannel_dangling_sid_index);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_iat);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_jti);
 	tcase_add_test(logout, test_handle_logout_backchannel_encrypted);
