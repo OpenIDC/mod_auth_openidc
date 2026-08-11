@@ -956,6 +956,26 @@ START_TEST(test_cfg_parse_key_files_alg) {
 	ck_assert_ptr_nonnull(
 	    oidc_cfg_parse_public_key_files(pool, apr_psprintf(pool, "enc:ES256@%s/public.pem", dir), &keys));
 	oidc_jwk_list_destroy(keys);
+
+	/* a kid that itself contains '@' is data, not an algorithm list: "key" names no algorithm,
+	 * so the tuple must parse as it did before the "<alg>@" prefix syntax existed */
+	keys = NULL;
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_public_key_files(pool, apr_psprintf(pool, "key@example.org#%s/public.pem", dir), &keys));
+	ck_assert_int_eq(keys->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->kid, "key@example.org");
+	ck_assert_ptr_null(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->alg);
+	oidc_jwk_list_destroy(keys);
+
+	/* a kid whose pre-'@' segment merely resembles an algorithm ("RSbank" passes oidc_alg2kty's
+	 * two-character match) must not be swallowed silently either */
+	keys = NULL;
+	ck_assert_ptr_null(
+	    oidc_cfg_parse_public_key_files(pool, apr_psprintf(pool, "RSbank@2024#%s/public.pem", dir), &keys));
+	ck_assert_int_eq(keys->nelts, 1);
+	ck_assert_str_eq(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->kid, "RSbank@2024");
+	ck_assert_ptr_null(APR_ARRAY_IDX(keys, 0, oidc_jwk_t *)->alg);
+	oidc_jwk_list_destroy(keys);
 }
 END_TEST
 

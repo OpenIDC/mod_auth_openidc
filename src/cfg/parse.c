@@ -494,19 +494,49 @@ static const char *oidc_cfg_parse_key_value(apr_pool_t *pool, const char *enc, c
 #define OIDC_KEY_ALG_LIST_SEPARATOR "+"
 
 /*
+ * the JOSE "alg" names the key tuple prefix may carry (RFC 7518 and registered successors),
+ * matched in full: a kid or filename segment that merely resembles one ("RSbank", "key") must
+ * not pass, which rules out oidc_alg2kty()'s two-character matching here
+ */
+static apr_byte_t oidc_cfg_parse_key_alg_is_known(const char *alg) {
+	static const char *known[] = {"RS256",	   "RS384",    "RS512",	       "PS256",	       "PS384",
+				      "PS512",	   "HS256",    "HS384",	       "HS512",	       "ES256",
+				      "ES384",	   "ES512",    "ES256K",       "EdDSA",	       "dir",
+				      "RSA1_5",	   "RSA-OAEP", "RSA-OAEP-256", "RSA-OAEP-384", "RSA-OAEP-512",
+				      "A128KW",	   "A192KW",   "A256KW",       "A128GCMKW",    "A192GCMKW",
+				      "A256GCMKW", "ECDH-ES",  "PBES2-HS256",  "PBES2-HS384",  "PBES2-HS512"};
+	for (unsigned int i = 0; i < sizeof(known) / sizeof(known[0]); i++)
+		if (_oidc_strcmp(alg, known[i]) == 0)
+			return TRUE;
+	return FALSE;
+}
+
+/*
  * detect and strip a leading "<alg>[+<alg>...]@" list from a key tuple: on a match, duplicate the algorithm
  * list into *alg (from pool) and return the tuple advanced past the "@"; otherwise return the tuple unchanged.
- * guard against a filename that itself contains '@' by requiring the candidate segment to hold no kid ('#')
- * or path ('/') character.
+ * a kid or a (server-root-relative, so possibly slash-less) filename may itself contain '@'
+ * ("key@example.org#/path/key.pem", "cert@2024.pem"), so the candidate segment is only read as an
+ * algorithm list when it holds no kid ('#') or path ('/') character AND every "+"-separated token
+ * names a known algorithm exactly; anything else stays kid/filename data as it was before the
+ * prefix syntax existed.
  */
 static const char *oidc_cfg_parse_key_alg_prefix(apr_pool_t *pool, const char *tuple, char **alg) {
 	const char *at = _oidc_strstr(tuple, OIDC_KEY_ALG_SEPARATOR);
+	char *last = NULL;
+	int n = 0;
 	if ((at == NULL) || (at == tuple))
 		return tuple;
 	for (const char *c = tuple; c < at; c++)
 		if ((*c == OIDC_KEY_TUPLE_SEPARATOR[0]) || (*c == OIDC_CHAR_FORWARD_SLASH))
 			return tuple;
-	*alg = apr_pstrndup(pool, tuple, at - tuple);
+	char *candidate = apr_pstrndup(pool, tuple, at - tuple);
+	for (char *tok = apr_strtok(apr_pstrdup(pool, candidate), OIDC_KEY_ALG_LIST_SEPARATOR, &last); tok != NULL;
+	     tok = apr_strtok(NULL, OIDC_KEY_ALG_LIST_SEPARATOR, &last), n++)
+		if (oidc_cfg_parse_key_alg_is_known(tok) == FALSE)
+			return tuple;
+	if (n == 0)
+		return tuple;
+	*alg = candidate;
 	return at + _oidc_strlen(OIDC_KEY_ALG_SEPARATOR);
 }
 

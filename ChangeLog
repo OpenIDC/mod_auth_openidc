@@ -1,4 +1,10 @@
 08/11/2026
+- config: only read the "<alg>[+<alg>...]@" key tuple prefix as an algorithm list when every
+  token names a known JOSE algorithm exactly: a kid containing '@' (key@example.org) or a
+  slash-less server-root-relative filename (cert@2024.pem) in OIDCPublicKeyFiles /
+  OIDCPrivateKeyFiles / OIDC(Provider|OAuth)VerifyCertFiles was misread as an algorithm -
+  failing startup, or, when the segment happened to pass oidc_alg2kty()'s two-character match
+  ("RSbank"), silently truncating the kid and publishing a bogus "alg" in the RP JWKs
 - http: register the curl easy-handle pool's cleanup after the process cleanup: pool cleanups
   run last-in-first-out, so the pooled handles were curl_easy_cleanup()d only after
   oidc_process_cleanup had already run curl_global_cleanup() - undefined behavior in libcurl
