@@ -105,7 +105,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, const oidc_cfg_t *c, const
  * the wrong meaning attached to its keys - the caller treats that as "no session", so the user
  * re-authenticates against this server and a payload is written in the layout it does write.
  */
-static apr_byte_t oidc_session_version_supported(request_rec *r, const oidc_session_t *z) {
+static apr_byte_t oidc_session_version_supported(request_rec *r, oidc_session_t *z) {
 	int version = 0;
 	/* absent: written before the field existed, i.e. the original layout */
 	oidc_json_object_get_int(z->state, OIDC_SESSION_FORMAT_VERSION_KEY, &version, 1);
@@ -114,6 +114,11 @@ static apr_byte_t oidc_session_version_supported(request_rec *r, const oidc_sess
 			  "discarding a session in payload format version %d: this module writes and understands "
 			  "up to version %d, so it was written by a newer mod_auth_openidc sharing this cache",
 			  version, OIDC_SESSION_FORMAT_VERSION);
+		/* the rejected object is refcounted, not pool-owned: drop it here, because the
+		 * callers treat FALSE as "no session" and a fallback load
+		 * (OIDCSessionCacheFallbackToCookie) overwrites the pointer and leaks it */
+		oidc_json_decref(z->state);
+		z->state = NULL;
 		return FALSE;
 	}
 	return TRUE;

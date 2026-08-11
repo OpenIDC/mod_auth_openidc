@@ -1,4 +1,8 @@
 08/11/2026
+- session: drop the decoded object when rejecting a payload with a newer format version instead
+  of leaving it on the session struct: the callers treat the rejection as "no session" and the
+  OIDCSessionCacheFallbackToCookie load then overwrote the pointer, leaking the refcounted
+  object once per rejected read in a mixed-version fleet
 - proto: only fire the extra-parameter duplicate guard against parameters that were already in
   the authorization request before the directive was processed: a key repeated within
   OIDCAuthRequestParams / OIDCPathAuthRequestParams itself (RFC 8707 sends "resource" once per

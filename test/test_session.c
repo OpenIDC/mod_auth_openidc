@@ -476,12 +476,15 @@ START_TEST(test_session_format_version) {
 	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
 	oidc_session_free(r, z);
 
-	/* 3: a version from the future is rejected, so the user re-authenticates here */
+	/* 3: a version from the future is rejected, so the user re-authenticates here; the rejected
+	 * (refcounted) object must not be left on the struct, where a fallback cookie load would
+	 * overwrite the pointer and leak it */
 	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
 	s_json =
 	    apr_psprintf(r->pool, "{\"v\":99,\"i\":\"%s\",\"e\":%d,\"r\":\"alice\"}", uuid, (int)apr_time_sec(future));
 	ck_assert_int_eq(oidc_cache_set_session(r, uuid, s_json, future), TRUE);
 	ck_assert_int_eq(oidc_session_load(r, &z), FALSE);
+	ck_assert_ptr_null(z->state);
 	oidc_session_free(r, z);
 
 	/* 4: what save() writes carries the version, so another server can apply the checks above.
