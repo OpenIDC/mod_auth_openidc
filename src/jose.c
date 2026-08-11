@@ -344,7 +344,7 @@ end:
  * inflate using zlib
  */
 static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
-					    int *output_len, apr_byte_t *inflated_anything, oidc_jose_error_t *err) {
+					    int *output_len, apr_byte_t *capped, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
 	int status = Z_OK;
 	size_t len = OIDC_CJOSE_UNCOMPRESS_CHUNK;
@@ -352,10 +352,9 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	char *buf = apr_pcalloc(pool, len);
 	z_stream zlib;
 
-	/* whether any output was produced before failing, i.e. whether this really was a zlib stream:
-	 * a buffer that only happens to start with two zlib-shaped bytes fails on the first inflate()
-	 * having produced nothing. See the caller. */
-	*inflated_anything = FALSE;
+	/* whether inflation was stopped at the output cap: the one failure that must not be passed
+	 * through as "not a zlib stream after all" - see the caller */
+	*capped = FALSE;
 
 	zlib.zalloc = Z_NULL;
 	zlib.zfree = Z_NULL;
@@ -378,6 +377,7 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 		 * prevent. Doubling reaches the same cap in ~11 rounds and under 30MB. */
 		if (zlib.total_out >= len) {
 			if (len >= OIDC_CJOSE_UNCOMPRESS_MAX) {
+				*capped = TRUE;
 				oidc_jose_error(err, "inflate() output would exceed %d bytes",
 						OIDC_CJOSE_UNCOMPRESS_MAX);
 				goto end;
@@ -404,8 +404,6 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	rv = TRUE;
 
 end:
-
-	*inflated_anything = (zlib.total_out > 0) ? TRUE : FALSE;
 
 	inflateEnd(&zlib);
 
@@ -471,21 +469,23 @@ apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_l
 		 * prefixes satisfy it ("x ", "H,", "80", "X(", "h$", ...). Session and state payloads are
 		 * JSON and cannot, but cache values reach this same path and are arbitrary strings, so a
 		 * cached value starting with one of those would be declared compressed and then lost.
-		 * Only inflate() can settle it: if it rejects the input without producing a single byte,
-		 * this was not a zlib stream and the payload passes through as it would have without the
-		 * heuristic. A stream that did inflate and then failed (e.g. hit the size cap) is a real
-		 * one, and its failure stands. */
-		apr_byte_t inflated_anything = FALSE;
-		if (oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, &inflated_anything, err) ==
-		    TRUE)
+		 * Nor can inflate() settle it: a false positive whose next bits happen to select a
+		 * fixed-Huffman block emits literal bytes before the stream turns invalid, so partial
+		 * output proves nothing. Only the decompression-bomb cap fails hard - megabytes of valid
+		 * inflate output do not come out of a value that merely started with two zlib-shaped
+		 * bytes - and every other rejection falls through to the passthrough below, where a
+		 * payload that really was a (corrupt) zlib stream fails the JSON parse after us instead:
+		 * the same net result, without sacrificing the false positives. */
+		apr_byte_t capped = FALSE;
+		if (oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, &capped, err) == TRUE)
 			return TRUE;
-		if (inflated_anything == TRUE)
+		if (capped == TRUE)
 			return FALSE;
-#else
-		oidc_jose_error(err, "payload is zlib compressed but this build has no zlib support: it was written "
-				     "by a build configured with zlib");
-		return FALSE;
 #endif
+		/* without zlib in this build the heuristic cannot be settled at all - and this build
+		 * never wrote zlib itself, so it passes through rather than fails: a genuinely zlib
+		 * payload written by another build still fails the JSON parse after us, as it did
+		 * before the detection existed */
 	}
 
 #ifdef USE_LIBBROTLI

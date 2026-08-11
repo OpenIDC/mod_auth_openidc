@@ -201,6 +201,30 @@ START_TEST(test_jose_uncompress_detects_uncompressed) {
 }
 END_TEST
 
+/*
+ * cache values are arbitrary strings and may start with one of the two-character prefixes that
+ * satisfy the zlib header heuristic ("80", "8n", "HK", ...) while never having been compressed:
+ * such a value must come back unaltered, not be declared compressed and lost - regardless of
+ * whether inflate() happens to emit a few literal bytes before rejecting it (a fixed-Huffman
+ * continuation does) or this build has no zlib at all
+ */
+START_TEST(test_jose_uncompress_zlib_lookalike_passes_through) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	/* "80..." as a raw stored value, e.g. a hex session identifier: 0x3830 has a low CMF
+	 * nibble of 8 and is a multiple of 31, so it looks like a zlib header */
+	const char *value = "80f1e2d3c4b5a697788990a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5";
+	int value_len = (int)_oidc_strlen(value);
+	char *out = NULL;
+	int out_len = 0;
+
+	ck_assert_msg(oidc_jose_uncompress(pool, value, value_len, &out, &out_len, &err) == TRUE,
+		      "a raw value with a zlib-lookalike prefix must pass through: %s", oidc_jose_e2s(pool, err));
+	ck_assert_int_eq(out_len, value_len);
+	ck_assert_msg(memcmp(out, value, value_len) == 0, "the value was altered on the way through");
+}
+END_TEST
+
 START_TEST(test_jose_compress_uncompress) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	const char *input = "the quick brown fox jumps over the lazy dog";
@@ -299,6 +323,32 @@ START_TEST(test_jose_uncompress_refuses_beyond_the_cap) {
 	ck_assert_msg(oidc_jose_uncompress(pool, out, out_len, &un, &un_len, &err) == FALSE,
 		      "a payload inflating past the cap must be refused, not inflated");
 	ck_assert_ptr_nonnull(_oidc_strstr(oidc_jose_e2s(pool, err), "exceed"));
+}
+END_TEST
+
+/*
+ * a real zlib stream that is cut short inflates some output and then fails: that partial output
+ * must not make the failure fatal (a false positive on the header heuristic can produce partial
+ * output too), so the bytes pass through and it is the JSON parse after us that rejects them -
+ * the same net result, arrived at without sacrificing raw values that merely look zlib-framed
+ */
+START_TEST(test_jose_uncompress_truncated_stream_passes_through) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	const char *input = "the quick brown fox jumps over the lazy dog";
+	int input_len = (int)_oidc_strlen(input);
+	char *out = NULL, *un = NULL;
+	int out_len = 0, un_len = 0;
+
+	ck_assert_msg(oidc_jose_compress(pool, input, input_len, &out, &out_len, &err) == TRUE, "compress failed: %s",
+		      oidc_jose_e2s(pool, err));
+	int cut_len = out_len / 2;
+	ck_assert_int_gt(cut_len, 2); /* keep the zlib header so the heuristic still fires */
+
+	ck_assert_msg(oidc_jose_uncompress(pool, out, cut_len, &un, &un_len, &err) == TRUE,
+		      "a truncated stream must pass through, not fail the read: %s", oidc_jose_e2s(pool, err));
+	ck_assert_int_eq(un_len, cut_len);
+	ck_assert_mem_eq(un, out, cut_len);
 }
 END_TEST
 
@@ -1752,10 +1802,12 @@ int main(void) {
 	tcase_add_test(core, test_jose_get_string_and_timestamps);
 	tcase_add_test(core, test_jose_compress_uncompress);
 	tcase_add_test(core, test_jose_uncompress_detects_uncompressed);
+	tcase_add_test(core, test_jose_uncompress_zlib_lookalike_passes_through);
 	tcase_add_test(core, test_jose_compress_uncompress_tiny);
 #if defined(USE_ZLIB) && !defined(USE_LIBBROTLI)
 	tcase_add_test(core, test_jose_uncompress_grows_beyond_one_chunk);
 	tcase_add_test(core, test_jose_uncompress_refuses_beyond_the_cap);
+	tcase_add_test(core, test_jose_uncompress_truncated_stream_passes_through);
 #endif
 	tcase_add_test(core, test_jose_jwk_and_json_and_copy_lists);
 	tcase_add_test(core, test_jose_jwe_decrypt_plaintext);

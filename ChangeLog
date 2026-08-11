@@ -1,4 +1,10 @@
 08/11/2026
+- jose: pass a payload that zlib cannot fully inflate through instead of failing the read: the
+  two-byte header heuristic has false positives among raw cache values ("80...", "HK...") and
+  inflate() cannot always disprove one - a fixed-Huffman continuation emits literal bytes
+  before the stream turns invalid - so partial output no longer makes the failure fatal; only
+  the decompression-bomb cap still fails hard. Also pass a heuristic match through in a build
+  without zlib (which never wrote zlib itself) instead of erroring out
 - session: killing a session no longer deletes the per-user "sub" logout index when it points
   at a surviving session of the same user: the index is a single slot shared by all of that
   user's sessions (last writer wins), so logging out - or merely expiring - an older session
