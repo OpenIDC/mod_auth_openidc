@@ -72,7 +72,7 @@ typedef enum {
 // file.c
 /* refuse to read a whole file, or a single cache entry's value, larger than this into memory */
 #define OIDC_UTIL_FILE_SIZE_MAX (16 * 1024 * 1024)
-apr_byte_t oidc_util_file_is_regular(apr_pool_t *pool, const char *path, apr_finfo_t *finfo);
+apr_byte_t oidc_util_file_is_regular(apr_pool_t *pool, const char *path, apr_byte_t follow, apr_finfo_t *finfo);
 apr_byte_t oidc_util_file_read(request_rec *r, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_read_server(server_rec *s, const char *path, apr_pool_t *pool, char **result);
 apr_byte_t oidc_util_file_write(request_rec *r, const char *path, const char *data);

@@ -49,9 +49,9 @@
 #include "util/request_state.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
-#include <fcntl.h>	  /* open()/close() for the EMFILE fd-exhaustion trick below */
+#include <fcntl.h>   /* open()/close() for the EMFILE fd-exhaustion trick below */
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
-#include <signal.h>	  /* SIGXFSZ for the RLIMIT_FSIZE trick below */
+#include <signal.h>  /* SIGXFSZ for the RLIMIT_FSIZE trick below */
 #include <sys/resource.h> /* getrlimit()/setrlimit(RLIMIT_NOFILE/RLIMIT_FSIZE) for the same tricks */
 #include <unistd.h>
 
@@ -378,6 +378,48 @@ START_TEST(test_util_file) {
 }
 END_TEST
 
+/* symlinked config files are a fact of deployment life - a Kubernetes ConfigMap volume exposes
+ * every file as a symlink into its ..data directory - so a symlink whose target is a regular
+ * file must read fine; one pointing at a directory, or at nothing, is still refused */
+START_TEST(test_util_file_read_symlink) {
+	request_rec *r = oidc_test_request_get();
+	const char *dir = NULL;
+	char *target = NULL, *link_path = NULL, *dir_link = NULL, *dangling = NULL, *read = NULL;
+
+	apr_temp_dir_get(&dir, r->pool);
+	target = apr_psprintf(r->pool, "%s/test-symlink-target.tmp", dir);
+	ck_assert_int_eq(oidc_util_file_write(r, target, "linked-content"), TRUE);
+
+	link_path = apr_psprintf(r->pool, "%s/test-symlink.tmp", dir);
+	unlink(link_path); /* in case a previous run left it behind */
+	ck_assert_int_eq(symlink(target, link_path), 0);
+	ck_assert_int_eq(oidc_util_file_read(r, link_path, r->pool, &read), TRUE);
+	ck_assert_ptr_nonnull(read);
+	ck_assert_str_eq(read, "linked-content");
+
+	/* a symlink to a directory is not a regular file however you look at it */
+	dir_link = apr_psprintf(r->pool, "%s/test-symlink-dir.tmp", dir);
+	unlink(dir_link);
+	ck_assert_int_eq(symlink(dir, dir_link), 0);
+	read = NULL;
+	ck_assert_int_eq(oidc_util_file_read(r, dir_link, r->pool, &read), FALSE);
+	ck_assert_ptr_null(read);
+
+	/* and a dangling one reads as absent */
+	dangling = apr_psprintf(r->pool, "%s/test-symlink-dangling.tmp", dir);
+	unlink(dangling);
+	ck_assert_int_eq(symlink(apr_psprintf(r->pool, "%s/test-symlink-nonexistent", dir), dangling), 0);
+	read = NULL;
+	ck_assert_int_eq(oidc_util_file_read(r, dangling, r->pool, &read), FALSE);
+	ck_assert_ptr_null(read);
+
+	unlink(link_path);
+	unlink(dir_link);
+	unlink(dangling);
+	apr_file_remove(target, r->pool);
+}
+END_TEST
+
 /* stat succeeds (it is a regular, readable file) but the subsequent open() fails. A mode-0000 file
  * would not exercise this when the suite runs as root, which permission checks do not apply to; a
  * file descriptor table exhausted down to exactly the fd the open() would need returns EMFILE
@@ -430,9 +472,9 @@ START_TEST(test_util_file_read_too_large) {
 	apr_temp_dir_get(&dir, r->pool);
 	path = apr_psprintf(r->pool, "%s/test-too-large.tmp", dir);
 
-	ck_assert_int_eq(apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
-					APR_OS_DEFAULT, r->pool),
-			 APR_SUCCESS);
+	ck_assert_int_eq(
+	    apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE, APR_OS_DEFAULT, r->pool),
+	    APR_SUCCESS);
 	ck_assert_int_eq(apr_file_seek(fd, APR_SET, &offset), APR_SUCCESS);
 	ck_assert_int_eq(apr_file_write(fd, "x", &nbytes), APR_SUCCESS);
 	apr_file_close(fd);
@@ -479,9 +521,9 @@ START_TEST(test_util_file_read_server) {
 
 	/* the default/error arm (IO_ERROR): the same oversized-file trick as above */
 	path = apr_psprintf(r->pool, "%s/test-server-too-large.tmp", dir);
-	ck_assert_int_eq(apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE,
-					APR_OS_DEFAULT, r->pool),
-			 APR_SUCCESS);
+	ck_assert_int_eq(
+	    apr_file_open(&fd, path, APR_FOPEN_WRITE | APR_FOPEN_CREATE | APR_FOPEN_TRUNCATE, APR_OS_DEFAULT, r->pool),
+	    APR_SUCCESS);
 	ck_assert_int_eq(apr_file_seek(fd, APR_SET, &offset), APR_SUCCESS);
 	ck_assert_int_eq(apr_file_write(fd, "x", &nbytes), APR_SUCCESS);
 	apr_file_close(fd);
@@ -1807,6 +1849,7 @@ int main(void) {
 	c = tcase_create("file");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_file);
+	tcase_add_test(c, test_util_file_read_symlink);
 	tcase_add_test(c, test_util_file_read_open_fails_after_stat);
 	tcase_add_test(c, test_util_file_read_too_large);
 	tcase_add_test(c, test_util_file_read_server);

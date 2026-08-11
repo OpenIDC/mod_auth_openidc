@@ -166,8 +166,10 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 	/* get the fully qualified path to the cache file based on the key name */
 	const char *path = oidc_cache_file_path(r, section, key);
 
-	/* reject links and non-regular files before opening the cache entry; the cache directory must be private */
-	if (oidc_util_file_is_regular(r->pool, path, &finfo) == FALSE) {
+	/* reject links and non-regular files before opening the cache entry (no following here,
+	 * unlike the metadata/template reads: this module writes this directory itself and never
+	 * creates symlinks in it, so one can only have been planted) */
+	if (oidc_util_file_is_regular(r->pool, path, FALSE, &finfo) == FALSE) {
 		if (finfo.filetype == APR_NOFILE) {
 			oidc_debug(r, "cache miss for key \"%s\"", key);
 		} else {

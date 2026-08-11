@@ -43,14 +43,18 @@
 #include "util/util.h"
 
 /*
- * true if path exists and is a regular file (as opposed to a symlink or other special
- * file); finfo->filetype is always well-defined on return: APR_NOFILE when the path
- * could not be stat-ed at all (typically: missing), the actual (non-regular) type
+ * true if path exists and is a regular file; with follow set, a symlink is resolved and it is
+ * the target that must be regular - right for operator-managed files (metadata, templates,
+ * keys), where symlinks are a fact of deployment life (Kubernetes ConfigMap volumes expose
+ * every file as one) - while without it the path itself must be regular, for the module's own
+ * private cache directory where a symlink can only have been planted. finfo->filetype is
+ * always well-defined on return: APR_NOFILE when the path could not be stat-ed at all
+ * (typically: missing, or a dangling symlink when following), the actual (non-regular) type
  * otherwise, letting callers tell "absent" apart from "present but wrong type"
  */
-apr_byte_t oidc_util_file_is_regular(apr_pool_t *pool, const char *path, apr_finfo_t *finfo) {
+apr_byte_t oidc_util_file_is_regular(apr_pool_t *pool, const char *path, apr_byte_t follow, apr_finfo_t *finfo) {
 	finfo->filetype = APR_NOFILE;
-	if (apr_stat(finfo, path, APR_FINFO_TYPE | APR_FINFO_LINK, pool) != APR_SUCCESS)
+	if (apr_stat(finfo, path, APR_FINFO_TYPE | (follow ? 0 : APR_FINFO_LINK), pool) != APR_SUCCESS)
 		return FALSE;
 	return (finfo->filetype == APR_REG) ? TRUE : FALSE;
 }
@@ -73,7 +77,9 @@ static oidc_util_file_read_rc_t oidc_util_file_read_core(apr_pool_t *pool, const
 	apr_status_t rc = APR_SUCCESS;
 	apr_finfo_t finfo;
 
-	if (oidc_util_file_is_regular(pool, path, &finfo) == FALSE) {
+	/* follow symlinks: what is read here is operator-managed (metadata, templates, keys) and
+	 * commonly symlinked into place; it is the target that must be a regular file */
+	if (oidc_util_file_is_regular(pool, path, TRUE, &finfo) == FALSE) {
 		if (finfo.filetype == APR_NOFILE) {
 			apr_cpystrn(s_err, "no such file", s_err_len);
 			return OIDC_UTIL_FILE_READ_NOT_FOUND;
