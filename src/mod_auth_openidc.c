@@ -1547,9 +1547,6 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 	if (oidc_cfg_dir_post_config(s) != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	if (oidc_util_jwt_post_config(s) != OK)
-		return HTTP_INTERNAL_SERVER_ERROR;
-
 	server_rec *sp = s;
 	while (sp != NULL) {
 		oidc_cfg_t *cfg = (oidc_cfg_t *)ap_get_module_config(sp->module_config, &auth_openidc_module);

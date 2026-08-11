@@ -199,12 +199,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	}
 
 	if (oidc_cfg_dir_post_config(request->server) != OK) {
-		fprintf(stderr, "oidc_util_jwt_post_config failed!\n");
-		exit(-1);
-	}
-
-	if (oidc_util_jwt_post_config(request->server) != OK) {
-		fprintf(stderr, "oidc_util_jwt_post_config failed!\n");
+		fprintf(stderr, "oidc_cfg_dir_post_config failed!\n");
 		exit(-1);
 	}
 

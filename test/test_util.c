@@ -847,7 +847,6 @@ START_TEST(test_util_jwt) {
 	ck_assert_str_eq(payload, str);
 
 	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
-	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_STRIP_HDR", "true");
 	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "result is not TRUE");
 	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE, "result is not TRUE");
 	ck_assert_str_eq(payload, str);
@@ -858,7 +857,6 @@ START_TEST(test_util_jwt) {
 	 * side meant that toggling it under running traffic made every live session unreadable.
 	 */
 	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
-	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_STRIP_HDR");
 	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "compressed create failed");
 	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
 	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE,

@@ -1,4 +1,6 @@
 08/11/2026
+- util: remove the undocumented OIDC_JWT_INTERNAL_STRIP_HDR environment variable: stripping the
+  internal JWE header was mutually broken with a rotating (two-secret) OIDCCryptoPassphrase
 - util/metadata: follow symlinks when reading operator-managed files (provider/client metadata,
   HTML templates, keys) and require the target to be a regular file, instead of refusing the
   symlink itself

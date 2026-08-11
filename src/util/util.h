@@ -100,7 +100,6 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 const char *oidc_util_jq_filter(request_rec *r, const oidc_json_t *json, const char *filter);
 
 // jwt.c
-int oidc_util_jwt_post_config(server_rec *s);
 
 // key.c
 apr_byte_t oidc_util_key_symmetric_create(request_rec *r, const char *client_secret, unsigned int r_key_len,

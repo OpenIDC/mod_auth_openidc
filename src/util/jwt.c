@@ -44,20 +44,6 @@
 #include "util/util.h"
 #include "util/util_cfg.h"
 
-/*
- * cached serialized header part of an A256GCM "dir" encrypted JWT;
- * populated once via oidc_util_jwt_post_config() from the (single-threaded) post-config phase,
- * read-only after that
- */
-static const char *_oidc_jwt_hdr_dir_a256gcm = NULL;
-
-/*
- * return the cached serialized header part of an A256GCM "dir" encrypted JWT
- */
-static const char *oidc_util_jwt_hdr_dir_a256gcm(void) {
-	return _oidc_jwt_hdr_dir_a256gcm;
-}
-
 #define OIDC_JWT_INTERNAL_NO_COMPRESS_ENV_VAR "OIDC_JWT_INTERNAL_NO_COMPRESS"
 
 /*
@@ -78,16 +64,6 @@ static apr_byte_t oidc_util_env_var_override(const request_rec *r, const char *e
 static apr_byte_t oidc_util_jwt_internal_compress(const request_rec *r) {
 	// avoid compressing JWTs that need to be compatible with external producers/consumers
 	return oidc_util_env_var_override(r, OIDC_JWT_INTERNAL_NO_COMPRESS_ENV_VAR, FALSE);
-}
-
-#define OIDC_JWT_INTERNAL_STRIP_HDR_ENV_VAR "OIDC_JWT_INTERNAL_STRIP_HDR"
-
-/*
- * check if we need to strip the header from (internal) encrypted JWTs or not
- */
-static apr_byte_t oidc_util_jwt_internal_strip_header(const request_rec *r) {
-	// avoid stripping JWT headers that need to be compatible with external producers/consumers
-	return oidc_util_env_var_override(r, OIDC_JWT_INTERNAL_STRIP_HDR_ENV_VAR, TRUE);
 }
 
 /*
@@ -160,9 +136,6 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 	}
 
-	if ((*compact_encoded_jwt != NULL) && (oidc_util_jwt_internal_strip_header(r)))
-		*compact_encoded_jwt += _oidc_strlen(oidc_util_jwt_hdr_dir_a256gcm());
-
 	rv = TRUE;
 
 end:
@@ -192,9 +165,6 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	char *alg = NULL;
 	char *enc = NULL;
 	char *kid = NULL;
-
-	if (oidc_util_jwt_internal_strip_header(r))
-		compact_encoded_jwt = apr_pstrcat(r->pool, oidc_util_jwt_hdr_dir_a256gcm(), compact_encoded_jwt, NULL);
 
 	oidc_proto_jwt_header_peek(r, compact_encoded_jwt, &alg, &enc, &kid);
 	if ((_oidc_strcmp(alg, OIDC_JOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, OIDC_JOSE_HDR_ENC_A256GCM) != 0)) {
@@ -241,73 +211,5 @@ end:
 	if (jwk != NULL)
 		oidc_jwk_destroy(jwk);
 
-	return rv;
-}
-
-/*
- * compute and cache the serialized A256GCM "dir" header prefix once during the (single-threaded)
- * post-config phase; lazy initialization from the request path is not safe under threaded MPMs because
- * the static and the process pool it allocates from are shared across worker threads without locking
- *
- * NB: we mirror oidc_util_jwt_create() inline here rather than calling it, because that function logs via
- * oidc_error(r, ...) → ap_log_rerror which would dereference uninitialized request_rec fields (e.g.
- * r->connection, r->uri) on the error path and crash Apache at startup; using server-context logging
- * (oidc_serror) keeps post-config failures recoverable
- */
-int oidc_util_jwt_post_config(server_rec *s) {
-	int rv = HTTP_INTERNAL_SERVER_ERROR;
-	apr_pool_t *pool = s->process->pool;
-	oidc_jose_error_t err = {{'\0'}, 0, {'\0'}, {'\0'}};
-	unsigned char *key = NULL;
-	unsigned int key_len = 0;
-	oidc_jwk_t *jwk = NULL;
-	oidc_jwt_t *jwe = NULL;
-	char *compact_encoded_jwt = NULL;
-	const char *sep = NULL;
-	static const char *secret = "needs_non_empty_string";
-
-	if (_oidc_jwt_hdr_dir_a256gcm != NULL)
-		return OK;
-
-	if (oidc_jose_hash_bytes(pool, OIDC_JOSE_ALG_SHA256, (const unsigned char *)secret,
-				 (unsigned int)_oidc_strlen(secret), &key, &key_len, &err) == FALSE) {
-		oidc_serror(s, "oidc_jose_hash_bytes failed: %s", oidc_jose_e2s(pool, err));
-		goto end;
-	}
-
-	jwk = oidc_jwk_create_symmetric_key(pool, NULL, key, key_len, FALSE, &err);
-	if (jwk == NULL) {
-		oidc_serror(s, "oidc_jwk_create_symmetric_key failed: %s", oidc_jose_e2s(pool, err));
-		goto end;
-	}
-
-	jwe = oidc_jwt_new(pool, TRUE, FALSE);
-	if (jwe == NULL) {
-		oidc_serror(s, "oidc_jwt_new failed");
-		goto end;
-	}
-	jwe->header.alg = apr_pstrdup(pool, OIDC_JOSE_HDR_ALG_DIR);
-	jwe->header.enc = apr_pstrdup(pool, OIDC_JOSE_HDR_ENC_A256GCM);
-
-	if (oidc_jwt_encrypt(pool, jwe, jwk, "x", 1, &compact_encoded_jwt, &err) == FALSE) {
-		oidc_serror(s, "oidc_jwt_encrypt failed: %s", oidc_jose_e2s(pool, err));
-		goto end;
-	}
-
-	sep = _oidc_strstr(compact_encoded_jwt, "..");
-	if (sep == NULL) {
-		oidc_serror(s, "no \"..\" separator found in compact JWE");
-		goto end;
-	}
-	_oidc_jwt_hdr_dir_a256gcm =
-	    apr_pstrndup(pool, compact_encoded_jwt, _oidc_strlen(compact_encoded_jwt) - _oidc_strlen(sep) + 2);
-
-	rv = (_oidc_jwt_hdr_dir_a256gcm != NULL) ? OK : HTTP_INTERNAL_SERVER_ERROR;
-
-end:
-	if (jwe != NULL)
-		oidc_jwt_destroy(jwe);
-	if (jwk != NULL)
-		oidc_jwk_destroy(jwk);
 	return rv;
 }
