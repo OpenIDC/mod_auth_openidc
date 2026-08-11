@@ -1232,6 +1232,25 @@ START_TEST(test_metadata_disk_list_preserves_http_issuer) {
 }
 END_TEST
 
+/* a provider file that parses as JSON but carries no "issuer" string must fall
+ * back to the filename-derived issuer (and then be rejected by validation),
+ * not crash on a NULL issuer */
+START_TEST(test_metadata_disk_list_provider_without_issuer) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *dir = e2e_make_metadata_dir(r);
+
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir),
+		       "{\"authorization_endpoint\":\"https://idp.example.com/authorize\"}");
+	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.client", dir),
+		       "{\"client_id\":\"rp-test\",\"client_secret\":\"sekret\"}");
+
+	apr_array_header_t *list = NULL;
+	ck_assert_int_eq(oidc_metadata_list(r, c, &list), TRUE);
+	ck_assert_int_eq(list->nelts, 0);
+}
+END_TEST
+
 /* with OIDCDefaultLoggedOutURL set, the dynamic-registration request carries
  * a post_logout_redirect_uris array with the absolute logged-out URL */
 START_TEST(test_metadata_disk_dyn_registration_post_logout_redirect_uris) {
@@ -2414,6 +2433,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_list_skips_provider_without_client);
 	tcase_add_test(disk, test_metadata_disk_get_full);
 	tcase_add_test(disk, test_metadata_disk_list_preserves_http_issuer);
+	tcase_add_test(disk, test_metadata_disk_list_provider_without_issuer);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_post_logout_redirect_uris);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_not_advertised);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_explicitly_set);

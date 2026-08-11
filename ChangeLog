@@ -1,3 +1,9 @@
+08/11/2026
+- metadata: actually fall back to the filename-derived issuer when a provider file carries no
+  "issuer" string: the JSON getter reports an absent key as success with a NULL value, so checking
+  its return code passed a NULL issuer onward and crashed in the issuer-to-filename conversion
+  when listing providers
+
 08/10/2026
 - http: bound the trailing CRLF strip on a captured response header value to the value's length, so
   an empty header value cannot read (and, if the adjacent byte happens to match, write) before the

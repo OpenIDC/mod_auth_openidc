@@ -143,8 +143,11 @@ apr_byte_t oidc_metadata_list(request_rec *r, oidc_cfg_t *cfg, apr_array_header_
 		const char *provider_path = apr_psprintf(r->pool, "%s/%s", oidc_cfg_metadata_dir_get(cfg), fi.name);
 		oidc_json_t *j_provider = NULL;
 		char *metadata_issuer = NULL;
-		if ((oidc_metadata_file_read_json(r, provider_path, &j_provider) == TRUE) &&
-		    (oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &metadata_issuer, NULL) == TRUE))
+		if (oidc_metadata_file_read_json(r, provider_path, &j_provider) == TRUE)
+			oidc_json_object_get_string(r->pool, j_provider, OIDC_METADATA_ISSUER, &metadata_issuer, NULL);
+		/* NB: oidc_json_object_get_string returns TRUE with a NULL value for an absent key,
+		 * so the fallback must check the value, not the return code */
+		if (metadata_issuer != NULL)
 			issuer = metadata_issuer;
 		if (j_provider != NULL)
 			oidc_json_decref(j_provider);
