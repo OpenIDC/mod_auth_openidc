@@ -14,6 +14,7 @@ parser, reusing the libcheck test fixture (`test/util.c`) for a ready
 | `fuzz_json`   | `oidc_json_decode_object`          | JSON decode (token / userinfo / metadata)         |
 | `fuzz_cookie` | `oidc_http_get_cookie`             | raw `Cookie` request header tokenizing            |
 | `fuzz_response_header` | `oidc_http_response_header` | raw OP response header line parsing (curl callback) |
+| `fuzz_form_params` | `oidc_util_read_form_encoded_params` | authz response / back-channel logout param parsing |
 
 ## Three build modes
 

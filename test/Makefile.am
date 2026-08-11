@@ -100,7 +100,8 @@ oidc_fuzz_targets = \
 	fuzz_jwt \
 	fuzz_json \
 	fuzz_cookie \
-	fuzz_response_header
+	fuzz_response_header \
+	fuzz_form_params
 
 fuzz_base64_SOURCES = fuzz/fuzz_base64.c fuzz/standalone.c
 fuzz_url_SOURCES = fuzz/fuzz_url.c fuzz/standalone.c
@@ -108,6 +109,7 @@ fuzz_jwt_SOURCES = fuzz/fuzz_jwt.c fuzz/standalone.c
 fuzz_json_SOURCES = fuzz/fuzz_json.c fuzz/standalone.c
 fuzz_cookie_SOURCES = fuzz/fuzz_cookie.c fuzz/standalone.c
 fuzz_response_header_SOURCES = fuzz/fuzz_response_header.c fuzz/standalone.c
+fuzz_form_params_SOURCES = fuzz/fuzz_form_params.c fuzz/standalone.c
 
 check_PROGRAMS = $(oidc_unit_tests) $(oidc_fuzz_targets)
 
