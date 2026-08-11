@@ -1484,8 +1484,10 @@ apr_byte_t oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, 
 		return TRUE;
 	}
 
-	/* set a chunked cookie */
-	int chunkCountValue = cookieLength / chunkSize + 1;
+	/* set a chunked cookie; NB: ceil division, or a length that is an exact multiple of the
+	 * chunk size would advertise a trailing empty chunk that oidc_http_set_cookie turns into a
+	 * delete, leaving the browser one chunk short of the counter and the whole value unreadable */
+	int chunkCountValue = (cookieLength + chunkSize - 1) / chunkSize;
 
 	/* refuse to write what oidc_http_get_chunked_cookie would refuse to read back: writing it
 	 * anyway leaves the browser holding a value that is dropped on the next request, which for a

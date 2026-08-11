@@ -1,4 +1,9 @@
 08/11/2026
+- http: use ceil division for the chunked-cookie chunk count: a value whose length is an exact
+  multiple of OIDCSessionCookieChunkSize advertised a trailing empty chunk that set_cookie turns
+  into a delete, so the browser stored one chunk fewer than the counter claimed and the reader
+  (since it stopped accepting partial assemblies) dropped the whole client-cookie session,
+  sending the affected user round the login loop indefinitely
 - logout: zero the stack session struct in the back-channel/front-channel cleanup: the session
   cache load reports a sid/sub index entry whose session entry is gone (superseded login,
   eviction) as success without touching the struct, so the token-revocation step read

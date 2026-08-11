@@ -389,10 +389,10 @@ END_TEST
 START_TEST(test_set_chunked_cookie_too_many_chunks) {
 	request_rec *r = oidc_test_request_get();
 	apr_time_t expires = apr_time_now() + apr_time_from_sec(3600);
-	/* 99 chunks of 100 is the maximum, so 9900 characters is the first length that needs 100 */
-	char *toolarge = apr_palloc(r->pool, 9901);
-	_oidc_memset(toolarge, 'A', 9900);
-	toolarge[9900] = '\0';
+	/* 99 chunks of 100 is the maximum, so 9901 characters is the first length that needs 100 */
+	char *toolarge = apr_palloc(r->pool, 9902);
+	_oidc_memset(toolarge, 'A', 9901);
+	toolarge[9901] = '\0';
 
 	ck_assert(oidc_http_set_chunked_cookie(r, "toobig", toolarge, expires, 100, "SameSite=Lax") == FALSE);
 
@@ -402,9 +402,61 @@ START_TEST(test_set_chunked_cookie_too_many_chunks) {
 	for (int i = 0; i < h->nelts; i++)
 		ck_assert_ptr_null(_oidc_strstr(elts[i].val, "toobig"));
 
-	/* one chunk fewer is still accepted, and round-trips */
-	toolarge[9899] = '\0';
+	/* 9900 fills the maximum 99 chunks exactly, and is still accepted */
+	toolarge[9900] = '\0';
 	ck_assert(oidc_http_set_chunked_cookie(r, "toobig", toolarge, expires, 100, "SameSite=Lax") == TRUE);
+}
+END_TEST
+
+/*
+ * a value whose length is an exact multiple of the chunk size must produce only full chunks
+ * and a matching counter: the old floor+1 chunk count advertised a trailing empty chunk that
+ * oidc_http_set_cookie turned into a delete, so a browser stored one chunk fewer than the
+ * counter claimed and oidc_http_get_chunked_cookie refused the whole value
+ */
+START_TEST(test_set_chunked_cookie_exact_multiple_roundtrip) {
+	request_rec *r = oidc_test_request_get();
+	apr_time_t expires = apr_time_now() + apr_time_from_sec(3600);
+	char *value = apr_palloc(r->pool, 201);
+	for (int i = 0; i < 200; i++)
+		value[i] = 'A' + (i % 26);
+	value[200] = '\0';
+
+	ck_assert(oidc_http_set_chunked_cookie(r, "exact", value, expires, 100, "SameSite=Lax") == TRUE);
+
+	/* replay the Set-Cookie headers into a Cookie header the way a browser would:
+	 * keep the last name=value per name, dropping names set to an empty value (deletes) */
+	const apr_array_header_t *h = apr_table_elts(r->err_headers_out);
+	apr_table_entry_t *elts = (apr_table_entry_t *)h->elts;
+	apr_table_t *jar = apr_table_make(r->pool, 8);
+	for (int i = 0; i < h->nelts; i++) {
+		if (_oidc_strcmp(elts[i].key, "Set-Cookie") != 0)
+			continue;
+		char *pair = apr_pstrdup(r->pool, elts[i].val);
+		char *semi = strchr(pair, ';');
+		if (semi)
+			*semi = '\0';
+		char *eq = strchr(pair, '=');
+		if (eq == NULL)
+			continue;
+		*eq = '\0';
+		if (*(eq + 1) == '\0')
+			apr_table_unset(jar, pair);
+		else
+			apr_table_set(jar, pair, eq + 1);
+	}
+	char *cookie_header = NULL;
+	const apr_array_header_t *j = apr_table_elts(jar);
+	apr_table_entry_t *jelts = (apr_table_entry_t *)j->elts;
+	for (int i = 0; i < j->nelts; i++)
+		cookie_header = apr_psprintf(r->pool, "%s%s%s=%s", cookie_header ? cookie_header : "",
+					     cookie_header ? "; " : "", jelts[i].key, jelts[i].val);
+	ck_assert_ptr_nonnull(cookie_header);
+	apr_table_set(r->headers_in, "Cookie", cookie_header);
+
+	char *readback = oidc_http_get_chunked_cookie(r, "exact", 100);
+	ck_assert_ptr_nonnull(readback);
+	ck_assert_str_eq(readback, value);
 }
 END_TEST
 
@@ -1360,6 +1412,7 @@ int main(void) {
 	tcase_add_test(accept, test_hdr_out_location_and_traceparent);
 	tcase_add_test(accept, test_set_cookie_and_chunked_set);
 	tcase_add_test(accept, test_set_chunked_cookie_too_many_chunks);
+	tcase_add_test(accept, test_set_chunked_cookie_exact_multiple_roundtrip);
 	tcase_add_test(accept, test_hdr_out_crlf_sanitized);
 	tcase_add_test(accept, test_forwarded_space_terminated);
 	tcase_add_test(accept, test_form_encoded_data_empty);
