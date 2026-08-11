@@ -17,8 +17,11 @@
  */
 
 #include "fuzz.h"
-#include "http.h" /* oidc_util_read_form_encoded_params */
+/* util.h pulls in const.h before any Apache header does, so config.h's
+ * PACKAGE_* defines win the race against Apache's own (empty) ones in
+ * ap_config_auto.h; keep it ahead of http.h, see cfg/cfg.h's own ordering */
 #include "util.h" /* test fixture */
+#include "http.h" /* oidc_util_read_form_encoded_params */
 
 #include <apr_pools.h>
 #include <apr_strings.h>

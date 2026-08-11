@@ -19,9 +19,12 @@
  */
 
 #include "fuzz.h"
+/* util.h pulls in const.h before any Apache header does, so config.h's
+ * PACKAGE_* defines win the race against Apache's own (empty) ones in
+ * ap_config_auto.h; keep it ahead of http.h, see cfg/cfg.h's own ordering */
+#include "util.h"     /* test fixture */
 #include "http.h"     /* oidc_http_response_header */
 #include "http_int.h" /* oidc_curl_resp_hdr_ctx_t */
-#include "util.h"     /* test fixture */
 
 #include <apr_hash.h>
 #include <apr_pools.h>
