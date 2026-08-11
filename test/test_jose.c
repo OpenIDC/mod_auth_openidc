@@ -269,6 +269,34 @@ START_TEST(test_jose_compress_uncompress_tiny) {
 }
 END_TEST
 
+#ifdef USE_LIBBROTLI
+
+/* a fixed multiple of the input size as the output buffer caps the compression ratio a payload
+ * may have: the old 4 * input_len buffer made any payload that compressed better than 4:1
+ * unreadable, and large repetitive JSON claim sets compress far better than that */
+START_TEST(test_jose_uncompress_brotli_high_ratio) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	char *out = NULL, *un = NULL;
+	int out_len = 0, un_len = 0;
+	/* highly compressible, comfortably past both the 4:1 ratio and the initial 8KB chunk */
+	const int input_len = 100 * 1024;
+	char *input = apr_palloc(pool, input_len);
+	memset(input, 'A', input_len);
+
+	ck_assert_msg(oidc_jose_compress(pool, input, input_len, &out, &out_len, &err) == TRUE, "compress failed: %s",
+		      oidc_jose_e2s(pool, err));
+	ck_assert_msg(out_len < input_len / 4, "input did not compress past 4:1: %d bytes", out_len);
+
+	ck_assert_msg(oidc_jose_uncompress(pool, out, out_len, &un, &un_len, &err) == TRUE, "uncompress failed: %s",
+		      oidc_jose_e2s(pool, err));
+	ck_assert_int_eq(un_len, input_len);
+	ck_assert_mem_eq(un, input, input_len);
+}
+END_TEST
+
+#endif
+
 #if defined(USE_ZLIB) && !defined(USE_LIBBROTLI)
 
 /*
@@ -1804,6 +1832,9 @@ int main(void) {
 	tcase_add_test(core, test_jose_uncompress_detects_uncompressed);
 	tcase_add_test(core, test_jose_uncompress_zlib_lookalike_passes_through);
 	tcase_add_test(core, test_jose_compress_uncompress_tiny);
+#ifdef USE_LIBBROTLI
+	tcase_add_test(core, test_jose_uncompress_brotli_high_ratio);
+#endif
 #if defined(USE_ZLIB) && !defined(USE_LIBBROTLI)
 	tcase_add_test(core, test_jose_uncompress_grows_beyond_one_chunk);
 	tcase_add_test(core, test_jose_uncompress_refuses_beyond_the_cap);

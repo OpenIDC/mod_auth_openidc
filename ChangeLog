@@ -1,4 +1,6 @@
 08/11/2026
+- jose: stream brotli decompression into a growing buffer instead of a fixed 4 * input_len one,
+  which made any payload that compressed better than 4:1 unreadable
 - util: remove the undocumented OIDC_JWT_INTERNAL_STRIP_HDR environment variable: stripping the
   internal JWE header was mutually broken with a rotating (two-secret) OIDCCryptoPassphrase
 - util/metadata: follow symlinks when reading operator-managed files (provider/client metadata,

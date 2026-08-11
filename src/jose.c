@@ -245,6 +245,10 @@ apr_byte_t oidc_jose_get_timestamp(apr_pool_t *pool, const json_t *json, const c
 	return TRUE;
 }
 
+#define OIDC_CJOSE_UNCOMPRESS_CHUNK 8192
+/* absolute cap on the decompressed output to prevent decompression bombs */
+#define OIDC_CJOSE_UNCOMPRESS_MAX (10 * 1024 * 1024)
+
 #ifdef USE_LIBBROTLI
 
 /*
@@ -264,19 +268,61 @@ static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input,
 }
 
 /*
- * inflate using libbrotli
+ * inflate using libbrotli: streamed into a buffer that grows by doubling up to the bomb cap,
+ * because a fixed multiple of the input size caps the compression ratio a payload may have -
+ * the old 4 * input_len buffer made any (real, valid) payload that compressed better than 4:1
+ * unreadable, and the one-shot API cannot tell that apart from corruption
  */
 static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					      int *output_len, oidc_jose_error_t *err) {
-	size_t len = 4 * input_len;
-	*output = apr_pcalloc(pool, len);
-	if (BrotliDecoderDecompress(input_len, (const uint8_t *)input, &len, (uint8_t *)*output) !=
-	    BROTLI_DECODER_RESULT_SUCCESS) {
-		oidc_jose_error(err, "BrotliDecoderDecompress failed: decompression error or buffer too small");
+	apr_byte_t rv = FALSE;
+	BrotliDecoderResult res = BROTLI_DECODER_RESULT_ERROR;
+	size_t len = OIDC_CJOSE_UNCOMPRESS_CHUNK;
+	size_t available_in = (size_t)input_len;
+	const uint8_t *next_in = (const uint8_t *)input;
+	size_t total_out = 0;
+	char *buf = apr_pcalloc(pool, len);
+	char *tmp = NULL;
+
+	BrotliDecoderState *state = BrotliDecoderCreateInstance(NULL, NULL, NULL);
+	if (state == NULL) {
+		oidc_jose_error(err, "BrotliDecoderCreateInstance failed");
 		return FALSE;
 	}
-	*output_len = len;
-	return TRUE;
+
+	while (1) {
+		size_t available_out = len - total_out;
+		uint8_t *next_out = (uint8_t *)(buf + total_out);
+		res = BrotliDecoderDecompressStream(state, &available_in, &next_in, &available_out, &next_out, NULL);
+		total_out = len - available_out;
+		if (res == BROTLI_DECODER_RESULT_SUCCESS)
+			break;
+		if (res != BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) {
+			/* a decode error, or a truncated stream asking for more input */
+			oidc_jose_error(err, "BrotliDecoderDecompressStream failed: %d", res);
+			goto end;
+		}
+		if (len >= OIDC_CJOSE_UNCOMPRESS_MAX) {
+			oidc_jose_error(err, "brotli output would exceed %d bytes", OIDC_CJOSE_UNCOMPRESS_MAX);
+			goto end;
+		}
+		/* grow by doubling, as the zlib side does and for the same reasons */
+		size_t next = (len > OIDC_CJOSE_UNCOMPRESS_MAX / 2) ? OIDC_CJOSE_UNCOMPRESS_MAX : len * 2;
+		tmp = apr_pcalloc(pool, next);
+		_oidc_memcpy(tmp, buf, len);
+		len = next;
+		buf = tmp;
+	}
+
+	*output = buf;
+	*output_len = (int)total_out;
+	rv = TRUE;
+
+end:
+
+	BrotliDecoderDestroyInstance(state);
+
+	return rv;
 }
 
 #endif
@@ -335,10 +381,6 @@ end:
 
 	return rv;
 }
-
-#define OIDC_CJOSE_UNCOMPRESS_CHUNK 8192
-/* absolute cap on the inflated output to prevent decompression bombs */
-#define OIDC_CJOSE_UNCOMPRESS_MAX (10 * 1024 * 1024)
 
 /*
  * inflate using zlib
