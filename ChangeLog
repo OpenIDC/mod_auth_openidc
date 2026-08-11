@@ -1,4 +1,9 @@
 08/11/2026
+- session: killing a session no longer deletes the per-user "sub" logout index when it points
+  at a surviving session of the same user: the index is a single slot shared by all of that
+  user's sessions (last writer wins), so logging out - or merely expiring - an older session
+  removed the entry for the newest one and a back-channel logout token carrying only a sub
+  (Back-Channel Logout 1.0 allows omitting the sid) silently no longer terminated it
 - config: only read the "<alg>[+<alg>...]@" key tuple prefix as an algorithm list when every
   token names a known JOSE algorithm exactly: a kid containing '@' (key@example.org) or a
   slash-less server-root-relative filename (cert@2024.pem) in OIDCPublicKeyFiles /

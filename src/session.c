@@ -384,8 +384,17 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oid
 
 		if (z->sid != NULL)
 			oidc_cache_set_sid(r, z->sid, NULL, 0);
-		if (z->sub != NULL)
-			oidc_cache_set_sid(r, z->sub, NULL, 0);
+		if (z->sub != NULL) {
+			/* unlike the per-login sid, the sub index is a single slot shared by all of this
+			 * user's sessions (last writer wins): killing one session must not delete an entry
+			 * that meanwhile points at a surviving session, or a back-channel logout token
+			 * carrying only a sub would no longer find that one; a stale entry left behind is
+			 * reported as "no session" there, which is harmless */
+			char *sub_uuid = NULL;
+			oidc_cache_get_sid(r, z->sub, &sub_uuid);
+			if ((sub_uuid == NULL) || (_oidc_strcmp(sub_uuid, z->uuid) == 0))
+				oidc_cache_set_sid(r, z->sub, NULL, 0);
+		}
 
 		/* clear the cookie */
 		oidc_http_set_cookie(r, oidc_cfg_dir_cookie_get(r), "", 0, OIDC_HTTP_COOKIE_SAMESITE_NONE(c, r));

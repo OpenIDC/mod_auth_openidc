@@ -46,6 +46,7 @@
  * access-token / userinfo last-refresh timestamps and a getter/setter roundtrip.
  */
 
+#include "cache/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
 #include "check_util.h"
@@ -548,6 +549,72 @@ START_TEST(test_session_load_mutate_reload) {
 }
 END_TEST
 
+/* the sub logout index is one shared slot per user, last writer wins: killing an older session
+ * must not delete the entry that meanwhile points at the user's newer session, or a back-channel
+ * logout token carrying only a sub would no longer find that one; killing the session the entry
+ * actually points at still clears it */
+START_TEST(test_session_sub_index_survives_older_session_kill) {
+	request_rec *r = oidc_test_request_get();
+	const char *uuid1 = "1111111111111111111111111111111111111111111111111111111111111111";
+	const char *uuid2 = "2222222222222222222222222222222222222222222222222222222222222222";
+	const char *sub = "alice@https://idp.example.com";
+	char *sub_uuid = NULL;
+
+	/* login on device A, then on device B: the shared slot ends up pointing at B */
+	oidc_session_t *z1 = NULL;
+	oidc_session_load(r, &z1);
+	z1->uuid = apr_pstrdup(r->pool, uuid1);
+	z1->remote_user = apr_pstrdup(r->pool, "alice");
+	z1->sub = apr_pstrdup(r->pool, sub);
+	z1->sid = apr_pstrdup(r->pool, "sid-device-a");
+	z1->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, z1, "https://idp.example.com");
+	ck_assert_int_eq(oidc_session_save(r, z1, OIDC_SESSION_SAVE_NEW), TRUE);
+	oidc_session_free(r, z1);
+
+	oidc_session_t *z2 = NULL;
+	oidc_session_load(r, &z2);
+	z2->uuid = apr_pstrdup(r->pool, uuid2);
+	z2->remote_user = apr_pstrdup(r->pool, "alice");
+	z2->sub = apr_pstrdup(r->pool, sub);
+	z2->sid = apr_pstrdup(r->pool, "sid-device-b");
+	z2->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, z2, "https://idp.example.com");
+	ck_assert_int_eq(oidc_session_save(r, z2, OIDC_SESSION_SAVE_NEW), TRUE);
+	oidc_session_free(r, z2);
+
+	ck_assert_int_eq(oidc_cache_get_sid(r, sub, &sub_uuid), TRUE);
+	ck_assert_str_eq(sub_uuid, uuid2);
+
+	/* device A's session is killed (logout or expiry): B's index entry must survive */
+	oidc_session_t *z3 = NULL;
+	oidc_session_load(r, &z3);
+	ck_assert_ptr_null(z3->state);
+	z3->uuid = apr_pstrdup(r->pool, uuid1);
+	z3->sub = apr_pstrdup(r->pool, sub);
+	ck_assert_int_eq(oidc_session_save(r, z3, OIDC_SESSION_SAVE_NEW), TRUE);
+	oidc_session_free(r, z3);
+
+	sub_uuid = NULL;
+	ck_assert_int_eq(oidc_cache_get_sid(r, sub, &sub_uuid), TRUE);
+	ck_assert_ptr_nonnull(sub_uuid);
+	ck_assert_str_eq(sub_uuid, uuid2);
+
+	/* killing the session the slot points at does clear it */
+	oidc_session_t *z4 = NULL;
+	oidc_session_load(r, &z4);
+	ck_assert_ptr_null(z4->state);
+	z4->uuid = apr_pstrdup(r->pool, uuid2);
+	z4->sub = apr_pstrdup(r->pool, sub);
+	ck_assert_int_eq(oidc_session_save(r, z4, OIDC_SESSION_SAVE_NEW), TRUE);
+	oidc_session_free(r, z4);
+
+	sub_uuid = NULL;
+	oidc_cache_get_sid(r, sub, &sub_uuid);
+	ck_assert_ptr_null(sub_uuid);
+}
+END_TEST
+
 /* claim black/whitelisting and the claim-size warning threshold */
 START_TEST(test_session_claim_filtering) {
 	request_rec *r = oidc_test_request_get();
@@ -652,6 +719,7 @@ int main(void) {
 	tcase_add_test(c, test_session_cache_corruption);
 	tcase_add_test(c, test_session_format_version);
 	tcase_add_test(c, test_session_load_mutate_reload);
+	tcase_add_test(c, test_session_sub_index_survives_older_session_kill);
 	tcase_add_test(c, test_session_claim_filtering);
 #ifdef USE_LIBJQ
 	tcase_add_test(c, test_session_claim_jq_filter);
