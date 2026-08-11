@@ -56,6 +56,7 @@ replay fuzz_json "$dir"/fuzz/corpus/json/*
 replay fuzz_url "$dir"/fuzz/corpus/url/*
 # the curated open-redirect payloads, one input per line
 replay fuzz_url --lines "$dir"/open-redirect-payload-list.txt
+replay fuzz_cookie "$dir"/fuzz/corpus/cookie/*
 
 # a run in which every target was skipped proves nothing: report it as a failure
 # rather than as a pass, so a build-condition or rename that stops producing the
