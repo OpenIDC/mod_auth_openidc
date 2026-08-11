@@ -3631,12 +3631,12 @@ START_TEST(test_proto_auth_request_params_repeated_key) {
 	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
 
 	/* NB: written unescaped because the ap_unescape_url stub does not decode */
-	ck_assert_ptr_null(
-	    oidc_cfg_provider_auth_request_params_set(r->pool, provider, "resource=urn:example:a&resource=urn:example:b"));
+	ck_assert_ptr_null(oidc_cfg_provider_auth_request_params_set(r->pool, provider,
+								     "resource=urn:example:a&resource=urn:example:b"));
 
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
-	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-repeated", ps, NULL,
-				   NULL, NULL, NULL);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-repeated", ps,
+				   NULL, NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
@@ -3645,6 +3645,41 @@ START_TEST(test_proto_auth_request_params_repeated_key) {
 		      "the first occurrence of a repeated parameter must be sent: %s", loc);
 	ck_assert_msg(_oidc_strstr(loc, "resource=urn%3Aexample%3Ab") != NULL,
 		      "the second occurrence of a repeated parameter must be sent too: %s", loc);
+}
+END_TEST
+
+/*
+ * the same key split across OIDCAuthRequestParams and the per-path/dynamic parameters is the
+ * cross-directive form of the repeat above (RFC 8707 "resource" may name one audience globally
+ * and another on a path): what the first directive added is not a parameter this module owns,
+ * so the second directive's occurrence must be sent alongside it rather than dropped - while a
+ * dynamic parameter that duplicates a genuinely module-owned one is still refused
+ */
+START_TEST(test_proto_auth_request_params_across_directives) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+
+	/* NB: written unescaped because the ap_unescape_url stub does not decode */
+	ck_assert_ptr_null(oidc_cfg_provider_auth_request_params_set(r->pool, provider, "resource=urn:example:global"));
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-across", ps, NULL,
+				   NULL, "resource=urn:example:path&state=evil", NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+
+	ck_assert_msg(_oidc_strstr(loc, "resource=urn%3Aexample%3Aglobal") != NULL,
+		      "the configured directive's occurrence must be sent: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "resource=urn%3Aexample%3Apath") != NULL,
+		      "the per-path occurrence of the same key must be sent alongside it, not dropped: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "state=evil") == NULL,
+		      "a dynamic parameter duplicating a module-owned one must still be dropped: %s", loc);
 }
 END_TEST
 
@@ -4533,6 +4568,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_auth_request_params_cannot_duplicate_ours);
 	tcase_add_test(e2e, test_proto_auth_request_params_configured);
 	tcase_add_test(e2e, test_proto_auth_request_params_repeated_key);
+	tcase_add_test(e2e, test_proto_auth_request_params_across_directives);
 	tcase_add_test(e2e, test_proto_request_auth_par_failures);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);

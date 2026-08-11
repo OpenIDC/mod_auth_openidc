@@ -1,4 +1,8 @@
 08/11/2026
+- proto: share the duplicate guard's directive-added key tracking across OIDCAuthRequestParams
+  and the per-path/dynamic parameters: a key the first directive added is not one this module
+  owns, so a per-path or discovery-supplied occurrence of the same key (RFC 8707 "resource" per
+  audience) was dropped with a misleading warning instead of being sent alongside it
 - cache/redis: do not unlock the serialized-model process mutex when the retry backoff released
   it for the sleep and could not re-acquire it: posting the semaphore twice hands the shared
   connection to two threads at once, interleaving their hiredis replies from then on

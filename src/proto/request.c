@@ -62,23 +62,20 @@
  * is request-supplied whatever the source of the directive - the operator opted into
  * forwarding that parameter, not into letting a request override one of ours.
  *
- * A key repeating *within* the directive itself is not a collision with anything we own: some
- * parameters are legitimately sent more than once (RFC 8707 "resource"), so every occurrence
- * after the first is added alongside it - which is why the keys this call adds are tracked
- * separately rather than looked up in the shared table they went into.
+ * A key repeating *within* the directive itself, or across the configured and the
+ * per-path/dynamic directive, is not a collision with anything we own: some parameters are
+ * legitimately sent more than once (RFC 8707 "resource"), so every occurrence after the first
+ * is added alongside it. The caller passes the same "added" table to both directive
+ * invocations, so that only a key which predates them both - a module-owned one, the ones the
+ * guard exists for - trips it.
  */
-static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, const char *auth_request_params,
-					       apr_byte_t configured) {
+static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, apr_table_t *added,
+					       const char *auth_request_params, apr_byte_t configured) {
 	char *key = NULL;
 	char *val = NULL;
-	apr_table_t *added = NULL;
 
 	if (auth_request_params == NULL)
 		return;
-
-	/* the keys added by this call, to tell a repeat within the directive from a collision
-	 * with a parameter that was already in the table when we started */
-	added = apr_table_make(r->pool, 4);
 
 	while (*auth_request_params) {
 		apr_byte_t from_request = FALSE;
@@ -274,11 +271,15 @@ void oidc_proto_request_auth_params_set(request_rec *r, oidc_cfg_t *cfg, const s
 	if (prompt != NULL)
 		apr_table_setn(params, OIDC_PROTO_PROMPT, prompt);
 
+	/* the keys the two directives below add, shared between their invocations so that a
+	 * parameter the first one added is not mistaken for one this module owns by the second */
+	apr_table_t *added = apr_table_make(r->pool, 4);
+
 	/* add any statically configured custom authorization request parameters */
-	oidc_proto_request_auth_params_add(r, params, oidc_cfg_provider_auth_request_params_get(provider), TRUE);
+	oidc_proto_request_auth_params_add(r, params, added, oidc_cfg_provider_auth_request_params_get(provider), TRUE);
 
 	/* add any dynamically configured custom authorization request parameters */
-	oidc_proto_request_auth_params_add(r, params, auth_request_params, FALSE);
+	oidc_proto_request_auth_params_add(r, params, added, auth_request_params, FALSE);
 
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)
