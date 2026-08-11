@@ -244,9 +244,16 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	if (j_cache != NULL)
 		oidc_json_decref(j_cache);
 
-	/* since it is valid, write the obtained provider metadata file */
+	/* since it is valid, write the obtained provider metadata file; when only the disk write
+	 * fails - the atomic tmp-file-plus-rename needs create/delete permission on the metadata
+	 * directory, which a setup with pre-provisioned writable files inside a non-writable
+	 * directory does not grant - that must not fail what is otherwise a completed, validated
+	 * retrieval: serve the in-memory result and let a next request try the write again */
 	if (oidc_util_file_write(r, provider_path, response) == FALSE)
-		return FALSE;
+		oidc_warn(
+		    r,
+		    "could not cache the retrieved provider metadata in \"%s\"; continuing with the in-memory result",
+		    provider_path);
 
 	return TRUE;
 }
