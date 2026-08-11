@@ -544,10 +544,14 @@ static apr_byte_t oidc_cache_redis_backoff(request_rec *r, const oidc_cache_cfg_
 
 /*
  * execute Redis command and deal with return value
- * NB: the caller must hold context->mutex; the retry path temporarily releases it while
- *     sleeping so other threads are not stalled behind this one for the whole interval
+ * NB: in the serialized (shared-connection) model the caller must hold context->mutex; the retry
+ *     path temporarily releases it while sleeping so other threads are not stalled behind this
+ *     one for the whole interval. When re-acquiring it fails, *mutex_held is cleared so the
+ *     caller knows not to unlock a mutex it no longer holds: posting the semaphore twice would
+ *     hand the "serialized" connection to two threads at once.
  */
-static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t *context, const char *format, ...) {
+static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t *context, apr_byte_t *mutex_held,
+					 const char *format, ...) {
 
 	redisReply *reply = NULL;
 	char *errstr = NULL;
@@ -567,8 +571,10 @@ static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t 
 		if (context->connect(r, context) != APR_SUCCESS) {
 			OIDC_REDIS_WARN_OR_ERROR(i < retries, r, "Redis connect (attempt=%d/%d to %s:%d) failed", i,
 						 retries, context->host_str, context->port);
-			if ((i < retries) && (oidc_cache_redis_backoff(r, context, interval) == FALSE))
+			if ((i < retries) && (oidc_cache_redis_backoff(r, context, interval) == FALSE)) {
+				*mutex_held = FALSE;
 				return NULL;
+			}
 			continue;
 		}
 
@@ -606,6 +612,7 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 	redisReply *reply = NULL;
 	apr_byte_t rv = FALSE;
+	apr_byte_t mutex_held = TRUE;
 
 	/* grab the process lock, except in request-scoped connection mode where each request
 	 * has its own connection and the mutex only guards the idle pool */
@@ -613,7 +620,7 @@ apr_byte_t oidc_cache_redis_get(request_rec *r, const char *section, const char 
 		return FALSE;
 
 	/* get */
-	reply = oidc_cache_redis_exec(r, context, "GET %s", oidc_cache_section_key(r->pool, section, key));
+	reply = oidc_cache_redis_exec(r, context, &mutex_held, "GET %s", oidc_cache_section_key(r->pool, section, key));
 
 	if (reply == NULL)
 		goto end;
@@ -649,8 +656,8 @@ end:
 	/* free the reply object resources */
 	oidc_cache_redis_reply_free(&reply);
 
-	/* unlock the process mutex */
-	if (context->request_scoped == FALSE)
+	/* unlock the process mutex, unless the retry backoff released it and could not get it back */
+	if ((context->request_scoped == FALSE) && (mutex_held == TRUE))
 		oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	/* return the status */
@@ -667,6 +674,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	oidc_cache_cfg_redis_t *context = (oidc_cache_cfg_redis_t *)cfg->cache.cfg;
 	redisReply *reply = NULL;
 	apr_byte_t rv = FALSE;
+	apr_byte_t mutex_held = TRUE;
 	apr_uint32_t timeout;
 
 	/* grab the process lock, except in request-scoped connection mode where each request
@@ -678,7 +686,8 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	if (value == NULL) {
 
 		/* delete it */
-		reply = oidc_cache_redis_exec(r, context, "DEL %s", oidc_cache_section_key(r->pool, section, key));
+		reply = oidc_cache_redis_exec(r, context, &mutex_held, "DEL %s",
+					      oidc_cache_section_key(r->pool, section, key));
 
 	} else {
 
@@ -686,7 +695,7 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 		timeout = (apr_uint32_t)apr_time_sec(expiry - apr_time_now());
 
 		/* store it */
-		reply = oidc_cache_redis_exec(r, context, "SET %s %s EX %d",
+		reply = oidc_cache_redis_exec(r, context, &mutex_held, "SET %s %s EX %d",
 					      oidc_cache_section_key(r->pool, section, key), value, timeout);
 	}
 
@@ -695,8 +704,8 @@ apr_byte_t oidc_cache_redis_set(request_rec *r, const char *section, const char 
 	/* free the reply object resources */
 	oidc_cache_redis_reply_free(&reply);
 
-	/* unlock the process mutex */
-	if (context->request_scoped == FALSE)
+	/* unlock the process mutex, unless the retry backoff released it and could not get it back */
+	if ((context->request_scoped == FALSE) && (mutex_held == TRUE))
 		oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 
 	/* return the status */

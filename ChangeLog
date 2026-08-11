@@ -1,4 +1,7 @@
 08/11/2026
+- cache/redis: do not unlock the serialized-model process mutex when the retry backoff released
+  it for the sleep and could not re-acquire it: posting the semaphore twice hands the shared
+  connection to two threads at once, interleaving their hiredis replies from then on
 - session: drop the decoded object when rejecting a payload with a newer format version instead
   of leaving it on the session struct: the callers treat the rejection as "no session" and the
   OIDCSessionCacheFallbackToCookie load then overwrote the pointer, leaking the refcounted
