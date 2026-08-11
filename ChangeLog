@@ -1,4 +1,9 @@
 08/11/2026
+- http: register the curl easy-handle pool's cleanup after the process cleanup: pool cleanups
+  run last-in-first-out, so the pooled handles were curl_easy_cleanup()d only after
+  oidc_process_cleanup had already run curl_global_cleanup() - undefined behavior in libcurl
+  that can crash a process that both served requests and destroys its configuration pool (the
+  Windows winnt MPM child, httpd -X) at shutdown or restart
 - proto: share the duplicate guard's directive-added key tracking across OIDCAuthRequestParams
   and the per-path/dynamic parameters: a key the first directive added is not one this module
   owns, so a per-path or discovery-supplied occurrence of the same key (RFC 8707 "resource" per

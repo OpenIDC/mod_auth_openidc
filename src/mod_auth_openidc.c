@@ -1514,7 +1514,6 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 		     _OIDC_USE_REDIS, _OIDC_USE_JQ);
 
 	oidc_http_init();
-	oidc_http_curl_pool_init(pool);
 
 #if ((OPENSSL_VERSION_NUMBER < 0x10100000) && defined(OPENSSL_THREADS) && APR_HAS_THREADS)
 	ssl_num_locks = CRYPTO_num_locks();
@@ -1539,6 +1538,11 @@ static int oidc_post_config(apr_pool_t *pool, apr_pool_t *p1, apr_pool_t *p2, se
 #endif /* (OPENSSL_VERSION_NUMBER < 0x10100000) && defined (OPENSSL_THREADS) && APR_HAS_THREADS */
 
 	apr_pool_cleanup_register(pool, s, oidc_process_cleanup, apr_pool_cleanup_null);
+
+	/* must come after the oidc_process_cleanup registration: pool cleanups run last-in-first-out
+	 * and the pooled easy handles have to be cleaned up before that cleanup's
+	 * curl_global_cleanup() tears down libcurl underneath them */
+	oidc_http_curl_pool_init(pool);
 
 	if (oidc_cfg_dir_post_config(s) != OK)
 		return HTTP_INTERNAL_SERVER_ERROR;
