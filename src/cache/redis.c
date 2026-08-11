@@ -461,6 +461,19 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 	return oidc_cache_redis_rctx_connect(r, context, &conn->rctx);
 }
 
+/* drop every connection sitting in the idle pool: called when a checked-out connection turns
+ * out dead at the connection level, because checkout is LIFO - whatever closed that socket (a
+ * Redis restart, a server-side idle timeout) closed the ones idle for even longer too */
+static void oidc_cache_redis_idle_flush(request_rec *r, oidc_cache_cfg_redis_t *context) {
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) != TRUE)
+		return;
+	if (context->idle_num > 0)
+		oidc_debug(r, "dropping %d idle pooled connection(s)", context->idle_num);
+	while (context->idle_num > 0)
+		redisFree(context->idle[--context->idle_num]);
+	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
+}
+
 redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *context, char **errstr, const char *format,
 				     va_list ap) {
 	redisReply *reply = NULL;
@@ -484,6 +497,12 @@ redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *con
 		oidc_cache_redis_conn_t *conn = oidc_cache_redis_conn_get(r, context);
 		redisFree(conn->rctx);
 		conn->rctx = NULL;
+		/* a pooled connection is only ever validated by its err flag, which cannot see the
+		 * peer closing the socket while it sat idle: without this flush every retry pops the
+		 * next dead socket, and the pool can hold more of those than there are retries, so
+		 * the operation failed with Redis perfectly reachable (and a session read that
+		 * fails sends the user back through authentication) */
+		oidc_cache_redis_idle_flush(r, context);
 	}
 
 	return reply;

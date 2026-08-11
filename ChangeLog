@@ -1,4 +1,9 @@
 08/11/2026
+- cache/redis: flush the idle connection pool when a checked-out connection turns out dead:
+  checkout only inspects hiredis' err flag, which cannot see the peer closing an idle socket, so
+  after a Redis restart or server-side idle timeout each retry popped the next dead socket and
+  the operation failed - bouncing an authenticated user back through login - with Redis
+  perfectly reachable
 - jose: pass a payload that brotli cannot decode through instead of failing the read: a libbrotli
   build assumed every non-zlib-framed payload was brotli, so a payload written uncompressed
   (OIDC_JWT_INTERNAL_NO_COMPRESS, or a writer built without brotli) made every session, state and
