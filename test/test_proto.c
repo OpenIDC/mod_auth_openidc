@@ -3615,6 +3615,40 @@ START_TEST(test_proto_auth_request_params_configured) {
 END_TEST
 
 /*
+ * a key repeating within the directive itself is not a collision with a parameter this module
+ * owns: some parameters are legitimately sent more than once (RFC 8707 sends "resource" once per
+ * audience), so the duplicate guard must only fire against parameters that were already in the
+ * request before the directive was processed, and every repeated occurrence must reach the
+ * provider
+ */
+START_TEST(test_proto_auth_request_params_repeated_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+
+	/* NB: written unescaped because the ap_unescape_url stub does not decode */
+	ck_assert_ptr_null(
+	    oidc_cfg_provider_auth_request_params_set(r->pool, provider, "resource=urn:example:a&resource=urn:example:b"));
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-repeated", ps, NULL,
+				   NULL, NULL, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+
+	ck_assert_msg(_oidc_strstr(loc, "resource=urn%3Aexample%3Aa") != NULL,
+		      "the first occurrence of a repeated parameter must be sent: %s", loc);
+	ck_assert_msg(_oidc_strstr(loc, "resource=urn%3Aexample%3Ab") != NULL,
+		      "the second occurrence of a repeated parameter must be sent too: %s", loc);
+}
+END_TEST
+
+/*
  * a Pushed Authorization Request that cannot be made: the OP never advertised the endpoint, or it
  * answers with an error. Either way the user must get an error page rather than a redirect to an
  * authorization request that was never pushed.
@@ -4498,6 +4532,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_userinfo_request_signed_jwt_response);
 	tcase_add_test(e2e, test_proto_auth_request_params_cannot_duplicate_ours);
 	tcase_add_test(e2e, test_proto_auth_request_params_configured);
+	tcase_add_test(e2e, test_proto_auth_request_params_repeated_key);
 	tcase_add_test(e2e, test_proto_request_auth_par_failures);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);
 	tcase_add_test(e2e, test_proto_request_auth_no_client_id);

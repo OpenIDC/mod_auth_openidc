@@ -1,4 +1,8 @@
 08/11/2026
+- proto: only fire the extra-parameter duplicate guard against parameters that were already in
+  the authorization request before the directive was processed: a key repeated within
+  OIDCAuthRequestParams / OIDCPathAuthRequestParams itself (RFC 8707 sends "resource" once per
+  audience) collided with its own first occurrence and all but one value were silently lost
 - cache/redis: flush the idle connection pool when a checked-out connection turns out dead:
   checkout only inspects hiredis' err flag, which cannot see the peer closing an idle socket, so
   after a Redis restart or server-side idle timeout each retry popped the next dead socket and

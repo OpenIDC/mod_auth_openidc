@@ -61,14 +61,24 @@
  * A "#" value means "forward the same-named parameter from the current request", so its value
  * is request-supplied whatever the source of the directive - the operator opted into
  * forwarding that parameter, not into letting a request override one of ours.
+ *
+ * A key repeating *within* the directive itself is not a collision with anything we own: some
+ * parameters are legitimately sent more than once (RFC 8707 "resource"), so every occurrence
+ * after the first is added alongside it - which is why the keys this call adds are tracked
+ * separately rather than looked up in the shared table they went into.
  */
 static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, const char *auth_request_params,
 					       apr_byte_t configured) {
 	char *key = NULL;
 	char *val = NULL;
+	apr_table_t *added = NULL;
 
 	if (auth_request_params == NULL)
 		return;
+
+	/* the keys added by this call, to tell a repeat within the directive from a collision
+	 * with a parameter that was already in the table when we started */
+	added = apr_table_make(r->pool, 4);
 
 	while (*auth_request_params) {
 		apr_byte_t from_request = FALSE;
@@ -84,7 +94,7 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 			oidc_util_url_parameter_get(r, key, &val);
 			from_request = TRUE;
 		}
-		if (apr_table_get(params, key) != NULL) {
+		if ((apr_table_get(params, key) != NULL) && (apr_table_get(added, key) == NULL)) {
 			if ((configured == FALSE) || (from_request == TRUE)) {
 				oidc_warn(r,
 					  "dropping authorization request parameter \"%s\": it would duplicate one "
@@ -93,9 +103,11 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 				continue;
 			}
 			apr_table_set(params, key, val);
+			apr_table_setn(added, key, "");
 			continue;
 		}
 		apr_table_add(params, key, val);
+		apr_table_setn(added, key, "");
 	}
 }
 
