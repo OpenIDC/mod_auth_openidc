@@ -670,8 +670,9 @@ static char *_jose_test_build_jwe(apr_pool_t *pool, oidc_jwk_t **out_pub, oidc_j
 	ck_assert_msg(oidc_jwt_encrypt(pool, jwe, pub, payload, (int)_oidc_strlen(payload), &serialized, &err) == TRUE,
 		      "oidc_jwt_encrypt failed");
 	oidc_jwt_destroy(jwe);
+	oidc_jwk_destroy(pub);
 
-	*out_pub = pub;
+	*out_pub = NULL;
 	*out_priv = priv;
 	return serialized;
 }
@@ -687,6 +688,8 @@ START_TEST(test_jwe_decrypt_kid_not_found) {
 	char *plaintext = NULL;
 	int plaintext_len = 0;
 	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+
+	oidc_jwk_list_destroy_hash(keys);
 }
 END_TEST
 
@@ -704,6 +707,8 @@ START_TEST(test_jwe_decrypt_kty_mismatch) {
 	char *plaintext = NULL;
 	int plaintext_len = 0;
 	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+
+	oidc_jwk_destroy(priv);
 }
 END_TEST
 
@@ -719,6 +724,8 @@ START_TEST(test_jwe_decrypt_use_mismatch) {
 	char *plaintext = NULL;
 	int plaintext_len = 0;
 	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+
+	oidc_jwk_list_destroy_hash(keys);
 }
 END_TEST
 
@@ -736,6 +743,8 @@ START_TEST(test_jwe_decrypt_no_keys_configured) {
 	plaintext = NULL;
 	plaintext_len = 0;
 	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, empty_keys, &plaintext, &plaintext_len, &err, TRUE), FALSE);
+
+	oidc_jwk_destroy(priv);
 }
 END_TEST
 

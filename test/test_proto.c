@@ -810,6 +810,8 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_client_keys) {
 	char *kid = NULL;
 	ck_assert_ptr_nonnull(oidc_proto_jwt_header_peek(r, assertion, NULL, NULL, &kid));
 	ck_assert_str_eq(kid, "client-1");
+
+	oidc_jwk_destroy(jwk);
 }
 END_TEST
 
@@ -856,6 +858,8 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_unsupported_key_type) 
 							&basic, &bearer),
 			 FALSE);
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
+
+	oidc_jwk_destroy(sym);
 }
 END_TEST
 
@@ -3985,6 +3989,10 @@ START_TEST(test_proto_jwks_uri_keys_x5t_match) {
 
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
+	/* the "thumb-1" hash key is oidc_proto_jwks_key_apply's x5t pointer, which points into jwt's
+	 * own protected header (owned by jwt->cjose_jws) -- the hash must be torn down before the jwt
+	 * that backs its key, not after */
+	oidc_jwk_list_destroy_hash(keys);
 	oidc_jwt_destroy(jwt);
 }
 END_TEST
