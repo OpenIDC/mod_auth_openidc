@@ -178,6 +178,8 @@ apr_byte_t oidc_json_object_get_string(apr_pool_t *pool, const oidc_json_t *json
 apr_byte_t oidc_json_object_get_string_array(apr_pool_t *pool, const oidc_json_t *json, const char *name,
 					     apr_array_header_t **value, const apr_array_header_t *default_value);
 apr_byte_t oidc_json_object_get_int(const oidc_json_t *json, const char *name, int *value, const int default_value);
+apr_byte_t oidc_json_object_get_int64(const oidc_json_t *json, const char *name, oidc_json_int_t *value,
+				      const oidc_json_int_t default_value);
 apr_byte_t oidc_json_object_get_bool(const oidc_json_t *json, const char *name, int *value, const int default_value);
 
 /*

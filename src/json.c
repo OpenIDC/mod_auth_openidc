@@ -466,6 +466,24 @@ apr_byte_t oidc_json_object_get_int(const oidc_json_t *json, const char *name, i
 }
 
 /*
+ * get (optional) 64-bit integer from a JSON object, preserving the full value - unlike
+ * oidc_json_object_get_int, which clamps into int range; used for timestamps that must survive 2038
+ */
+apr_byte_t oidc_json_object_get_int64(const oidc_json_t *json, const char *name, oidc_json_int_t *value,
+				      const oidc_json_int_t default_value) {
+	const oidc_json_t *v = NULL;
+	*value = default_value;
+	if (json != NULL) {
+		v = oidc_json_object_get(json, name);
+		if ((v != NULL) && (oidc_json_is_integer(v))) {
+			*value = oidc_json_integer_value(v);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/*
  * get (optional) boolean from a JSON object
  */
 apr_byte_t oidc_json_object_get_bool(const oidc_json_t *json, const char *name, int *value, const int default_value) {

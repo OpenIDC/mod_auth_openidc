@@ -1,4 +1,8 @@
 08/12/2026
+- session: store session timestamps as full 64-bit seconds instead of narrowing them through an
+  (int) cast: an expiry past January 2038 wrapped negative on persist and then read back as
+  already-expired, sending the user round the authentication loop. Wire-compatible: values below
+  2^31 serialize identically
 - json: reject a successfully parsed non-object (e.g. a top-level array) from
   oidc_json_decode_object_err even when logging is disabled: the log flag controlled rejection as
   well, so a userinfo response that was a JSON array was accepted as claims instead of being

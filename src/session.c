@@ -453,8 +453,8 @@ static inline int oidc_session_get_int(request_rec *r, const oidc_session_t *z, 
  * retrieve a timestamp from the session state
  */
 static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, const oidc_session_t *z, const char *key) {
-	int value = -1;
-	oidc_json_object_get_int(z->state, key, &value, -1);
+	oidc_json_int_t value = -1;
+	oidc_json_object_get_int64(z->state, key, &value, -1);
 	return (value > -1) ? apr_time_from_sec(value) : -1;
 }
 
@@ -546,8 +546,13 @@ static void oidc_session_set_int(request_rec *r, oidc_session_t *z, const char *
  * store a timestamp value into the session state
  */
 static void oidc_session_set_timestamp(request_rec *r, oidc_session_t *z, const char *key, const apr_time_t timestamp) {
-	if (timestamp > -1)
-		oidc_session_set_int(r, z, key, (int)apr_time_sec(timestamp));
+	if (timestamp <= -1)
+		return;
+	if (z->state == NULL)
+		z->state = oidc_json_object();
+	/* store the full seconds value as a 64-bit JSON integer: the previous (int) cast wrapped any
+	 * timestamp past January 2038 into a negative, i.e. already-expired, value */
+	oidc_json_object_set_new(z->state, key, oidc_json_integer(apr_time_sec(timestamp)));
 }
 
 /*
