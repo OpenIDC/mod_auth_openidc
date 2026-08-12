@@ -1,3 +1,7 @@
+08/12/2026
+- util: reject a value that is not an importable, GCM-authenticated JWE in oidc_util_jwt_verify
+  instead of passing it back verbatim as if it had been verified (fail-open hardening)
+
 08/11/2026
 - jose: stream brotli decompression into a growing buffer instead of a fixed 4 * input_len one,
   which made any payload that compressed better than 4:1 unreadable

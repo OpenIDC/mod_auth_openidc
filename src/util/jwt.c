@@ -185,7 +185,11 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	}
 	apr_hash_set(keys, "1", APR_HASH_KEY_STRING, jwk);
 
-	if (oidc_jwe_decrypt(r->pool, compact_encoded_jwt, keys, &plaintext, &plaintext_len, &err, FALSE) == FALSE) {
+	/* import_must_succeed=TRUE: the header was pinned to dir/A256GCM above, so require a genuine,
+	 * GCM-authenticated JWE here. With FALSE, a value that merely carries that header but is not an
+	 * importable JWE would be handed back verbatim and reported as verified - a fail-open in a
+	 * function named _verify; the caller must never treat unauthenticated input as authenticated. */
+	if (oidc_jwe_decrypt(r->pool, compact_encoded_jwt, keys, &plaintext, &plaintext_len, &err, TRUE) == FALSE) {
 		oidc_error(r, "decrypting JWE failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
