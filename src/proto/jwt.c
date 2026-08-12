@@ -60,6 +60,10 @@ static apr_byte_t oidc_proto_validate_iat(request_rec *r, const oidc_jwt_t *jwt,
 		}
 		return TRUE;
 	}
+	if (!(jwt->payload.iat >= 0)) {
+		oidc_error(r, "\"%s\" validation failure: JWT contained an invalid timestamp", OIDC_CLAIM_IAT);
+		return FALSE;
+	}
 
 	/* see if we are asked to enforce a time window at all */
 	if (slack < 0) {
@@ -99,6 +103,10 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, const oidc_jwt_t *jwt,
 		return TRUE;
 	}
 
+	if (!(jwt->payload.exp >= 0)) {
+		oidc_error(r, "\"%s\" validation failure: JWT contained an invalid timestamp", OIDC_CLAIM_EXP);
+		return FALSE;
+	}
 	/* compare in the double domain: an out-of-range JSON number ("exp":1e300) cast to apr_time_t is
 	 * undefined behaviour, and would otherwise let platform-specific wraparound decide validity */
 	if ((double)now > jwt->payload.exp) {

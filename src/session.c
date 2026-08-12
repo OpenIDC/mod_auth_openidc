@@ -455,7 +455,8 @@ static inline int oidc_session_get_int(request_rec *r, const oidc_session_t *z, 
 static inline apr_time_t oidc_session_get_key2timestamp(request_rec *r, const oidc_session_t *z, const char *key) {
 	oidc_json_int_t value = -1;
 	oidc_json_object_get_int64(z->state, key, &value, -1);
-	return (value > -1) ? apr_time_from_sec(value) : -1;
+	/* saturate rather than wrap, guarding a tampered client-cookie session with an oversized value */
+	return (value > -1) ? oidc_util_apr_time_from_sec((double)value) : -1;
 }
 
 /*
