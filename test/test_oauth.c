@@ -299,6 +299,39 @@ START_TEST(test_oauth_bearer_from_cookie) {
 }
 END_TEST
 
+/* a repeated access_token in the query string is rejected, so no bearer token is extracted */
+START_TEST(test_oauth_bearer_from_query_duplicate_rejected) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "query"));
+
+	r->args = "access_token=AT-ONE&access_token=AT-TWO";
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), FALSE);
+	ck_assert_ptr_null(token);
+}
+END_TEST
+
+/* a repeated access_token in a form-encoded POST body is likewise rejected */
+START_TEST(test_oauth_bearer_from_post_duplicate_rejected) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCOAuthAcceptTokenAs");
+	ck_assert_ptr_null(oidc_cmd_dir_accept_oauth_token_in_set(cmd, dir_cfg, "post"));
+
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->args = apr_pstrdup(r->pool, "access_token=AT-ONE&access_token=AT-TWO");
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	const char *token = NULL;
+	ck_assert_int_eq(oidc_oauth_get_bearer_token(r, &token), FALSE);
+	ck_assert_ptr_null(token);
+}
+END_TEST
+
 /*
  * Tests for the local-JWT access-token validation path (no introspection
  * endpoint configured), which is reached via oidc_oauth_validate_token.
@@ -1336,6 +1369,8 @@ int main(void) {
 	tcase_add_test(bearer, test_oauth_bearer_not_present);
 	tcase_add_test(bearer, test_oauth_bearer_wrong_scheme);
 	tcase_add_test(bearer, test_oauth_bearer_from_query);
+	tcase_add_test(bearer, test_oauth_bearer_from_query_duplicate_rejected);
+	tcase_add_test(bearer, test_oauth_bearer_from_post_duplicate_rejected);
 	tcase_add_test(bearer, test_oauth_bearer_from_cookie);
 	tcase_add_test(bearer, test_oauth_bearer_from_basic_header);
 	tcase_add_test(bearer, test_oauth_bearer_from_basic_header_no_colon);

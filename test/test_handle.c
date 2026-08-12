@@ -886,6 +886,37 @@ START_TEST(test_handle_response_authorization_post_non_post_method) {
 }
 END_TEST
 
+/* a form_post authorization response that repeats a security-critical parameter is rejected */
+START_TEST(test_handle_response_authorization_post_duplicate_param) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->method_number = M_POST;
+	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
+	r->args = apr_pstrdup(r->pool, "state=a&code=x&state=b");
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+	ck_assert_int_eq(oidc_response_authorization_post(r, c, session), HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a query-mode authorization response that repeats a security-critical parameter is rejected */
+START_TEST(test_handle_response_authorization_redirect_duplicate_param) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	r->args = apr_pstrdup(r->pool, "code=a&code=b");
+	ck_assert_int_eq(oidc_response_authorization_redirect(r, c, session), HTTP_BAD_REQUEST);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_response_authorization_post_only_response_mode_fragment) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -5388,6 +5419,99 @@ START_TEST(test_handle_logout_backchannel_jti_replay) {
 }
 END_TEST
 
+/* a back-channel logout request that repeats the logout_token is rejected, not silently last-wins */
+START_TEST(test_handle_logout_backchannel_duplicate_logout_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
+							   "jti-dup", TRUE, FALSE, secret);
+	char *enc = oidc_http_url_encode(r, logout_jwt);
+	char *body = apr_psprintf(r->pool, "logout_token=%s&logout_token=%s", enc, enc);
+	e2e_post_body(r, body);
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+	ck_assert_int_eq(oidc_logout(r, c, session), HTTP_BAD_REQUEST);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a cache backend that errors only on the jti section, so the surrounding sid/session lookups still
+ * work and the fail-open behaviour can be observed in isolation */
+static const oidc_cache_t *e2e_jti_passthrough_impl = NULL;
+static int e2e_jti_cache_failure_mode = 0; /* 1 = fail the jti-section get, 2 = fail the jti-section set */
+
+static apr_byte_t e2e_jti_cache_get(request_rec *r, const char *section, const char *key, char **value) {
+	if ((e2e_jti_cache_failure_mode == 1) && (_oidc_strcmp(section, OIDC_CACHE_SECTION_JTI) == 0)) {
+		*value = NULL;
+		return FALSE;
+	}
+	return e2e_jti_passthrough_impl->get(r, section, key, value);
+}
+
+static apr_byte_t e2e_jti_cache_set(request_rec *r, const char *section, const char *key, const char *value,
+				    apr_time_t expiry) {
+	if ((e2e_jti_cache_failure_mode == 2) && (_oidc_strcmp(section, OIDC_CACHE_SECTION_JTI) == 0))
+		return FALSE;
+	return e2e_jti_passthrough_impl->set(r, section, key, value, expiry);
+}
+
+static oidc_cache_t e2e_jti_failure_cache = {"jti-section-failure", 1,	 NULL, NULL, e2e_jti_cache_get,
+					     e2e_jti_cache_set,	    NULL};
+
+/* jti replay detection fails OPEN: a jti cache read (mode 1) or write (mode 2) error is logged but
+ * must not turn a valid back-channel logout into a failure. The section-scoped mock leaves the sid
+ * index lookup working, so the logout still completes and clears the index despite the jti error. */
+START_TEST(test_handle_logout_backchannel_jti_cache_errors_fail_open) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_cache_t *old_impl = (oidc_cache_t *)c->cache.impl;
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	for (int mode = 1; mode <= 2; mode++) {
+		const char *sub = apr_psprintf(r->pool, "alice-%d", mode);
+		oidc_session_t *session = NULL;
+		oidc_session_load(r, &session);
+
+		/* a sid index pointing at a (dangling) session uuid, so the logout has real work to do */
+		const char *sid = oidc_response_make_sid_iss_unique(r, sub, "https://idp.example.com");
+		ck_assert_int_eq(
+		    oidc_cache_set_sid(r, sid, "no-such-session-uuid", apr_time_now() + apr_time_from_sec(60)), TRUE);
+
+		char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", sub,
+								   apr_psprintf(r->pool, "jti-cache-error-%d", mode),
+								   TRUE, FALSE, secret);
+		char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+		e2e_post_body(r, body);
+		r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+		r->remaining = (apr_size_t)_oidc_strlen(r->args);
+
+		e2e_jti_passthrough_impl = old_impl;
+		e2e_jti_cache_failure_mode = mode;
+		c->cache.impl = &e2e_jti_failure_cache;
+		ck_assert_int_eq(oidc_logout(r, c, session), OK);
+		c->cache.impl = old_impl;
+		e2e_jti_cache_failure_mode = 0;
+
+		/* the logout still ran to completion and cleared the sid index */
+		char *uuid = NULL;
+		oidc_cache_get_sid(r, sid, &uuid);
+		ck_assert_ptr_null(uuid);
+
+		oidc_session_free(r, session);
+	}
+}
+END_TEST
+
 /* an events claim without the back-channel logout member object is rejected */
 START_TEST(test_handle_logout_backchannel_events_wrong_member) {
 	request_rec *r = oidc_test_request_get();
@@ -6753,6 +6877,8 @@ int main(void) {
 	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch);
 	tcase_add_test(response, test_handle_response_authorization_redirect_state_mismatch_with_sso_url);
 	tcase_add_test(response, test_handle_response_authorization_post_non_post_method);
+	tcase_add_test(response, test_handle_response_authorization_post_duplicate_param);
+	tcase_add_test(response, test_handle_response_authorization_redirect_duplicate_param);
 	tcase_add_test(response, test_handle_response_authorization_post_only_response_mode_fragment);
 	tcase_add_test(response, test_handle_response_authorization_redirect_error_param);
 	tcase_add_test(response, test_handle_response_authorization_redirect_unknown_response_type);
@@ -6899,6 +7025,8 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_op_request_refresh_hint_fails);
 	tcase_add_test(logout, test_handle_logout_backchannel_garbage_token);
 	tcase_add_test(logout, test_handle_logout_backchannel_jti_replay);
+	tcase_add_test(logout, test_handle_logout_backchannel_duplicate_logout_token);
+	tcase_add_test(logout, test_handle_logout_backchannel_jti_cache_errors_fail_open);
 	tcase_add_test(logout, test_handle_logout_backchannel_events_wrong_member);
 
 	TCase *content = tcase_create("content");
