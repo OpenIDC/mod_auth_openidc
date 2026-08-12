@@ -764,7 +764,7 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 	apr_table_t *params = apr_table_make(r->pool, 8);
 	if (oidc_util_read_post_params_reject_dup(r, params, FALSE, NULL, OIDC_RESPONSE_NO_REPEAT) == FALSE) {
 		oidc_error(r, "something went wrong when reading the POST parameters");
-		return HTTP_INTERNAL_SERVER_ERROR;
+		return HTTP_BAD_REQUEST;
 	}
 
 	/* see if we've got any POST-ed data at all */

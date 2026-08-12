@@ -877,10 +877,10 @@ START_TEST(test_handle_response_authorization_post_non_post_method) {
 	oidc_session_load(r, &session);
 
 	/* M_GET is the test fixture default => oidc_util_read_post_params returns FALSE
-	 * => oidc_response_authorization_post short-circuits to HTTP_INTERNAL_SERVER_ERROR */
+	 * => oidc_response_authorization_post rejects the malformed request */
 	r->method_number = M_GET;
 	int rc = oidc_response_authorization_post(r, c, session);
-	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+	ck_assert_int_eq(rc, HTTP_BAD_REQUEST);
 
 	oidc_session_free(r, session);
 }
