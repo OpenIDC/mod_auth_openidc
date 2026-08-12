@@ -4,8 +4,10 @@
   in a bearer-token request body/query, "logout_token" in a back-channel logout - instead of
   silently taking the last value; generic form parsing and POST preservation keep last-wins
 - metadata: fail the JWKs forced-refresh throttle closed when its shared-cache lookup errors instead
-  of reading the error as "not throttled": during a cache outage that let every request carrying an
-  unknown "kid"/"x5t" drive a synchronous OP JWKs fetch and pin a worker thread
+  of reading the error as "not throttled", and stop a throttled or failed forced refresh from falling
+  through to a second unguarded fetch: during a cache outage that let every request carrying an
+  unknown "kid"/"x5t" drive a synchronous OP JWKs fetch and pin a worker thread. An ordinary initial
+  cache miss is still fetched normally (not throttled)
 - proto/handle: log a warning when the cache read or write behind nonce / logout-token "jti" replay
   detection returns an error, instead of silently ignoring it: the cache API distinguishes a miss
   from a backend error, and a backend error still fails open (accepts) as before, but is now visible

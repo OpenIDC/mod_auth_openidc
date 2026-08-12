@@ -125,14 +125,14 @@ apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oid
 
 /* record a forced-refresh attempt so the next one within the window is rate-limited; stamped before
  * the fetch rather than after it, so a jwks_uri that is down or slow is not retried per request */
-static void oidc_metadata_jwks_forced_refresh_stamp(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
+static apr_byte_t oidc_metadata_jwks_forced_refresh_stamp(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
 	const int interval = oidc_metadata_jwks_forced_refresh_interval(r);
 	/* with the guard disabled there is nothing to record: writing a marker that expires immediately
 	 * would still put an entry in the shared cache on every forced refresh */
 	if (interval == 0)
-		return;
-	oidc_cache_set_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), "1",
-			    apr_time_now() + apr_time_from_sec(interval));
+		return TRUE;
+	return oidc_cache_set_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), "1",
+				   apr_time_now() + apr_time_from_sec(interval));
 }
 
 /*
@@ -243,19 +243,28 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 				  int ssl_validate_server, oidc_json_t **j_jwks, apr_byte_t *refresh) {
 	char *value = NULL;
 	const char *url = jwks_uri->signed_uri ? jwks_uri->signed_uri : jwks_uri->uri;
+	/* a forced refresh that was throttled, could not be stamped, or already fetched-and-failed: the
+	 * fallback path below must not turn round and fetch again, which would defeat the rate limit */
+	apr_byte_t forced_refresh_attempted = FALSE;
 
 	oidc_debug(r, "enter, %sjwks_uri=%s, refresh=%d", jwks_uri->signed_uri ? "signed_" : "", url, *refresh);
 
 	/* see if we need to do a forced refresh */
 	if (*refresh == TRUE) {
 		if (oidc_metadata_jwks_forced_refresh_throttled(r, jwks_uri) == TRUE) {
+			forced_refresh_attempted = TRUE;
 			oidc_debug(r,
 				   "not refreshing the JWKs from URI \"%s\": a forced refresh was already "
 				   "attempted less than %d seconds ago",
 				   url, oidc_metadata_jwks_forced_refresh_interval(r));
 			// fall back to any cached JWKs
+		} else if (oidc_metadata_jwks_forced_refresh_stamp(r, jwks_uri) == FALSE) {
+			forced_refresh_attempted = TRUE;
+			oidc_warn(r, "not refreshing the JWKs from URI \"%s\": could not record the rate-limit marker",
+				  url);
+			// fall back to any cached JWKs
 		} else {
-			oidc_metadata_jwks_forced_refresh_stamp(r, jwks_uri);
+			forced_refresh_attempted = TRUE;
 			oidc_debug(r, "doing a forced refresh of the JWKs from URI \"%s\"", url);
 			if (oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, ssl_validate_server, j_jwks) ==
 			    TRUE)
@@ -272,6 +281,11 @@ apr_byte_t oidc_metadata_jwks_get(request_rec *r, oidc_cfg_t *cfg, const oidc_jw
 	}
 
 	if (value == NULL) {
+		/* a forced refresh that was throttled or already failed must not fall through into another
+		 * unguarded fetch. An ordinary initial cache miss (no forced refresh was requested) is not
+		 * throttled and still fetches normally. */
+		if (forced_refresh_attempted == TRUE)
+			return FALSE;
 		/* it is non-existing, invalid or expired: do a forced refresh */
 		*refresh = TRUE;
 		return oidc_metadata_jwks_retrieve_and_cache(r, cfg, jwks_uri, ssl_validate_server, j_jwks);
