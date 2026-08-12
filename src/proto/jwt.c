@@ -71,15 +71,22 @@ static apr_byte_t oidc_proto_validate_iat(request_rec *r, const oidc_jwt_t *jwt,
 		return TRUE;
 	}
 
+	/* bounded seconds for logging only: a JSON number can exceed apr_time_t, and "%f" of a huge value
+	 * reads uninitialised bytes in apr_vformatter; the comparisons below stay in the exact double domain */
+	apr_time_t iat = apr_time_sec(oidc_util_apr_time_from_sec(jwt->payload.iat));
+
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
 	if ((double)(now - slack) > jwt->payload.iat) {
-		oidc_error(r, "\"iat\" validation failure (%.0f): JWT was issued more than %d seconds ago",
-			   jwt->payload.iat, slack);
+		oidc_error(r,
+			   "\"iat\" validation failure (%" APR_TIME_T_FMT "): JWT was issued more than %d seconds ago",
+			   iat, slack);
 		return FALSE;
 	}
 	if ((double)(now + slack) < jwt->payload.iat) {
-		oidc_error(r, "\"iat\" validation failure (%.0f): JWT was issued more than %d seconds in the future",
-			   jwt->payload.iat, slack);
+		oidc_error(r,
+			   "\"iat\" validation failure (%" APR_TIME_T_FMT
+			   "): JWT was issued more than %d seconds in the future",
+			   iat, slack);
 		return FALSE;
 	}
 
@@ -108,10 +115,13 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, const oidc_jwt_t *jwt,
 		return FALSE;
 	}
 	/* compare in the double domain: an out-of-range JSON number ("exp":1e300) cast to apr_time_t is
-	 * undefined behaviour, and would otherwise let platform-specific wraparound decide validity */
+	 * undefined behaviour, and would otherwise let platform-specific wraparound decide validity; the
+	 * bounded seconds value is for logging only (see oidc_proto_validate_iat) */
+	apr_time_t exp = apr_time_sec(oidc_util_apr_time_from_sec(jwt->payload.exp));
 	if ((double)now > jwt->payload.exp) {
-		oidc_error(r, "\"%s\" validation failure (%.0f): JWT expired %.0f seconds ago", OIDC_CLAIM_EXP,
-			   jwt->payload.exp, (double)now - jwt->payload.exp);
+		oidc_error(
+		    r, "\"%s\" validation failure (%" APR_TIME_T_FMT "): JWT expired %" APR_TIME_T_FMT " seconds ago",
+		    OIDC_CLAIM_EXP, exp, now - exp);
 		return FALSE;
 	}
 

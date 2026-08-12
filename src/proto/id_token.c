@@ -461,9 +461,10 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 
 	/* log our results */
 
-	apr_rfc822_date(buf, oidc_util_apr_time_from_sec((*jwt)->payload.exp));
-	oidc_debug(r, "valid id_token for user \"%s\" expires: [%s], in %.0f secs from now)", (*jwt)->payload.sub, buf,
-		   (*jwt)->payload.exp - (double)apr_time_sec(apr_time_now()));
+	apr_time_t expires = oidc_util_apr_time_from_sec((*jwt)->payload.exp);
+	apr_rfc822_date(buf, expires);
+	oidc_debug(r, "valid id_token for user \"%s\" expires: [%s], in %" APR_TIME_T_FMT " secs from now)",
+		   (*jwt)->payload.sub, buf, apr_time_sec(expires) - apr_time_sec(apr_time_now()));
 
 	/* since we've made it so far, we may as well say it is a valid id_token */
 	return TRUE;
