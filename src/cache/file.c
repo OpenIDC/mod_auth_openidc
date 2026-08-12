@@ -237,7 +237,7 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 	}
 
 	/* allocate space for the actual value based on the data size info in the header (+1 for \0 termination) */
-	*value = apr_palloc(r->pool, info.len);
+	*value = apr_palloc(r->pool, info.len + 1);
 
 	/* (blocking) read the requested data in to the buffer */
 	rc = oidc_cache_file_read(r, path, fd, (void *)(*value), info.len);
@@ -247,6 +247,10 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 		oidc_error(r, "could not read cache value from \"%s\"", path);
 		goto error_close;
 	}
+
+	/* NUL-terminate: an entry this module wrote already ends in \0 within info.len, but a corrupt or
+	 * externally-planted cache file may not, and every caller treats the value as a C string */
+	(*value)[info.len] = '\0';
 
 	/* we're done, unlock and close the file */
 	apr_file_unlock(fd);

@@ -1,4 +1,6 @@
 08/12/2026
+- cache: NUL-terminate the file-cache value buffer (allocate len + 1) so a corrupt or externally
+  planted cache file whose data is not \0-terminated cannot make a caller over-read past it
 - util: reject a value that is not an importable, GCM-authenticated JWE in oidc_util_jwt_verify
   instead of passing it back verbatim as if it had been verified (fail-open hardening)
 
