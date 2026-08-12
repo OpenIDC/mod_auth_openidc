@@ -91,6 +91,9 @@ START_TEST(test_session_cache_roundtrip) {
 	z->expiry = apr_time_now() + apr_time_from_sec(3600);
 	oidc_session_set_issuer(r, z, "https://idp.example.com");
 	oidc_session_set_access_token(r, z, "AT-cache");
+	/* a post-2038 expiry must round-trip intact (regression for the old 32-bit narrowing) */
+	apr_time_t after_2038 = apr_time_from_sec((apr_time_t)INT_MAX + 86400);
+	oidc_session_set_session_expires(r, z, after_2038);
 	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
 
 	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
@@ -100,6 +103,7 @@ START_TEST(test_session_cache_roundtrip) {
 	ck_assert_str_eq(z2->remote_user, "alice@idp.example.com");
 	ck_assert_str_eq(oidc_session_get_issuer(r, z2), "https://idp.example.com");
 	ck_assert_str_eq(oidc_session_get_access_token(r, z2), "AT-cache");
+	ck_assert(oidc_session_get_session_expires(r, z2) == after_2038);
 
 	oidc_session_free(r, z);
 	oidc_session_free(r, z2);

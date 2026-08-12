@@ -25,6 +25,8 @@
  *
  **************************************************************************/
 
+#include "cache/cache.h"
+#include "cfg/cfg_int.h"
 #include "cfg/oauth.h"
 #include "cfg/provider.h"
 #include "check_util.h"
@@ -666,6 +668,92 @@ START_TEST(test_metadata_jwks_get_forced_refresh_throttled) {
 	ck_assert_str_eq(oidc_test_http_server_captured(srv, 1)->path, "/b");
 
 	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* A failed forced fetch is already covered by the marker written before the request. It must not
+ * immediately fall through to a second fetch, nor may the next unauthenticated request retry it. */
+START_TEST(test_metadata_jwks_get_failed_refresh_remains_throttled) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *jwks_body = "{\"keys\":[{\"kty\":\"oct\",\"kid\":\"unexpected-second-fetch\","
+				"\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}]}";
+	oidc_test_http_response_t resp[2] = {
+	    {.status_code = 500, .content_type = "text/plain", .body = "temporarily unavailable"},
+	    {.status_code = 200, .content_type = "application/json", .body = jwks_body}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resp, 2);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 60;
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+	ck_assert_ptr_null(j);
+
+	refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+	ck_assert_ptr_null(j);
+
+	/* Disable the guard explicitly to consume the server's second response. If either guarded call
+	 * above fetched twice, the first assertion would have returned this successful document instead. */
+	apr_table_set(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL", "0");
+	refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_test_jwks_first_kid(j), "unexpected-second-fetch");
+	oidc_json_decref(j);
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	apr_table_unset(r->subprocess_env, "OIDC_JWKS_FORCED_REFRESH_INTERVAL");
+	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+static int e2e_jwks_cache_failure_mode = 0;
+static int e2e_jwks_cache_set_calls = 0;
+
+static apr_byte_t e2e_jwks_cache_get(request_rec *r, const char *section, const char *key, char **value) {
+	*value = NULL;
+	return (e2e_jwks_cache_failure_mode == 1) ? FALSE : TRUE;
+}
+
+static apr_byte_t e2e_jwks_cache_set(request_rec *r, const char *section, const char *key, const char *value,
+				     apr_time_t expiry) {
+	e2e_jwks_cache_set_calls++;
+	return (e2e_jwks_cache_failure_mode == 2) ? FALSE : TRUE;
+}
+
+static oidc_cache_t e2e_jwks_failure_cache = {"jwks-failure",	  1,   NULL, NULL, e2e_jwks_cache_get,
+					      e2e_jwks_cache_set, NULL};
+
+/* a shared-cache error is not a miss: the forced-refresh guard reports "throttled" and the fetch it
+ * protects must not happen anyway through the fallback path */
+START_TEST(test_metadata_jwks_get_cache_errors_fail_closed) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_cache_t *old_impl = (oidc_cache_t *)c->cache.impl;
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = "http://127.0.0.1:9/jwks-must-not-be-fetched";
+	jwks_uri.refresh_interval = 60;
+	c->cache.impl = &e2e_jwks_failure_cache;
+
+	e2e_jwks_cache_failure_mode = 1;
+	ck_assert_int_eq(oidc_metadata_jwks_forced_refresh_throttled(r, &jwks_uri), TRUE);
+	oidc_json_t *j = NULL;
+	apr_byte_t refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+	ck_assert_ptr_null(j);
+
+	e2e_jwks_cache_failure_mode = 2;
+	e2e_jwks_cache_set_calls = 0;
+	refresh = TRUE;
+	ck_assert_int_eq(oidc_metadata_jwks_get(r, c, &jwks_uri, 0, &j, &refresh), FALSE);
+	ck_assert_ptr_null(j);
+	ck_assert_int_eq(e2e_jwks_cache_set_calls, 1);
+
+	c->cache.impl = old_impl;
+	e2e_jwks_cache_failure_mode = 0;
 }
 END_TEST
 
@@ -2451,6 +2539,8 @@ int main(void) {
 	tcase_add_test(retrieve, test_metadata_retrieve_invalid_metadata);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh_throttled);
+	tcase_add_test(retrieve, test_metadata_jwks_get_failed_refresh_remains_throttled);
+	tcase_add_test(retrieve, test_metadata_jwks_get_cache_errors_fail_closed);
 	tcase_add_test(retrieve, test_metadata_jwks_get_forced_refresh_interval_envvar);
 	tcase_add_test(retrieve, test_metadata_jwks_get_http_failure);
 	tcase_add_test(retrieve, test_metadata_jwks_get_cache_hit);

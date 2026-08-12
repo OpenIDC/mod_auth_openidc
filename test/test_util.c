@@ -1541,6 +1541,20 @@ START_TEST(test_util_read_form_encoded_params) {
 	ck_assert_table_str(t, "a", "1");
 	ck_assert_table_str(t, "b", "two words");
 	ck_assert_table_str(t, "c", "3");
+
+	/* arbitrary application fields keep the historical last-value-wins behaviour */
+	const char *const no_repeat[] = {OIDC_PROTO_STATE, OIDC_PROTO_CODE, NULL};
+	t = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_util_read_form_encoded_params_reject_dup(r, t, "color=red&color=blue", no_repeat), TRUE);
+	ck_assert_table_str(t, "color", "blue");
+
+	/* a selected protocol field must occur exactly once, even when the duplicate spelling is
+	 * percent-encoded (st%61te decodes to state) */
+	t = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_util_read_form_encoded_params_reject_dup(r, t, "state=good&st%61te=bad", no_repeat),
+			 FALSE);
+	t = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_util_read_form_encoded_params_reject_dup(r, t, "code=one&code=two", no_repeat), FALSE);
 }
 END_TEST
 
@@ -1716,6 +1730,13 @@ START_TEST(test_util_json_string_and_encode) {
 	json = NULL;
 	ck_assert_msg(oidc_json_decode_object_err(r, "{not json", &json, FALSE) == FALSE,
 		      "decode of invalid JSON must fail");
+	ck_assert_ptr_null(json);
+
+	/* suppressing the log must not change object validation semantics: a top-level array is
+	 * still not an object and must be rejected even with log_err == FALSE */
+	json = NULL;
+	ck_assert_msg(oidc_json_decode_object_err(r, "[1,2,3]", &json, FALSE) == FALSE,
+		      "decode of a non-object JSON value must fail even when logging is disabled");
 	ck_assert_ptr_null(json);
 }
 END_TEST

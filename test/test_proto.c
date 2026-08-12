@@ -217,6 +217,46 @@ START_TEST(test_proto_validate_nonce) {
 }
 END_TEST
 
+static int e2e_replay_cache_failure_mode = 0;
+
+static apr_byte_t e2e_replay_cache_get(request_rec *r, const char *section, const char *key, char **value) {
+	*value = NULL;
+	return (e2e_replay_cache_failure_mode == 1) ? FALSE : TRUE;
+}
+
+static apr_byte_t e2e_replay_cache_set(request_rec *r, const char *section, const char *key, const char *value,
+				       apr_time_t expiry) {
+	return (e2e_replay_cache_failure_mode == 2) ? FALSE : TRUE;
+}
+
+static oidc_cache_t e2e_replay_cache = {"replay-failure",     1,   NULL, NULL, e2e_replay_cache_get,
+					e2e_replay_cache_set, NULL};
+
+/* nonce replay detection fails OPEN: a cache read or write error is logged but must not break a
+ * login whose nonce is otherwise valid (the deliberate availability-over-strictness choice) */
+START_TEST(test_proto_validate_nonce_cache_errors_fail_open) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_cache_t *old_impl = (oidc_cache_t *)c->cache.impl;
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+
+	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_NONCE, oidc_json_string("cache-error-nonce"));
+	c->cache.impl = &e2e_replay_cache;
+
+	e2e_replay_cache_failure_mode = 1;
+	ck_assert_int_eq(oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), "cache-error-nonce", jwt),
+			 TRUE);
+
+	e2e_replay_cache_failure_mode = 2;
+	ck_assert_int_eq(oidc_proto_idtoken_validate_nonce(r, c, oidc_cfg_provider_get(c), "cache-error-nonce", jwt),
+			 TRUE);
+
+	c->cache.impl = old_impl;
+	e2e_replay_cache_failure_mode = 0;
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
 START_TEST(test_proto_validate_jwt) {
 	request_rec *r = oidc_test_request_get();
 
@@ -1024,6 +1064,20 @@ START_TEST(test_proto_jwt_validate_edge_cases) {
 	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
 	jwt->payload.iat = now - 7200;
 	jwt->payload.exp = now + 3600;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	oidc_jwt_destroy(jwt);
+
+	/* a JSON NumericDate can exceed every integer type: validation must compare it without an
+	 * out-of-range cast, and later conversion sites clamp it through oidc_util_apr_time_from_sec */
+	jwt = oidc_jwt_new(pool, TRUE, TRUE);
+	jwt->payload.iss = apr_pstrdup(pool, "https://idp.example.com");
+	jwt->payload.iat = now;
+	jwt->payload.exp = 1e300;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), TRUE);
+	jwt->payload.exp = -2;
+	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
+	jwt->payload.exp = 1e300;
+	jwt->payload.iat = 1e300;
 	ck_assert_int_eq(oidc_proto_jwt_validate(r, jwt, "https://idp.example.com", TRUE, TRUE, 10), FALSE);
 	oidc_jwt_destroy(jwt);
 }
@@ -4437,6 +4491,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_authorization_request);
 	tcase_add_test(core, test_logout_request);
 	tcase_add_test(core, test_proto_validate_nonce);
+	tcase_add_test(core, test_proto_validate_nonce_cache_errors_fail_open);
 	tcase_add_test(core, test_proto_validate_jwt);
 	tcase_add_test(core, test_proto_nonce_and_jti);
 	tcase_add_test(core, test_proto_supported_flows_and_check);
