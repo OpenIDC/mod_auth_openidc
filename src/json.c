@@ -318,15 +318,13 @@ apr_byte_t oidc_json_decode_object_err(request_rec *r, const char *str, oidc_jso
 	}
 
 	if (!oidc_json_is_object(*json)) {
-		/* oops, no JSON object */
-		if (log_err) {
+		/* a successfully parsed non-object (e.g. a top-level array) is still not a valid result here;
+		 * log_err controls only whether we log the rejection, not whether we reject */
+		if (log_err)
 			oidc_error(r, "parsed JSON did not contain a JSON object");
-			oidc_json_decref(*json);
-			*json = NULL;
-			return FALSE;
-		}
-
-		return TRUE;
+		oidc_json_decref(*json);
+		*json = NULL;
+		return FALSE;
 	}
 
 	return TRUE;

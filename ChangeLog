@@ -1,4 +1,8 @@
 08/12/2026
+- json: reject a successfully parsed non-object (e.g. a top-level array) from
+  oidc_json_decode_object_err even when logging is disabled: the log flag controlled rejection as
+  well, so a userinfo response that was a JSON array was accepted as claims instead of being
+  retried as a JWT
 - proto: saturate out-of-range JWT "exp"/"iat" timestamps instead of casting an arbitrary JSON
   number to apr_time_t (undefined behaviour): compare "exp" in the double domain and route session
   expiry through oidc_util_apr_time_from_sec, so a signed but far-future ("exp":1e300) token can no
