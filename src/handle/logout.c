@@ -431,7 +431,11 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 		return HTTP_BAD_REQUEST;
 	}
 
-	oidc_cache_get_jti(r, jti, &replay);
+	if (oidc_cache_get_jti(r, jti, &replay) == FALSE)
+		oidc_warn(r,
+			  "cache lookup for logout-token \"%s\" replay detection failed; a backend error is "
+			  "treated as \"not seen\", so replay protection is not enforced for this request",
+			  OIDC_CLAIM_JTI);
 	if (replay != NULL) {
 		oidc_error(r,
 			   "the \"%s\" value (%s) passed in logout token was found in the cache already; "
@@ -444,7 +448,11 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 	 */
 	jti_cache_duration = apr_time_from_sec(oidc_cfg_provider_idtoken_iat_slack_get(provider) * 2 + 10);
 	/* store it in the cache for the calculated duration */
-	oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration);
+	if (oidc_cache_set_jti(r, jti, jti, apr_time_now() + jti_cache_duration) == FALSE)
+		oidc_warn(r,
+			  "failed to store logout-token \"%s\" in the cache; a subsequent replay of this logout "
+			  "token may go undetected",
+			  OIDC_CLAIM_JTI);
 	return OK;
 }
 

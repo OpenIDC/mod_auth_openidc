@@ -58,7 +58,9 @@ apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, co
 
 	/* see if we have this nonce cached already */
 	char *replay = NULL;
-	oidc_cache_get_nonce(r, nonce, &replay);
+	if (oidc_cache_get_nonce(r, nonce, &replay) == FALSE)
+		oidc_warn(r, "cache lookup for nonce replay detection failed; a backend error is treated as "
+			     "\"not seen\", so replay protection is not enforced for this request");
 	if (replay != NULL) {
 		oidc_error(r,
 			   "the nonce value (%s) passed in the browser state was found in the cache already; possible "
@@ -90,7 +92,9 @@ apr_byte_t oidc_proto_idtoken_validate_nonce(request_rec *r, oidc_cfg_t *cfg, co
 	apr_time_t nonce_cache_duration = apr_time_from_sec(oidc_cfg_provider_idtoken_iat_slack_get(provider) * 2 + 10);
 
 	/* store it in the cache for the calculated duration */
-	oidc_cache_set_nonce(r, nonce, nonce, apr_time_now() + nonce_cache_duration);
+	if (oidc_cache_set_nonce(r, nonce, nonce, apr_time_now() + nonce_cache_duration) == FALSE)
+		oidc_warn(r, "failed to store nonce in the cache; a subsequent replay of this id_token may go "
+			     "undetected");
 
 	oidc_debug(r, "nonce \"%s\" validated successfully and is now cached for %" APR_TIME_T_FMT " seconds", nonce,
 		   apr_time_sec(nonce_cache_duration));
