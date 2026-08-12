@@ -112,8 +112,14 @@ apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oid
 	 * marker an earlier request may have left in the cache */
 	if (oidc_metadata_jwks_forced_refresh_interval(r) == 0)
 		return FALSE;
-	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), &value) == FALSE)
-		return FALSE;
+	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), &value) == FALSE) {
+		/* a cache backend error must not read as "not throttled": that would let every unknown-"kid"
+		 * request drive a synchronous OP JWKs fetch during a cache outage. Fail closed and rely on the
+		 * cached JWKs; a genuine key rollover still recovers once the shared cache is healthy again */
+		oidc_warn(r, "cache lookup for the JWKs forced-refresh throttle failed; treating the forced refresh "
+			     "as throttled");
+		return TRUE;
+	}
 	return (value != NULL);
 }
 
