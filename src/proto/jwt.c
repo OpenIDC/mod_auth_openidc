@@ -69,13 +69,13 @@ static apr_byte_t oidc_proto_validate_iat(request_rec *r, const oidc_jwt_t *jwt,
 
 	/* check if this id_token has been issued just now +- slack (default 10 minutes) */
 	if ((double)(now - slack) > jwt->payload.iat) {
-		oidc_error(r, "\"iat\" validation failure (%ld): JWT was issued more than %d seconds ago",
-			   (long)jwt->payload.iat, slack);
+		oidc_error(r, "\"iat\" validation failure (%.0f): JWT was issued more than %d seconds ago",
+			   jwt->payload.iat, slack);
 		return FALSE;
 	}
 	if ((double)(now + slack) < jwt->payload.iat) {
-		oidc_error(r, "\"iat\" validation failure (%ld): JWT was issued more than %d seconds in the future",
-			   (long)jwt->payload.iat, slack);
+		oidc_error(r, "\"iat\" validation failure (%.0f): JWT was issued more than %d seconds in the future",
+			   jwt->payload.iat, slack);
 		return FALSE;
 	}
 
@@ -99,11 +99,11 @@ static apr_byte_t oidc_proto_validate_exp(request_rec *r, const oidc_jwt_t *jwt,
 		return TRUE;
 	}
 
-	/* see if now is beyond the JWT expiry timestamp */
-	apr_time_t expires = (apr_time_t)jwt->payload.exp;
-	if (now > expires) {
-		oidc_error(r, "\"exp\" validation failure (%ld): JWT expired %ld seconds ago", (long)expires,
-			   (long)(now - expires));
+	/* compare in the double domain: an out-of-range JSON number ("exp":1e300) cast to apr_time_t is
+	 * undefined behaviour, and would otherwise let platform-specific wraparound decide validity */
+	if ((double)now > jwt->payload.exp) {
+		oidc_error(r, "\"%s\" validation failure (%.0f): JWT expired %.0f seconds ago", OIDC_CLAIM_EXP,
+			   jwt->payload.exp, (double)now - jwt->payload.exp);
 		return FALSE;
 	}
 

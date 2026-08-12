@@ -302,7 +302,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 	/* store max session duration in the session as a hard cut-off expiry timestamp */
 	apr_time_t session_expires =
 	    (oidc_cfg_provider_session_max_duration_get(provider) == 0)
-		? apr_time_from_sec(id_token_jwt->payload.exp)
+		? oidc_util_apr_time_from_sec(id_token_jwt->payload.exp)
 		: (apr_time_now() + apr_time_from_sec(oidc_cfg_provider_session_max_duration_get(provider)));
 	oidc_session_set_session_expires(r, session, session_expires);
 

@@ -1,4 +1,8 @@
 08/12/2026
+- proto: saturate out-of-range JWT "exp"/"iat" timestamps instead of casting an arbitrary JSON
+  number to apr_time_t (undefined behaviour): compare "exp" in the double domain and route session
+  expiry through oidc_util_apr_time_from_sec, so a signed but far-future ("exp":1e300) token can no
+  longer flip validity or wrap the stored expiry depending on the platform
 - cache: NUL-terminate the file-cache value buffer (allocate len + 1) so a corrupt or externally
   planted cache file whose data is not \0-terminated cannot make a caller over-read past it
 - util: reject a value that is not an importable, GCM-authenticated JWE in oidc_util_jwt_verify
