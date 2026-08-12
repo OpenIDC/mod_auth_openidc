@@ -746,6 +746,10 @@ end:
 	return rc;
 }
 
+/* specification-defined parameters that must not be repeated in an authorization response */
+static const char *const OIDC_RESPONSE_NO_REPEAT[] = {OIDC_PROTO_STATE, OIDC_PROTO_CODE, OIDC_PROTO_ACCESS_TOKEN,
+						      OIDC_PROTO_ID_TOKEN, NULL};
+
 /*
  * handle an OpenID Connect Authorization Response using the POST (+fragment->POST) response_mode
  */
@@ -758,7 +762,7 @@ int oidc_response_authorization_post(request_rec *r, oidc_cfg_t *c, oidc_session
 
 	/* read the parameters that are POST-ed to us */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
+	if (oidc_util_read_post_params_reject_dup(r, params, FALSE, NULL, OIDC_RESPONSE_NO_REPEAT) == FALSE) {
 		oidc_error(r, "something went wrong when reading the POST parameters");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -792,7 +796,8 @@ int oidc_response_authorization_redirect(request_rec *r, oidc_cfg_t *c, oidc_ses
 
 	/* read the parameters from the query string */
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	oidc_util_read_form_encoded_params(r, params, r->args);
+	if (oidc_util_read_form_encoded_params_reject_dup(r, params, r->args, OIDC_RESPONSE_NO_REPEAT) == FALSE)
+		return HTTP_BAD_REQUEST;
 
 	/* do the actual work */
 	return oidc_response_process(r, c, session, params, OIDC_PROTO_RESPONSE_MODE_QUERY);

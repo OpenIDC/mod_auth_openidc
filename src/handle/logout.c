@@ -327,9 +327,12 @@ int oidc_logout_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session, 
  */
 #define OIDC_EVENTS_BLOGOUT_KEY "http://schemas.openid.net/event/backchannel-logout"
 
+/* a back-channel logout request must not repeat the logout token */
+static const char *const OIDC_LOGOUT_NO_REPEAT[] = {OIDC_PROTO_LOGOUT_TOKEN, NULL};
+
 static int oidc_logout_backchannel_read_token(request_rec *r, const char **logout_token) {
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params, FALSE, NULL) == FALSE) {
+	if (oidc_util_read_post_params_reject_dup(r, params, FALSE, NULL, OIDC_LOGOUT_NO_REPEAT) == FALSE) {
 		oidc_error(r, "could not read POST-ed parameters to the logout endpoint");
 		return HTTP_BAD_REQUEST;
 	}

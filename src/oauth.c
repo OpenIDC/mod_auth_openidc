@@ -235,12 +235,16 @@ static const char *oidc_oauth_token_from_auth_header(request_rec *r, oidc_oauth_
 	return NULL;
 }
 
+/* RFC 6750 permits the access token in exactly one location, so reject a repeated one */
+static const char *const OIDC_OAUTH_NO_REPEAT[] = {OIDC_PROTO_ACCESS_TOKEN, NULL};
+
 /*
  * extract the bearer token from a POST body parameter
  */
 static const char *oidc_oauth_token_from_post(request_rec *r) {
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	if (oidc_util_read_post_params(r, params, TRUE, OIDC_PROTO_ACCESS_TOKEN) == FALSE)
+	if (oidc_util_read_post_params_reject_dup(r, params, TRUE, OIDC_PROTO_ACCESS_TOKEN, OIDC_OAUTH_NO_REPEAT) ==
+	    FALSE)
 		return NULL;
 	return apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 }
@@ -250,7 +254,8 @@ static const char *oidc_oauth_token_from_post(request_rec *r) {
  */
 static const char *oidc_oauth_token_from_query(request_rec *r) {
 	apr_table_t *params = apr_table_make(r->pool, 8);
-	oidc_util_read_form_encoded_params(r, params, r->args);
+	if (oidc_util_read_form_encoded_params_reject_dup(r, params, r->args, OIDC_OAUTH_NO_REPEAT) == FALSE)
+		return NULL;
 	return apr_table_get(params, OIDC_PROTO_ACCESS_TOKEN);
 }
 

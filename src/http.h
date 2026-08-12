@@ -171,8 +171,12 @@ int oidc_util_http_send(request_rec *r, const char *data, size_t data_len, const
 int oidc_util_http_content_prep(request_rec *r, const char *data, size_t data_len, const char *content_type);
 int oidc_util_http_content_send(request_rec *r);
 apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, const char *data);
+apr_byte_t oidc_util_read_form_encoded_params_reject_dup(request_rec *r, apr_table_t *table, const char *data,
+							 const char *const *no_repeat);
 apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
 				      const char *strip_param_name);
+apr_byte_t oidc_util_read_post_params_reject_dup(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+						 const char *strip_param_name, const char *const *no_repeat);
 char *oidc_http_query_encoded_url(request_rec *r, const char *url, const apr_table_t *params);
 char *oidc_http_form_encoded_data(request_rec *r, const apr_table_t *params);
 

@@ -1,4 +1,8 @@
 08/12/2026
+- handle/oauth/util: reject a duplicated security-critical protocol parameter at the endpoints that
+  consume it - "state"/"code"/"access_token"/"id_token" in an authorization response, "access_token"
+  in a bearer-token request body/query, "logout_token" in a back-channel logout - instead of
+  silently taking the last value; generic form parsing and POST preservation keep last-wins
 - metadata: fail the JWKs forced-refresh throttle closed when its shared-cache lookup errors instead
   of reading the error as "not throttled": during a cache outage that let every request carrying an
   unknown "kid"/"x5t" drive a synchronous OP JWKs fetch and pin a worker thread

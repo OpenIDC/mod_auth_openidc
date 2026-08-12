@@ -238,9 +238,24 @@ static apr_byte_t oidc_util_read(request_rec *r, char **rbuf) {
 }
 
 /*
- * read form-encoded parameters from a string in to a table
+ * TRUE when key is one of the NUL-terminated no_repeat parameter names (a NULL list matches nothing)
  */
-apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, const char *data) {
+static apr_byte_t oidc_util_param_must_not_repeat(const char *const *no_repeat, const char *key) {
+	if (no_repeat == NULL)
+		return FALSE;
+	for (const char *const *n = no_repeat; *n != NULL; n++)
+		if (_oidc_strcmp(*n, key) == 0)
+			return TRUE;
+	return FALSE;
+}
+
+/*
+ * read form-encoded parameters from a string in to a table; when no_repeat is non-NULL, fail if any
+ * parameter named in that list occurs more than once (protocol endpoints reject duplicated
+ * security-critical parameters; the generic parser and POST preservation keep last-wins semantics)
+ */
+static apr_byte_t oidc_util_read_form_encoded_params_impl(request_rec *r, apr_table_t *table, const char *data,
+							  const char *const *no_repeat) {
 	const char *key = NULL;
 	const char *val = NULL;
 	const char *p = data;
@@ -252,6 +267,10 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table
 		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
 		key = oidc_http_url_decode(r, key);
 		val = oidc_http_url_decode(r, val);
+		if (oidc_util_param_must_not_repeat(no_repeat, key) && (apr_table_get(table, key) != NULL)) {
+			oidc_error(r, "duplicate \"%s\" parameter is not allowed", key);
+			return FALSE;
+		}
 		/* this parses the front-channel authorization response and the back-channel logout
 		 * request, so the values include the authorization code and bare tokens */
 		oidc_debug(r, "read: %s=%s", key, oidc_http_param_is_sensitive(key) ? "***" : val);
@@ -262,6 +281,15 @@ apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table
 		   apr_table_elts(table)->nelts);
 
 	return TRUE;
+}
+
+apr_byte_t oidc_util_read_form_encoded_params(request_rec *r, apr_table_t *table, const char *data) {
+	return oidc_util_read_form_encoded_params_impl(r, table, data, NULL);
+}
+
+apr_byte_t oidc_util_read_form_encoded_params_reject_dup(request_rec *r, apr_table_t *table, const char *data,
+							 const char *const *no_repeat) {
+	return oidc_util_read_form_encoded_params_impl(r, table, data, no_repeat);
 }
 
 static void oidc_util_userdata_set_post_param(request_rec *r, const char *post_param_name,
@@ -277,8 +305,8 @@ static void oidc_util_userdata_set_post_param(request_rec *r, const char *post_p
 /*
  * read the POST parameters in to a table
  */
-apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
-				      const char *strip_param_name) {
+static apr_byte_t oidc_util_read_post_params_impl(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+						  const char *strip_param_name, const char *const *no_repeat) {
 	apr_byte_t rc = FALSE;
 	char *data = NULL;
 	const apr_array_header_t *arr = NULL;
@@ -295,7 +323,7 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_by
 	if (oidc_util_read(r, &data) != TRUE)
 		goto end;
 
-	rc = oidc_util_read_form_encoded_params(r, table, data);
+	rc = oidc_util_read_form_encoded_params_impl(r, table, data, no_repeat);
 	if (rc != TRUE)
 		goto end;
 
@@ -311,6 +339,16 @@ apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_by
 end:
 
 	return rc;
+}
+
+apr_byte_t oidc_util_read_post_params(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+				      const char *strip_param_name) {
+	return oidc_util_read_post_params_impl(r, table, propagate, strip_param_name, NULL);
+}
+
+apr_byte_t oidc_util_read_post_params_reject_dup(request_rec *r, apr_table_t *table, apr_byte_t propagate,
+						 const char *strip_param_name, const char *const *no_repeat) {
+	return oidc_util_read_post_params_impl(r, table, propagate, strip_param_name, no_repeat);
 }
 
 /*
