@@ -236,10 +236,10 @@ static apr_byte_t oidc_jose_parse_payload(apr_pool_t *pool, const char *s_payloa
 	oidc_jose_get_string(pool, payload->value.json, OIDC_JOSE_JWT_ISS, FALSE, &payload->iss, NULL);
 
 	/* get the (optional) "exp" value from the JSON payload */
-	oidc_jose_get_timestamp(pool, payload->value.json, OIDC_JOSE_JWT_EXP, FALSE, &payload->exp, NULL);
+	oidc_jose_get_timestamp(payload->value.json, OIDC_JOSE_JWT_EXP, FALSE, &payload->exp, NULL);
 
 	/* get the (optional) "iat" value from the JSON payload */
-	oidc_jose_get_timestamp(pool, payload->value.json, OIDC_JOSE_JWT_IAT, FALSE, &payload->iat, NULL);
+	oidc_jose_get_timestamp(payload->value.json, OIDC_JOSE_JWT_IAT, FALSE, &payload->iat, NULL);
 
 	/* get the (optional) "sub" value from the JSON payload */
 	oidc_jose_get_string(pool, payload->value.json, OIDC_JOSE_JWT_SUB, FALSE, &payload->sub, NULL);

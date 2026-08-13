@@ -530,8 +530,8 @@ static const char *oidc_cfg_parse_key_alg_prefix(apr_pool_t *pool, const char *t
 		if ((*c == OIDC_KEY_TUPLE_SEPARATOR[0]) || (*c == OIDC_CHAR_FORWARD_SLASH))
 			return tuple;
 	char *candidate = apr_pstrndup(pool, tuple, at - tuple);
-	for (char *tok = apr_strtok(apr_pstrdup(pool, candidate), OIDC_KEY_ALG_LIST_SEPARATOR, &last); tok != NULL;
-	     tok = apr_strtok(NULL, OIDC_KEY_ALG_LIST_SEPARATOR, &last), n++)
+	for (const char *tok = apr_strtok(apr_pstrdup(pool, candidate), OIDC_KEY_ALG_LIST_SEPARATOR, &last);
+	     tok != NULL; tok = apr_strtok(NULL, OIDC_KEY_ALG_LIST_SEPARATOR, &last), n++)
 		if (oidc_cfg_parse_key_alg_is_known(tok) == FALSE)
 			return tuple;
 	if (n == 0)

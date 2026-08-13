@@ -151,12 +151,12 @@ START_TEST(test_jose_get_string_and_timestamps) {
 		      "get string should have failed for missing mandatory key");
 
 	double ts = 0;
-	ck_assert_msg(oidc_jose_get_timestamp(pool, j, "t1", TRUE, &ts, &err) == TRUE,
+	ck_assert_msg(oidc_jose_get_timestamp(j, "t1", TRUE, &ts, &err) == TRUE,
 		      "get timestamp failed for existing key");
 	ck_assert_msg(ts == 4.5, "unexpected value");
 
 	double ts2 = 0;
-	ck_assert_msg(oidc_jose_get_timestamp(pool, j, "tsmissing", TRUE, &ts2, &err) == FALSE,
+	ck_assert_msg(oidc_jose_get_timestamp(j, "tsmissing", TRUE, &ts2, &err) == FALSE,
 		      "get timestamp should have failed for missing mandatory key");
 
 	oidc_json_decref(j);
