@@ -66,12 +66,16 @@ cd test && ./fuzz_url crash-file          # one input per file
 
 ## Adding a target
 
-1. Write `fuzz_<name>.c` implementing `LLVMFuzzerTestOneInput`; create a
+1. Write `fuzz_<name>.c` implementing `LLVMFuzzerTestOneInput` plus the
+   `LLVMFuzzerInitialize` one-time-setup hook (copy the pattern from an
+   existing target — the fixture init must run there, pre-forkserver, not
+   lazily in the first input call; see the note in `fuzz.h`); create a
    per-input subpool from `oidc_test_pool_get()` and free it each call (free any
    non-pooled results — `json_decref`, `oidc_jwt_destroy`, ...).
 2. Add `fuzz_<name>` to `oidc_fuzz_targets` and a `fuzz_<name>_SOURCES` line in
    `test/Makefile.am`, and a `replay` line in `run-fuzzers.sh`.
-3. Drop a few seed inputs in `corpus/<name>/`.
-4. Add `/fuzz_<name>` to `test/.gitignore` (it lists each built binary
+3. Add `<name>` to the target list in `oss-fuzz-build.sh` and `build.sh`.
+4. Drop a few seed inputs in `corpus/<name>/`.
+5. Add `/fuzz_<name>` to `test/.gitignore` (it lists each built binary
    individually rather than by a glob) so the standalone binary `make check`
    produces does not show up as untracked.

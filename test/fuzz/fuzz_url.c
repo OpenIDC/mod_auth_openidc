@@ -23,11 +23,20 @@
 
 static int g_ready = 0;
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+/* engine-called one-time init, pre-forkserver on AFL++: see fuzz.h */
+int LLVMFuzzerInitialize(int *argc, char ***argv) {
+	(void)argc;
+	(void)argv;
 	if (!g_ready) {
 		oidc_test_setup();
 		g_ready = 1;
 	}
+	return 0;
+}
+
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+	if (!g_ready)
+		LLVMFuzzerInitialize(NULL, NULL);
 
 	apr_pool_t *pool = NULL;
 	apr_pool_create(&pool, oidc_test_pool_get());

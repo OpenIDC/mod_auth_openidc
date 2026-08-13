@@ -83,6 +83,12 @@ export CFLAGS="$CFLAGS -fno-lto"
 	--with-apxs=/usr/bin/apxs \
 	--without-jq --without-hiredis \
 	--disable-shared
+# An engine/sanitizer switch over a locally mounted tree (helper.py
+# build_fuzzers with a source path) leaves objects compiled with the previous
+# run's flags, which make considers up to date and links into the new targets
+# (undefined __afl_area_ptr and the like). Start clean; this is a no-op in the
+# pristine OSS-Fuzz container.
+make -C src clean >/dev/null 2>&1 || true
 make -C src libauth_openidc.la -j"$(nproc)"
 
 lib="$root/src/.libs/libauth_openidc.a"
@@ -103,7 +109,7 @@ libs="$prefix/lib/libcjose.a $prefix/lib/libjansson.a \
       $(pkg-config --libs apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8) \
       -lz -lm -lrt -lpthread"
 
-for t in base64 url jwt json; do
+for t in base64 url jwt json cookie response_header form_params; do
 	src="$root/test/fuzz/fuzz_$t.c"
 	[[ -f "$src" ]] || continue
 	echo "=== building fuzz_$t"
@@ -127,7 +133,7 @@ done
 # this is worth doing first is that it is what makes check_build pass at all.
 # ---------------------------------------------------------------------------
 mkdir -p "$OUT/lib"
-for t in base64 url jwt json; do
+for t in base64 url jwt json cookie response_header form_params; do
 	[[ -f "$OUT/fuzz_$t" ]] || continue
 	ldd "$OUT/fuzz_$t" | awk '/=> \//{print $3}'
 done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc_s|ld-linux)[.-]' \
@@ -139,7 +145,7 @@ done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc
 # fuzz_url additionally gets the curated open-redirect payload list, one input
 # per file -- the same 834 payloads test_handle.c asserts are all rejected.
 # ---------------------------------------------------------------------------
-for t in base64 url jwt json; do
+for t in base64 url jwt json cookie response_header form_params; do
 	seed="$WORK/seed_$t"
 	rm -rf "$seed" && mkdir -p "$seed"
 	cp "$root"/test/fuzz/corpus/"$t"/* "$seed"/ 2>/dev/null || true
