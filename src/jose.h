@@ -92,12 +92,7 @@ typedef struct bio_st BIO;
 /* the OIDC jwks fields from RFC 5741 */
 #define OIDC_JOSE_JWKS_KEYS_STR "keys" // Array of JWKs
 
-/*
- * JOSE header parameter names, algorithm/encryption values and key types, kept independent of the backend
- * JOSE library so that nothing outside jose.c, the jose/ subdirectory and util/key.c needs to reference cjose;
- * the key-type values are kept identical to the cjose enum (asserted at compile time in jose/internal.h) so no
- * boundary translation is needed
- */
+/* Backend-independent JOSE names and values. Key types match cjose and are compile-time asserted. */
 #define OIDC_JOSE_HDR_ALG "alg"
 #define OIDC_JOSE_HDR_ENC "enc"
 #define OIDC_JOSE_HDR_KID "kid"

@@ -163,13 +163,7 @@ START_TEST(test_jose_get_string_and_timestamps) {
 }
 END_TEST
 
-/*
- * a payload carries no marker saying how it was compressed, and the choice is made both at compile
- * time and at runtime, so decompression decides from the payload rather than from how this build
- * happens to be configured. That is what lets a build with compression read one written without it
- * -- a mixed-version cluster on one cache, or an operator toggling
- * OIDC_JWT_INTERNAL_NO_COMPRESS under traffic.
- */
+/* Decompression must recognize uncompressed payloads regardless of the local write setting. */
 START_TEST(test_jose_uncompress_detects_uncompressed) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -201,13 +195,7 @@ START_TEST(test_jose_uncompress_detects_uncompressed) {
 }
 END_TEST
 
-/*
- * cache values are arbitrary strings and may start with one of the two-character prefixes that
- * satisfy the zlib header heuristic ("80", "8n", "HK", ...) while never having been compressed:
- * such a value must come back unaltered, not be declared compressed and lost - regardless of
- * whether inflate() happens to emit a few literal bytes before rejecting it (a fixed-Huffman
- * continuation does) or this build has no zlib at all
- */
+/* Raw cache values that resemble a zlib header must pass through unchanged. */
 START_TEST(test_jose_uncompress_zlib_lookalike_passes_through) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -271,9 +259,7 @@ END_TEST
 
 #ifdef USE_LIBBROTLI
 
-/* a fixed multiple of the input size as the output buffer caps the compression ratio a payload
- * may have: the old 4 * input_len buffer made any payload that compressed better than 4:1
- * unreadable, and large repetitive JSON claim sets compress far better than that */
+/* Highly compressible payloads must not be limited by a fixed input/output ratio. */
 START_TEST(test_jose_uncompress_brotli_high_ratio) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -299,16 +285,7 @@ END_TEST
 
 #if defined(USE_ZLIB) && !defined(USE_LIBBROTLI)
 
-/*
- * the inflate output buffer starts at one chunk and grows as the payload turns out to be
- * bigger, up to a hard cap that exists so that a decompression bomb cannot be inflated
- * indefinitely. Both the growing and the refusal at the cap went untested; the cap in
- * particular is the interesting one, since nothing else in the module bounds the output.
- *
- * Guarded on the zlib build without brotli: oidc_jose_compress produces brotli when brotli
- * is configured, and the zlib inflate path (the one with the cap) is only reached for a
- * payload that is actually zlib-framed.
- */
+/* Exercise zlib buffer growth and the decompression cap when Brotli is not selected. */
 START_TEST(test_jose_uncompress_grows_beyond_one_chunk) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -354,12 +331,7 @@ START_TEST(test_jose_uncompress_refuses_beyond_the_cap) {
 }
 END_TEST
 
-/*
- * a real zlib stream that is cut short inflates some output and then fails: that partial output
- * must not make the failure fatal (a false positive on the header heuristic can produce partial
- * output too), so the bytes pass through and it is the JSON parse after us that rejects them -
- * the same net result, arrived at without sacrificing raw values that merely look zlib-framed
- */
+/* A truncated zlib stream may emit bytes before failing but must still use the passthrough path. */
 START_TEST(test_jose_uncompress_truncated_stream_passes_through) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
@@ -601,9 +573,7 @@ START_TEST(test_jwt_verify_kty_mismatch) {
 	jwt->header.kid = apr_pstrdup(pool, "k1");
 	ck_assert_msg(oidc_jwt_sign(pool, jwt, sym, FALSE, &err) == TRUE, "oidc_jwt_sign failed");
 
-	/* a key under the matching kid, but of the wrong type for HS256/oct -- kty is checked as
-	 * defense in depth against key/algorithm confusion, not merely whether some key was found
-	 * under that name; only .kty is set since a mismatch is caught before the key is ever used */
+	/* A matching kid with the wrong kty must fail before key use. */
 	oidc_jwk_t *wrong_type = apr_pcalloc(pool, sizeof(oidc_jwk_t));
 	wrong_type->kty = CJOSE_JWK_KTY_RSA;
 

@@ -53,12 +53,7 @@
 /* JSON object key for the value that holds the refresh token's refresh timestamp */
 #define OIDC_REFRESH_TIMESTAMP "ts"
 
-/*
- * time-to-live (seconds) for the lock that prevents parallel callers to execute
- * a refresh grant for the same refresh token; this also presents the maximum time
- * that callers will be blocked, waiting for another process to finish the refresh
- * and populate the cache with the results
- */
+/* Refresh lock lifetime and maximum wait for another caller's result. */
 #define OIDC_REFRESH_LOCK_TTL 5
 
 /*
@@ -176,22 +171,8 @@ static oidc_refresh_token_cache_result_t oidc_refresh_token_cache_get(request_re
 		goto no_cache_found;
 
 	/*
-	 * wait for the "other" caller to populate the refresh token response cache results; bound the
-	 * wait to the lock TTL - by which time the lock entry will have expired anyway - so a cache
-	 * backend that does not expire entries promptly cannot stall the request indefinitely
-	 *
-	 * NB: the mutex is dropped around the sleep. It is created with global == TRUE
-	 * (oidc_cfg_refresh_mutex_get), i.e. a cross-process apr_global_mutex shared by every httpd
-	 * child, and it is not per-token - so holding it here would block every refresh anywhere on
-	 * this machine behind this one waiter for up to the full bounded wait, when all this thread
-	 * is doing is polling for someone else's result. oidc_cache_redis_exec() drops its mutex
-	 * around its retry sleep for the same reason.
-	 *
-	 * What the mutex protects is the read-then-set-the-lock sequence below: the cache read on
-	 * entry, or the last one in this loop, must not be separated from the
-	 * oidc_cache_set_refresh_token() under "no_cache_found" by another caller doing the same.
-	 * Re-acquiring before the read at the end of each iteration keeps that pair atomic, so the
-	 * "only one refresh per machine" property this lock exists for is unaffected.
+	 * Poll only until the lock TTL. Release the global mutex while sleeping, then reacquire it
+	 * before reading so the final read and lock claim remain atomic.
 	 */
 	int retries = OIDC_REFRESH_LOCK_TTL * 2;
 	while ((retries-- > 0) && (s_json != NULL) && (_oidc_strcmp(s_json, OIDC_REFRESH_LOCK_VALUE) == 0)) {
@@ -239,16 +220,7 @@ no_cache_found:
 
 	oidc_debug(r, "locking cache and refreshing %s...", oidc_util_mask_value(r, refresh_token));
 
-	/*
-	 * best-effort distributed locking during our upcoming refresh grant execution
-	 *
-	 * note that a small chance/race-condition remains that in a parallel request on
-	 * another server in the same cluster another process just did the same in between
-	 * i.e. calling oidc_cache_get_refresh_token (on entry) and calling
-	 * oidc_cache_set_refresh_token (on exit) hereafter
-	 *
-	 * a process lock (refresh_mutex) in the calling function prevents this at least on the same machine
-	 */
+	/* Best-effort cluster lock; refresh_mutex closes the read/set race only on this machine. */
 	oidc_cache_set_refresh_token(r, refresh_token, OIDC_REFRESH_LOCK_VALUE,
 				     apr_time_now() + apr_time_from_sec(OIDC_REFRESH_LOCK_TTL));
 
@@ -288,12 +260,7 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
 					     expires_in, s_refresh_token, s_scope) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_REFRESH_ERROR);
 		oidc_error(r, "access_token could not be refreshed");
-		/*
-		 * our own refresh grant failed; in a clustered and/or rolling-refresh-token setup this most likely
-		 * means another caller already spent (and rotated) this exact refresh token successfully, so before
-		 * locking the token out do a final best-effort re-read of the cache and re-use those results if they
-		 * got populated in the meantime, rather than needlessly killing the session
-		 */
+		/* Another caller may have rotated the token; recheck its cached result before locking it out. */
 		char *s_recovered = NULL;
 		oidc_cache_get_refresh_token(r, refresh_token, &s_recovered);
 		if ((s_recovered != NULL) && (_oidc_strcmp(s_recovered, OIDC_REFRESH_LOCK_VALUE) != 0) &&
@@ -321,12 +288,8 @@ static apr_byte_t oidc_refresh_token_grant_obtain_tokens(request_rec *r, oidc_cf
 }
 
 /*
- * OpenID Connect Core 1.0 section 12.2 requires the "sub" claim in an id_token obtained from a
- * refresh grant to represent the same end-user as the one in the id_token that was issued at
- * authentication time: refuse a refreshed id_token that would silently move an established
- * session to a different subject. When no earlier claims are on record - the session was
- * established without an id_token, or storing its claims was turned off - there is nothing to
- * compare against and the check does not apply
+ * OIDC Core 12.2 requires a refreshed ID token to retain the original subject. Skip the check
+ * only when the session has no earlier ID-token claims.
  */
 static apr_byte_t oidc_refresh_token_grant_id_token_sub_match(request_rec *r, const oidc_session_t *session,
 							      const oidc_jwt_t *jwt) {
@@ -361,13 +324,8 @@ static void oidc_refresh_token_grant_apply_id_token(request_rec *r, oidc_cfg_t *
 	oidc_jwt_t *id_token_jwt = NULL;
 
 	/*
-	 * validate the refreshed id_token just like the one obtained at authentication time: section 12.2 of
-	 * OpenID Connect Core 1.0 requires it to be validated according to section 3.1.3.7, which is what
-	 * oidc_proto_idtoken_parse implements - decryption, signature verification and the "iss"/"aud"/"azp"/
-	 * "exp"/"iat" payload checks - including the exception that section 3.1.3.7 item 6 makes for an
-	 * unsigned id_token obtained over the TLS-protected back-channel; a refresh response is such a
-	 * back-channel response, hence is_code_flow=TRUE. There is no nonce to check here: the nonce belongs
-	 * to the authentication request, not to a refresh
+	 * Validate as a TLS-protected back-channel ID token. Refreshes have no nonce because the nonce
+	 * belongs to the original authentication request.
 	 */
 	if (oidc_proto_idtoken_parse(r, c, provider, s_id_token, NULL, &id_token_jwt, TRUE) == FALSE) {
 		oidc_warn(r, "refreshed id_token could not be validated, retaining the claims obtained earlier");

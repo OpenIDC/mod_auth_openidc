@@ -109,13 +109,7 @@ static int oidc_cache_memcache_add_server_impl(server_rec *s, apr_pool_t *p, oid
 	return OK;
 }
 
-/*
- * validate the configuration, allocate the memcache struct and compute the connection-pool sizes
- *
- * this does not add any servers and therefore does not open a connection, so it can be exercised
- * offline; the actual (connecting) server setup is done in oidc_cache_memcache_add_servers through
- * the injectable context->add_server operation
- */
+/* Validate and allocate without connecting; add_servers performs injectable network setup later. */
 int oidc_cache_memcache_post_config(apr_pool_t *pool, server_rec *s, oidc_cfg_t *cfg) {
 
 	if (cfg->cache.cfg != NULL)

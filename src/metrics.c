@@ -123,9 +123,7 @@ typedef struct oidc_metrics_t {
 static apr_shm_t *_oidc_metrics_cache = NULL;
 // flag to record if we are a parent process or a child process
 static apr_byte_t _oidc_metrics_is_parent = FALSE;
-/* flag to signal the metrics write thread to exit; accessed from the flush thread and from the
- * cleanup/child-init paths, so use apr_atomic_* to enforce visibility across threads (without this,
- * LTO is free to hoist the load out of the polling loop and shutdown stalls) */
+/* Atomic stop flag shared by the flush, cleanup, and child-init paths. */
 static volatile apr_uint32_t _oidc_metrics_thread_exit = 0;
 // mutex to protect the shared memory storage
 static oidc_cache_mutex_t *_oidc_metrics_global_mutex = NULL;
@@ -816,9 +814,7 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
 	if (oidc_cache_mutex_child_init(p, s, _oidc_metrics_process_mutex) != APR_SUCCESS)
 		return APR_EGENERAL;
 
-	/* if a flush thread already exists in this process (e.g. unit tests calling post_config and
-	 * child_init without forking) shut it down before overwriting the handle; after a real fork the
-	 * pid differs and the parent's thread didn't carry over, so the stale handle is just discarded */
+	/* Stop an existing same-process flush thread; discard inherited handles after a fork. */
 	if (_oidc_metrics_thread != NULL && _oidc_metrics_thread_pid == getpid()) {
 		apr_atomic_set32(&_oidc_metrics_thread_exit, 1);
 		apr_thread_join(&rv, _oidc_metrics_thread);

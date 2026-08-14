@@ -57,11 +57,7 @@
 
 #include "jose.h"
 
-/*
- * jose.c is the cjose seam: cjose's public API is defined in terms of the JSON backend's value
- * type (jansson's json_t, identical to oidc_json_t), so this is the one translation unit besides
- * json.c that includes the backend header directly and uses the raw json_* API
- */
+/* cjose exposes the backend JSON type, so this file is the only raw JSON user outside json.c. */
 #include <jansson.h>
 
 #include <cjose/cjose.h>
@@ -267,12 +263,7 @@ static apr_byte_t oidc_jose_brotli_compress(apr_pool_t *pool, const char *input,
 	return TRUE;
 }
 
-/*
- * inflate using libbrotli: streamed into a buffer that grows by doubling up to the bomb cap,
- * because a fixed multiple of the input size caps the compression ratio a payload may have -
- * the old 4 * input_len buffer made any (real, valid) payload that compressed better than 4:1
- * unreadable, and the one-shot API cannot tell that apart from corruption
- */
+/* Stream Brotli output into a doubling buffer so valid high-ratio payloads fit below the bomb cap. */
 static apr_byte_t oidc_jose_brotli_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output,
 					      int *output_len, oidc_jose_error_t *err) {
 	apr_byte_t rv = FALSE;
@@ -344,11 +335,10 @@ static apr_byte_t oidc_jose_zlib_compress(apr_pool_t *pool, const char *input, i
 	zlib.next_in = (Bytef *)input;
 	zlib.avail_in = input_len;
 
-	/* the inputs here are small internal payloads (state/session cookies, cache values of at
-	 * most a few (dozen) KB): a 4KB window (windowBits 12) and modest memLevel cut the ~256KB
-	 * of per-call zlib allocations by an order of magnitude and the default level compresses
-	 * such short JSON inputs within a few percent of Z_BEST_COMPRESSION at a fraction of the
-	 * cost; zlib streams are self-describing so any inflate side decodes them unchanged */
+	/*
+	 * Small window and memory settings avoid oversized allocations for short payloads. The zlib
+	 * header records the window size, so the default inflate path remains compatible.
+	 */
 	status = deflateInit2(&zlib, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 12, 5, Z_DEFAULT_STRATEGY);
 	if (status != Z_OK) {
 		oidc_jose_error(err, "deflateInit2() failed: %d", status);
@@ -412,11 +402,7 @@ static apr_byte_t oidc_jose_zlib_uncompress(apr_pool_t *pool, const char *input,
 	}
 
 	while (status == Z_OK) {
-		/* NB: grow by doubling, not by a fixed chunk. The old buffer cannot be handed back to
-		 * the pool, so a fixed chunk made the output buffer cost quadratic in its own size:
-		 * inflating up to the OIDC_CJOSE_UNCOMPRESS_MAX cap took ~1280 rounds and left 6.25GB
-		 * of dead buffers behind in the pool, which is exactly the outcome that cap exists to
-		 * prevent. Doubling reaches the same cap in ~11 rounds and under 30MB. */
+		/* Double pooled buffers; fixed growth retains old allocations and becomes quadratic. */
 		if (zlib.total_out >= len) {
 			if (len >= OIDC_CJOSE_UNCOMPRESS_MAX) {
 				*capped = TRUE;
@@ -470,14 +456,7 @@ apr_byte_t oidc_jose_compress(apr_pool_t *pool, const char *input, int input_len
 #endif
 }
 
-/*
- * whether a buffer carries a zlib stream, from its two-byte header (RFC 1950 2.2): the low nibble
- * of CMF is the compression method, 8 for deflate, and CMF*256+FLG must be a multiple of 31.
- *
- * The only other thing these payloads are ever set to is the JSON this module serialized, which
- * cannot satisfy that: '{' is 0x7b, whose low nibble is 11 rather than 8. Leading whitespace is
- * likewise excluded (space is 0x20, tab 0x09).
- */
+/* Recognize a possible zlib stream from its RFC 1950 header; callers handle false positives. */
 static apr_byte_t oidc_jose_is_zlib(const char *input, int input_len) {
 	const unsigned char *b = (const unsigned char *)input;
 	if ((input == NULL) || (input_len < 2))
@@ -488,55 +467,29 @@ static apr_byte_t oidc_jose_is_zlib(const char *input, int input_len) {
 }
 
 /*
- * decompress a payload, deciding from the payload itself rather than from how this build happens
- * to be configured.
- *
- * The compressed form carries no marker saying which algorithm produced it, and the choice is made
- * both at compile time (brotli / zlib / neither) and at runtime (OIDC_JWT_INTERNAL_NO_COMPRESS), so
- * assuming the local setting is wrong in exactly the cases that matter: a mixed-version cluster
- * sharing a cache, or an operator toggling that variable under running traffic. Assuming produced a
- * failed decompress, then a JSON parse error, then a discarded session and a silent re-login, with
- * nothing naming the cause.
- *
- * Detecting instead makes an uncompressed payload readable by a build with compression enabled and
- * vice versa. What detection cannot repair is a zlib payload arriving at a build without zlib -- the
- * bytes cannot be inflated without the library - but that at least reports what happened.
+ * Detect compression from the payload so caches remain readable across build or configuration
+ * changes. A build without zlib still cannot decode a zlib payload.
  */
 apr_byte_t oidc_jose_uncompress(apr_pool_t *pool, const char *input, int input_len, char **output, int *output_len,
 				oidc_jose_error_t *err) {
 
 	if (oidc_jose_is_zlib(input, input_len)) {
 #ifdef USE_ZLIB
-		/* the two-byte test is a heuristic and has false positives: 19 printable two-character
-		 * prefixes satisfy it ("x ", "H,", "80", "X(", "h$", ...). Session and state payloads are
-		 * JSON and cannot, but cache values reach this same path and are arbitrary strings, so a
-		 * cached value starting with one of those would be declared compressed and then lost.
-		 * Nor can inflate() settle it: a false positive whose next bits happen to select a
-		 * fixed-Huffman block emits literal bytes before the stream turns invalid, so partial
-		 * output proves nothing. Only the decompression-bomb cap fails hard - megabytes of valid
-		 * inflate output do not come out of a value that merely started with two zlib-shaped
-		 * bytes - and every other rejection falls through to the passthrough below, where a
-		 * payload that really was a (corrupt) zlib stream fails the JSON parse after us instead:
-		 * the same net result, without sacrificing the false positives. */
+		/*
+		 * The zlib header test has false positives for arbitrary cache values. Treat inflate
+		 * errors as uncompressed input; only the decompression-size cap is a hard failure.
+		 */
 		apr_byte_t capped = FALSE;
 		if (oidc_jose_zlib_uncompress(pool, input, input_len, output, output_len, &capped, err) == TRUE)
 			return TRUE;
 		if (capped == TRUE)
 			return FALSE;
 #endif
-		/* without zlib in this build the heuristic cannot be settled at all - and this build
-		 * never wrote zlib itself, so it passes through rather than fails: a genuinely zlib
-		 * payload written by another build still fails the JSON parse after us, as it did
-		 * before the detection existed */
+		/* Without zlib support, pass possible zlib input through for downstream validation. */
 	}
 
 #ifdef USE_LIBBROTLI
-	/* brotli has no header to recognize, so try it first: it is what this build writes. A failed
-	 * decode is not corruption - the input came out of a decrypted JWE or a JWS this module
-	 * signed - but a payload that was never compressed: written under
-	 * OIDC_JWT_INTERNAL_NO_COMPRESS, or by a writer built without brotli. Fall through to the
-	 * passthrough a build without compression support always applied; if the bytes really are
-	 * garbage the JSON parse after us rejects them, with the same net result as failing here. */
+	/* Brotli has no header; a failed decode may simply mean the payload is uncompressed. */
 	if (oidc_jose_brotli_uncompress(pool, input, input_len, output, output_len, err) == TRUE)
 		return TRUE;
 #endif
@@ -618,12 +571,7 @@ end:
 	return rv;
 }
 
-/*
- * map a JOSE signing algorithm to its SHA-2 family: the OpenSSL digest name and the hash
- * length both derive from this single table so the two mappings cannot go out of sync;
- * the table is function-local because the CJOSE_HDR_ALG_* values are extern pointers,
- * not compile-time constants
- */
+/* Map JOSE algorithms to digest name and length together; cjose names are not constant expressions. */
 static apr_byte_t _oidc_jose_alg_to_sha2(const char *alg, const char **openssl_digest, int *hash_len) {
 	const struct {
 		const char *algs[4];

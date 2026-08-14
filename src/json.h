@@ -52,16 +52,8 @@
 #include <stddef.h>
 
 /*
- * JSON backend abstraction layer.
- *
- * Nothing outside json.c references the JSON backend library (currently libjansson) directly:
- * the rest of the module only ever sees the opaque oidc_json_t type, the oidc_json_* functions
- * and the OIDC_JSON_* constants declared in this header. The one place that binds the abstraction
- * to a concrete backend is the typedef below (whose struct tag is the backend's value-struct tag)
- * plus the translations in json.c, so swapping the backend is a matter of changing this header and
- * reimplementing json.c. The single exception is jose.c, the cjose seam: cjose's public API is
- * itself defined in terms of the backend's value type, so jose.c includes the backend header
- * directly and relies on oidc_json_t being identical to the backend value type.
+ * JSON backend abstraction. Only json.c uses the backend API directly; jose.c is the exception
+ * because cjose exposes the backend value type in its public API.
  */
 typedef struct json_t oidc_json_t;
 

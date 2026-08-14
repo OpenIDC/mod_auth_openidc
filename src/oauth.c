@@ -80,13 +80,8 @@ apr_byte_t oidc_oauth_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg
 }
 
 /*
- * obtain the OAuth 2.0 configuration settings, possibly by retrieving the metadata document
- *
- * returns the config to use for the rest of the request: the shared config unchanged when no
- * metadata URL is configured (or on a retrieve/parse failure), or a per-request view whose oauth
- * struct carries the metadata-derived endpoints. The metadata is deliberately parsed into a private
- * per-request copy rather than into the shared, process-lifetime server config, which would be a
- * cross-request use-after-free / data race under threaded MPMs (the strings are request-pool-scoped).
+ * Return the shared configuration or a request-scoped copy containing metadata endpoints.
+ * Request-pool strings must never be stored in the shared server configuration.
  */
 static oidc_cfg_t *oidc_oauth_provider_config(request_rec *r, oidc_cfg_t *c) {
 
@@ -313,13 +308,8 @@ apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token
 #define OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS 60
 
 /*
- * parse the (custom/configurable) token expiry claim from an introspection result or from the payload of a
- * locally validated JWT access token and bound the cache entry by it
- *
- * NB: FALSE is returned only when the claim is mandatory and absent or malformed, and the two callers act on
- *     that differently: the introspection path rejects the token outright, whereas the JWT access token path
- *     passes expiry_claim_is_mandatory = FALSE and therefore never sees it. When TRUE is returned and the
- *     claim was absent or unusable, *cache_until is left untouched, so the caller's default applies.
+ * Bound the cache entry by the configured expiry claim. Missing or nonnumeric mandatory claims
+ * fail; optional unusable claims and nonpositive numeric claims leave the default unchanged.
  */
 static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_cfg_t *c,
 							  const oidc_json_t *introspection_response,
@@ -359,10 +349,7 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 		return TRUE;
 	}
 
-	/* whole seconds: truncating a NumericDate expires the entry no later than the claim allows.
-	 * NB: kept as a double up to oidc_util_apr_time_from_sec, which clamps before converting: a JSON
-	 *     number can hold a value no integer type can, and converting one that does not fit is
-	 *     undefined rather than merely inaccurate */
+	/* Truncate to expire no later than the claim; clamp the double before converting it. */
 	double value = oidc_json_number_value(expiry);
 	if (!(value > 0)) {
 		oidc_warn(r,
@@ -673,12 +660,8 @@ static apr_byte_t oidc_oauth_validate_jwt_iss(request_rec *r, const oidc_cfg_t *
 }
 
 /*
- * validate the claims of a JWT access token that bind it to this resource server (RFC 9068
- * section 4)
- *
- * NB: applied to freshly verified tokens as well as to claims served from the validation cache:
- *     that cache is keyed on the token and the crypto passphrase, so vhosts that inherit the same
- *     OIDCCryptoPassphrase share entries even when they bind to a different audience/issuer
+ * Validate RFC 9068 resource-server claims even on cache hits, which may be shared by vhosts
+ * with different audience or issuer settings.
  */
 static apr_byte_t oidc_oauth_validate_jwt_claims(request_rec *r, const oidc_cfg_t *c, const oidc_json_t *claims) {
 	if (oidc_oauth_validate_jwt_iss(r, c, claims) == FALSE)
@@ -709,13 +692,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	apr_hash_t *decrypt_keys = NULL;
 	oidc_json_t *cached = NULL;
 
-	/*
-	 * a JWT access token is self-contained: its validation outcome cannot change until it
-	 * expires, so serve the claims of a previously validated instance from the cache and skip
-	 * the per-request decryption-key setup and signature verification; the cache respects
-	 * OIDCOAuthTokenIntrospectionInterval: -1 disables caching and a value > 0 additionally
-	 * bounds how long a validation result may be reused (e.g. to pick up JWKs key rotation)
-	 */
+	/* Reuse cached validation until token expiry or the configured introspection interval. */
 	oidc_oauth_get_cached_access_token(r, c, access_token, &cached);
 	if (cached != NULL) {
 		if (oidc_oauth_validate_jwt_claims(r, c, cached) == FALSE) {
@@ -751,12 +728,8 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	oidc_debug(r, "successfully parsed JWT with header: %s", jwt->header.value.str);
 
 	/*
-	 * validate the access token JWT by validating the exp claim, which is required: a JWT access
-	 * token without an expiry would be accepted forever (RFC 9068 section 4)
-	 * don't enforce anything around iat since it doesn't make much sense for access tokens
-	 * NB: "iss" is passed as NULL here and validated together with "aud" after the signature has
-	 *     been verified, so that neither claim is acted upon before the token is known to be
-	 *     authentic, and both are applied on the cache-hit path as well
+	 * RFC 9068 requires exp. Validate iss and aud after signature verification, including on
+	 * cache hits; iat is not enforced for access tokens.
 	 */
 	if (oidc_proto_jwt_validate(r, jwt, NULL, TRUE, FALSE, -1) == FALSE) {
 		oidc_jwt_destroy(jwt);

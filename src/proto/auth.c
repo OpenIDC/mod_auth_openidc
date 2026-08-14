@@ -255,12 +255,8 @@ end:
 }
 
 /*
- * add the configured token endpoint authentication method to the request (or return it in the *_auth_str parameters)
- *
- * NB: this must stay idempotent in the sense that calling it again on the same params table replaces
- * the credentials it added before instead of adding a 2nd copy: a caller that retries a request
- * (see the DPoP nonce retry in oidc_proto_token_endpoint_request) calls it once per attempt so that
- * a client assertion gets a fresh jti/exp; use apr_table_set(n) and never apr_table_add(n) here
+ * Keep this idempotent: retries rebuild the authentication data to obtain a fresh client
+ * assertion, so credentials must replace earlier values rather than create duplicates.
  */
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *token_endpoint_auth_alg, const char *client_id,

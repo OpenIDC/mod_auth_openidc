@@ -47,27 +47,9 @@
 #include "util/util.h"
 
 /*
- * add extra authentication request parameters (global or per-path) to the authorization request
- *
- * Every parameter this module owns has already been put in the table by the caller, so a key
- * that is present here is a collision with one of those. Sending it twice is not allowed
- * (RFC 6749 3.1) and leaves it to the provider which one wins, so:
- *
- *  - a configured value (OIDCAuthRequestParams, provider metadata) is the operator's, and
- *    replaces ours rather than being sent alongside it
- *  - a value that came in on the request is not, and is dropped: otherwise a link could add a
- *    second redirect_uri, prompt or max_age and rely on the provider preferring it
- *
- * A "#" value means "forward the same-named parameter from the current request", so its value
- * is request-supplied whatever the source of the directive - the operator opted into
- * forwarding that parameter, not into letting a request override one of ours.
- *
- * A key repeating *within* the directive itself, or across the configured and the
- * per-path/dynamic directive, is not a collision with anything we own: some parameters are
- * legitimately sent more than once (RFC 8707 "resource"), so every occurrence after the first
- * is added alongside it. The caller passes the same "added" table to both directive
- * invocations, so that only a key which predates them both - a module-owned one, the ones the
- * guard exists for - trips it.
+ * Configured extras may replace module-owned parameters; request-supplied values, including
+ * "#" forwards, may not. One shared "added" table distinguishes both directives' parameters
+ * from module-owned ones, allowing repeats such as RFC 8707 "resource" across either directive.
  */
 static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, apr_table_t *added,
 					       const char *auth_request_params, apr_byte_t configured) {
@@ -175,10 +157,10 @@ int oidc_proto_request_auth_push(request_rec *r, oidc_cfg_t *cfg, const struct o
 	apr_table_clear(params);
 	apr_table_setn(params, OIDC_PROTO_CLIENT_ID, oidc_cfg_provider_client_id_get(provider));
 	apr_table_setn(params, OIDC_PROTO_REQUEST_URI, request_uri);
-	/* OpenID Connect Core 1.0 incorporating errata set 2 requires scope=openid alongside a request_uri
-	 * - overriding RFC 9126 §4, which would otherwise restrict the redirect to client_id and
-	 * request_uri only - whereas FAPI 2.0 §5.3.3.2 mandates that restriction, so the parameter is
-	 * added only when the profile in use asks for it */
+	/*
+	 * OIDC requires scope=openid beside request_uri; FAPI 2.0 restricts the request to
+	 * client_id and request_uri.
+	 */
 	scope = oidc_proto_profile_request_uri_scope_get(provider);
 	if (scope != NULL)
 		apr_table_setn(params, OIDC_PROTO_SCOPE, scope);

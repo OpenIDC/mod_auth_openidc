@@ -47,12 +47,8 @@
 #include "proto/proto.h"
 
 /*
- * single source of truth for the simple pointer-merged and int-merged members of oidc_oauth_t:
- * the struct declaration, oidc_cfg_oauth_create and oidc_cfg_oauth_merge are all generated from
- * this list, so a member can no longer be added to the struct but forgotten in create or merge.
- * PTR(type, name) merges "add wins when non-NULL"; INT(name) merges on OIDC_CONFIG_POS_INT_UNSET.
- * Members with grouped or special create/merge semantics are listed separately below the macro
- * expansion and handled by hand in all three places.
+ * Generate the declaration, initialization, and merge logic for simple OAuth members. Members
+ * with special ownership or merge rules remain explicit below.
  */
 #define OIDC_OAUTH_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                        \
 	PTR(char *, metadata_url)                                                                                      \
@@ -392,12 +388,7 @@ oidc_oauth_t *oidc_cfg_oauth_create(apr_pool_t *pool) {
 	return o;
 }
 
-/*
- * shallow per-request copy: the returned struct is a byte copy of src, so every member still points
- * at src's (process-lifetime) allocations. It exists so a request can overwrite the few
- * metadata-derived endpoint members (via the setters) without mutating the shared server config; the
- * caller must not free src's members through it. See oidc_cfg_request_view().
- */
+/* Shallow request copy for endpoint overrides; members still belong to the shared source. */
 oidc_oauth_t *oidc_cfg_oauth_shallow_copy(apr_pool_t *pool, const oidc_oauth_t *src) {
 	return apr_pmemdup(pool, src, sizeof(*src));
 }

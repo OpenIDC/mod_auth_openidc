@@ -512,13 +512,8 @@ static apr_byte_t oidc_cfg_parse_key_alg_is_known(const char *alg) {
 }
 
 /*
- * detect and strip a leading "<alg>[+<alg>...]@" list from a key tuple: on a match, duplicate the algorithm
- * list into *alg (from pool) and return the tuple advanced past the "@"; otherwise return the tuple unchanged.
- * a kid or a (server-root-relative, so possibly slash-less) filename may itself contain '@'
- * ("key@example.org#/path/key.pem", "cert@2024.pem"), so the candidate segment is only read as an
- * algorithm list when it holds no kid ('#') or path ('/') character AND every "+"-separated token
- * names a known algorithm exactly; anything else stays kid/filename data as it was before the
- * prefix syntax existed.
+ * Treat text before @ as an algorithm list only when every token is known and no kid/path
+ * separator occurs; otherwise @ remains part of the key ID or filename.
  */
 static const char *oidc_cfg_parse_key_alg_prefix(apr_pool_t *pool, const char *tuple, char **alg) {
 	const char *at = _oidc_strstr(tuple, OIDC_KEY_ALG_SEPARATOR);
@@ -659,12 +654,8 @@ static const char *oidc_cfg_parse_pem_key(apr_pool_t *pool, apr_byte_t is_privat
 }
 
 /*
- * add the public or private key from a PEM/X.509 file to our list of JWKs
- *
- * The tuple is [<use>:][<alg>[+<alg>...]@][<kid>#]<filename>. When more than one "alg" is supplied the
- * same key is loaded once per algorithm, each duplicate published (and, for private keys, indexed for
- * decryption) under a distinct, alg-derived "kid" so an OP can select a specific key-management algorithm
- * from the JWKs (see RFC 7517 section 4.4). Without an "alg" the behaviour is unchanged (single key).
+ * Parse [<use>:][<alg>[+<alg>...]@][<kid>#]<filename>. Multiple algorithms publish the key once
+ * per algorithm with distinct derived key IDs; no algorithm produces one key.
  */
 static const char *oidc_cfg_parse_key_files(apr_pool_t *pool, const char *arg, apr_array_header_t **keys,
 					    apr_byte_t is_private) {

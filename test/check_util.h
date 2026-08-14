@@ -90,15 +90,7 @@
 #define ck_assert_mem_eq(X, Y, L) ck_assert_msg(memcmp((X), (Y), (L)) == 0, "Assertion '%s' failed", #X " == " #Y)
 #endif
 
-/*
- * domain-specific assertions for the libcheck tests
- *
- * The module passes claims and metadata to the request as apr_table entries
- * (headers, subprocess_env, ...), so the tests check those constantly. These
- * wrap the apr_table_get + ck_assert pattern and, unlike a bare
- * ck_assert_str_eq(apr_table_get(...), ...), fail cleanly with the key name
- * instead of dereferencing NULL when the entry is absent.
- */
+/* apr_table assertions that report a missing key instead of dereferencing NULL. */
 
 /* assert that table entry KEY is present and equals EXPECTED */
 #define ck_assert_table_str(tbl, key, expected)                                                                        \

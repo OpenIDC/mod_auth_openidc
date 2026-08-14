@@ -113,17 +113,8 @@ static apr_byte_t oidc_cache_mutex_global_create(apr_pool_t *pool, server_rec *s
 	    ;
 
 	/*
-	 * create the mutex lock on the provided pool (typically pconf, per-config-generation)
-	 *
-	 * NB: libapr registers its own regular pool cleanup for the underlying POSIX semaphore when it
-	 * is created here; relying on that cleanup for teardown used to cause a sem_post "invalid read"
-	 * and a parent-process segfault on graceful restarts, because our own oidc_cache_shm_destroy()
-	 * (which unlocks and destroys this mutex) then ran after libapr had already closed and unmapped
-	 * the semaphore. That is now ordered correctly: oidc_cfg_server_cleanup() -- which drives the
-	 * cache destroy -- is registered as a *pre*-cleanup on this same pool (see oidc_cfg_server_alloc()
-	 * in cfg/cfg.c), so it always runs before libapr's regular semaphore cleanup. Do not weaken that
-	 * to a regular cleanup registration, or allocate this mutex on a longer-lived pool to paper over
-	 * the ordering: both reintroduce the graceful-restart crash / cross-generation leak.
+	 * The server pre-cleanup must destroy this mutex before APR's regular cleanup tears down its
+	 * semaphore. Changing that order can crash graceful restarts.
 	 */
 	rv = apr_global_mutex_create(&m->gmutex, (const char *)m->mutex_filename, mech, pool);
 
@@ -275,12 +266,7 @@ static inline apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *p
 	return oidc_util_jwt_create(r, passphrase, plaintext, result);
 }
 
-/*
- * AES GCM decrypt using the crypto passphrase (or, when retrying a cache-key lookup after
- * passphrase rollover, the previous passphrase) as symmetric key; reuses the precomputed
- * derived key material from cfg_passphrase (see oidc_cfg_crypto_passphrase_derive_keys())
- * for whichever slot was used, rather than re-deriving it from the raw secret string
- */
+/* AES-GCM decrypt with the current or previous passphrase's precomputed key. */
 static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
 						   const oidc_crypto_passphrase_t *cfg_passphrase,
 						   apr_byte_t use_secondary, char **plaintext) {
@@ -470,14 +456,7 @@ end:
 	return rc;
 }
 
-/*
- * the registry of compiled-in cache backends
- *
- * this is the single place a backend has to be listed: the directive parser derives both the
- * set of accepted OIDCCacheType values and the name -> implementation lookup from it, so adding
- * a backend (in particular on a downstream branch) is one line here plus the extern in cache.h,
- * rather than an entry in a parallel options[] array and a branch in an if/else chain
- */
+/* Registry used for both OIDCCacheType validation and backend lookup. */
 // clang-format off
 static oidc_cache_t *const oidc_cache_backends[] = {
 	&oidc_cache_shm,

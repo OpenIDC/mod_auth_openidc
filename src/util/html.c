@@ -161,14 +161,7 @@ int oidc_util_html_send(request_rec *r, const char *title, const char *html_head
 	    "  </body>\n"
 	    "</html>\n";
 
-	/*
-	 * on_load is rendered as the value of an HTML onload="..." attribute. The
-	 * caller is expected to pass trusted JavaScript (a function call literal),
-	 * but HTML-escape it as defense-in-depth: HTML entities in attribute
-	 * values are decoded by the browser before the JS is executed, so
-	 * legitimate values keep working while a stray quote can't break out of
-	 * the attribute into the surrounding markup.
-	 */
+	/* Escape trusted onload JavaScript so a stray quote cannot break out of the attribute. */
 	const char *html = apr_psprintf(
 	    r->pool, html_tmpl, title ? oidc_util_html_escape(r->pool, title) : "", html_head ? html_head : "",
 	    on_load ? apr_psprintf(r->pool, " onload=\"%s\"", oidc_util_html_escape(r->pool, on_load)) : "",
@@ -290,14 +283,8 @@ int oidc_util_html_send_in_template(request_rec *r, const char *filename, char *
 }
 
 /*
- * report a user-facing error by setting the OIDC_ERROR/OIDC_ERROR_DESC environment variables and
- * returning the HTTP status code, so a custom error page configured with Apache's ErrorDocument
- * directive can present the details (they surface as REDIRECT_OIDC_ERROR/REDIRECT_OIDC_ERROR_DESC
- * after Apache's internal ErrorDocument redirect).
- *
- * NB: the values are set unescaped and may (partly) derive from request input; an ErrorDocument
- * page or template that renders them into HTML MUST HTML-escape them, or it introduces a
- * cross-site-scripting vector into the error page (see also the note in auth_openidc.conf).
+ * Expose error details to ErrorDocument through OIDC_ERROR and OIDC_ERROR_DESC. The values may
+ * contain request input and must be HTML-escaped before rendering.
  */
 int oidc_util_html_send_error(request_rec *r, const char *error, const char *description, int status_code) {
 

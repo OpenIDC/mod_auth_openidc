@@ -59,14 +59,7 @@ static int oidc_util_char_to_env(int c) {
 	return apr_isalnum(c) ? apr_toupper(c) : '_';
 }
 
-/*
- * compare two strings based on how they would be converted to an
- * environment variable, as per oidc_char_to_env. If len is specified
- * as less than zero, then the full strings will be compared. Returns
- * less than, equal to, or greater than zero based on whether the
- * first argument's conversion to an environment variable is less
- * than, equal to, or greater than the second.
- */
+/* Compare strings after oidc_char_to_env conversion; a negative len compares the full strings. */
 int oidc_util_strnenvcmp(const char *a, const char *b, int len) {
 	int d = 0;
 	int i = 0;
@@ -249,11 +242,7 @@ static apr_byte_t oidc_util_param_must_not_repeat(const char *const *no_repeat, 
 	return FALSE;
 }
 
-/*
- * read form-encoded parameters from a string in to a table; when no_repeat is non-NULL, fail if any
- * parameter named in that list occurs more than once (protocol endpoints reject duplicated
- * security-critical parameters; the generic parser and POST preservation keep last-wins semantics)
- */
+/* Parse form parameters, optionally rejecting repeated names from no_repeat. */
 static apr_byte_t oidc_util_read_form_encoded_params_impl(request_rec *r, apr_table_t *table, const char *data,
 							  const char *const *no_repeat) {
 	const char *key = NULL;
@@ -653,16 +642,8 @@ void oidc_util_apr_hash_clear(apr_hash_t *ht) {
 #define OIDC_UTIL_APR_TIME_SEC_MAX (APR_INT64_MAX / APR_USEC_PER_SEC)
 
 /*
- * convert a number of seconds - typically a JWT "exp"/"iat", which RFC 7519 section 2 defines as a
- * JSON number and so reaches us as a double - into an apr_time_t, saturating instead of wrapping
- *
- * Two things go wrong without this. Converting a double to an integer type is undefined once the
- * value falls outside that type's range, which a JSON number trivially exceeds ("exp":1e300).
- * And apr_time_from_sec multiplies by a million, so anything past OIDC_UTIL_APR_TIME_SEC_MAX wraps
- * int64 - typically into a negative, i.e. already-expired, timestamp, which turns a far-future
- * expiry into an immediate one.
- *
- * A negative or non-finite input yields 0.
+ * Convert seconds to apr_time_t without undefined casts or overflow in apr_time_from_sec().
+ * Negative and non-finite values become 0; values above the APR range saturate.
  */
 apr_time_t oidc_util_apr_time_from_sec(double seconds) {
 	/* NB: also catches NaN, which compares false against everything */

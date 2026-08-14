@@ -427,11 +427,7 @@ static char *oidc_proto_request_object_create(request_rec *r, oidc_cfg_t *cfg, c
 
 	/* see if we need to encrypt the request object */
 	if (jwe->header.alg != NULL) {
-		/* the encrypted payload is itself a JWT (the signed - or "none" - request
-		 * object), so mark the JWE as a Nested JWT per RFC 7519 section 5.2:
-		 * "cty":"JWT" tells the OP to re-parse the decrypted plaintext as a JWS
-		 * rather than as a bare JSON claims set (e.g. Keycloak otherwise rejects
-		 * it with "Failed to deserialize JWT") */
+		/* Mark the encrypted request object as a nested JWT so the OP parses its plaintext as a JWS. */
 		jwe->header.cty = apr_pstrdup(r->pool, "JWT");
 		serialized_request_object =
 		    oidc_proto_request_object_encrypt(r, cfg, provider, jwe, cser, request_object->header.alg);

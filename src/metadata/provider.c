@@ -244,11 +244,7 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	if (j_cache != NULL)
 		oidc_json_decref(j_cache);
 
-	/* since it is valid, write the obtained provider metadata file; when only the disk write
-	 * fails - the atomic tmp-file-plus-rename needs create/delete permission on the metadata
-	 * directory, which a setup with pre-provisioned writable files inside a non-writable
-	 * directory does not grant - that must not fail what is otherwise a completed, validated
-	 * retrieval: serve the in-memory result and let a next request try the write again */
+	/* A cache-file write failure does not invalidate successfully retrieved metadata. */
 	if (oidc_util_file_write(r, provider_path, response) == FALSE)
 		oidc_warn(
 		    r,
@@ -259,15 +255,8 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 }
 
 /*
- * read an endpoint URL out of the provider metadata, preferring the RFC 8705 section 5
- * "mtls_endpoint_aliases" entry when `j_aliases` is non-NULL (i.e. when mutual-TLS applies to this
- * provider) and it carries `key`
- *
- * NB: falling back to the conventional endpoint is right when the aliases object does not mention
- *     `key` - section 5 aliases only the endpoints it lists - but not when it does and the value is
- *     unusable: the request would then go to the endpoint that does not bind the access token to the
- *     TLS client certificate, which is the very thing the alias exists to arrange, and it would do
- *     so silently. Report that as an error instead.
+ * Prefer an RFC 8705 mTLS alias when present. A missing alias may fall back to the conventional
+ * endpoint; an invalid configured alias must fail rather than silently lose certificate binding.
  */
 static apr_byte_t oidc_metadata_provider_parse_url_mtls(request_rec *r, const oidc_provider_t *provider,
 							const oidc_json_t *j_provider, const oidc_json_t *j_aliases,
@@ -314,15 +303,7 @@ static apr_byte_t oidc_metadata_provider_parse_url_mtls(request_rec *r, const oi
 #define OIDC_METADATA_PROVIDER_PARSE_URL(j_provider, key, member)                                                      \
 	OIDC_METADATA_PROVIDER_PARSE_URL_MTLS(j_provider, NULL, key, member)
 
-/*
- * RFC 8705: decide whether the mutual-TLS behaviour applies to this provider, i.e. whether to
- * prefer its "mtls_endpoint_aliases" endpoints and to request certificate-bound access tokens
- *
- * NB: the settings this depends on are read off the provider struct, which carries the per-OP ones
- *     by now: the single OIDCProviderMetadataURL setup copies the directives into it and the
- *     OIDCMetadataDir setup has oidc_metadata_conf_parse_pre_provider() apply the .conf metadata
- *     they can be set in; the token endpoint authentication method has been resolved just above
- */
+/* Apply RFC 8705 behavior using the resolved per-provider settings. */
 static apr_byte_t oidc_metadata_provider_cert_bound_tokens_enabled(request_rec *r, oidc_cfg_t *cfg,
 								   const oidc_json_t *j_provider,
 								   const oidc_provider_t *provider) {
@@ -331,9 +312,7 @@ static apr_byte_t oidc_metadata_provider_cert_bound_tokens_enabled(request_rec *
 			    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL);
 	oidc_cert_bound_tokens_t mode = oidc_cfg_provider_cert_bound_tokens_get(provider);
 
-	/* "auto" is also what the getter returns for an unset value, so fall back to the global setting
-	 * and then to the profile, which can strengthen it (FAPI 2.0 implies "on"; the OIDC 1.0 profile
-	 * hands the configured value back, leaving "auto" to be decided on the provider metadata) */
+	/* Resolve auto through the global setting and profile before consulting provider metadata. */
 	if (mode == OIDC_CERT_BOUND_TOKENS_AUTO)
 		mode = oidc_cfg_provider_cert_bound_tokens_get(oidc_cfg_provider_get(cfg));
 	if (mode == OIDC_CERT_BOUND_TOKENS_AUTO)
@@ -394,10 +373,7 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const o
 			oidc_error(r, "oidc_provider_token_endpoint_auth_set: %s", rv);
 	}
 
-	/* RFC 8705: settle whether the mutual-TLS behaviour applies to this provider and record the
-	 * outcome on the provider struct, so that requesting certificate-bound access tokens on client
-	 * registration (section 6.1, in metadata/client.c, which has no provider metadata at hand)
-	 * cannot disagree with the endpoint selection made here (section 5) */
+	/* Record the RFC 8705 decision so endpoint selection and client registration stay consistent. */
 	if (oidc_metadata_provider_cert_bound_tokens_enabled(r, cfg, j_provider, provider) == TRUE) {
 		oidc_cfg_provider_cert_bound_tokens_int_set(provider, OIDC_CERT_BOUND_TOKENS_ON);
 		j_aliases = oidc_metadata_mtls_endpoint_aliases_get(j_provider);

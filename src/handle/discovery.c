@@ -152,12 +152,7 @@ static const char *oidc_discovery_page_providers(request_rec *r, const oidc_cfg_
 
 		const char *issuer = APR_ARRAY_IDX(arr, i, const char *);
 
-		/* NB: the redirect URI is the one part of this href that is not URL-encoded on the
-		 * way in, and a relative OIDCRedirectURI resolves it against the current request's
-		 * host - so HTML-escape it before it lands in an attribute. The remaining values are
-		 * either module-controlled or passed through oidc_http_url_encode(), which
-		 * percent-encodes everything outside the RFC 3986 unreserved set. Escaping the whole
-		 * href instead would double-encode the "&amp;" separators written here deliberately. */
+		/* Escape the unencoded redirect URI only; escaping the full href would double-encode &amp;. */
 		char *href = apr_psprintf(r->pool, "%s?%s=%s&amp;%s=%s&amp;%s=%s&amp;%s=%s",
 					  oidc_util_html_escape(r->pool, oidc_util_url_redirect_uri(r, cfg)),
 					  OIDC_DISC_OP_PARAM, oidc_http_url_encode(r, issuer), OIDC_DISC_RT_PARAM,
@@ -617,14 +612,7 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	/* do CSRF protection if not 3rd party initiated SSO */
 	apr_byte_t csrf_valid = oidc_discovery_response_csrf_check(r, c);
 
-	/*
-	 * "scopes" and "auth_request_params" shape the authorization request, and they are ours:
-	 * they are documented as values that come back from the Discovery page we rendered, which
-	 * is what a valid CSRF token proves. csrf_valid is FALSE both for 3rd-party initiated SSO
-	 * (no cookie) and for a failed check, and in neither case did these values come from us -
-	 * honouring them would let any cross-site link pick the scopes, or add authorization
-	 * request parameters, for a session the victim ends up with.
-	 */
+	/* Only a CSRF-validated Discovery response may control scopes or authorization parameters. */
 	if (csrf_valid == FALSE) {
 		if ((path_scopes != NULL) || (auth_request_params != NULL))
 			oidc_warn(r,

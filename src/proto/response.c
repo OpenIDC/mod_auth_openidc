@@ -375,11 +375,7 @@ static apr_byte_t oidc_proto_resolve_code_and_validate_response(request_rec *r, 
 	return TRUE;
 }
 
-/*
- * per response type, the authorization-response parameters that must not be accepted from the
- * front channel because they may only come from the token endpoint - or are no part of the
- * flow at all; keeping all six flows in one table makes the strip sets auditable side-by-side
- */
+/* Strip front-channel parameters that may only come from the token endpoint or are not part of the response type. */
 static void oidc_proto_response_strip_params(request_rec *r, apr_table_t *params, const char *response_type) {
 	static const struct {
 		const char *response_type;

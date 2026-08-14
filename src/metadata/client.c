@@ -123,10 +123,7 @@ apr_byte_t oidc_metadata_client_register(request_rec *r, oidc_cfg_t *cfg, const 
 		oidc_json_object_set_new(data, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHOD,
 					 oidc_json_string(oidc_cfg_provider_token_endpoint_auth_get(provider)));
 
-	/* RFC 8705 section 6.1: request certificate-bound access tokens when the mutual-TLS behaviour
-	 * applies to this provider, which oidc_metadata_provider_parse resolved into the provider struct
-	 * (including the section 3 case of a certificate used for token binding only); the mutual-TLS
-	 * client authentication methods imply it by themselves */
+	/* Request certificate-bound tokens when the provider's resolved RFC 8705 mode requires them. */
 	if ((oidc_cfg_provider_cert_bound_tokens_get(provider) == OIDC_CERT_BOUND_TOKENS_ON) ||
 	    (oidc_cfg_endpoint_auth_is_mtls(oidc_cfg_provider_token_endpoint_auth_get(provider)) == TRUE))
 		oidc_json_object_set_new(data, OIDC_METADATA_TLS_CLIENT_CERTIFICATE_BOUND_ACCESS_TOKENS,

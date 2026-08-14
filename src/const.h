@@ -91,25 +91,9 @@ static inline size_t _oidc_strlen(const char *s) {
 	return (s ? strlen(s) : 0);
 }
 /*
- * NULL-safe string comparison helpers.
- *
- * IMPORTANT: when either argument is NULL these intentionally return a
- * non-zero value (-1) -- even when both are NULL. This is a defensive
- * choice for the security-critical callers that use patterns like
- *   if (_oidc_strcmp(calculated_state, received_state) != 0) { reject; }
- * If two NULLs compared as "equal" (0), a missing state/nonce/CSRF token
- * pair could silently slip past the check. Do not "fix" this to return 0
- * for two NULL inputs without auditing every caller; the "<rejected when
- * either side is missing>" semantics are load-bearing.
- *
- * _oidc_strcmp deliberately uses byte-exact strcmp() rather than
- * apr_strnatcmp() "natural ordering": natcmp skips over whitespace and
- * compares digit runs numerically, so two different byte strings can
- * compare equal ("ab cd" == "abcd") - surprising equality semantics for
- * the protocol values (nonce, state, issuer, client_id) these wrappers
- * guard. Callers only test the result against 0; nothing relies on the
- * natural sort order. NB: comparisons against secret-derived values use
- * the constant-time oidc_util_strcmp_const_time() instead.
+ * NULL never compares equal, even to NULL, so missing state, nonce, or CSRF values fail closed.
+ * _oidc_strcmp is byte-exact because apr_strnatcmp() can equate distinct protocol values.
+ * Secret-derived values require oidc_util_strcmp_const_time().
  */
 static inline int _oidc_strcmp(const char *a, const char *b) {
 	return ((a && b) ? strcmp(a, b) : -1);
@@ -129,11 +113,7 @@ static inline apr_time_t _oidc_str_to_time(const char *s, const apr_time_t defau
 		sscanf(s, "%" APR_TIME_T_FMT, &v);
 	return v;
 }
-/*
- * strict string->int: sets *out and returns TRUE only when the whole string is a valid, in-range
- * integer; rejects NULL/empty, non-numeric input, trailing junk ("300x") and overflow. This is the
- * shared core for both the lenient _oidc_str_to_int() below and the config-time oidc_cfg_parse_int().
- */
+/* Strict full-string, in-range integer parsing shared by runtime and configuration callers. */
 static inline apr_byte_t _oidc_str_to_int_checked(const char *s, int *out) {
 	char *endptr = NULL;
 	long v = 0;

@@ -90,18 +90,8 @@ typedef enum {
 } oidc_dpop_mode_t;
 
 /*
- * RFC 8705 section 3: whether to obtain certificate-bound access tokens with the configured TLS
- * client certificate when it is not (also) used for mutual-TLS client authentication, i.e. whether
- * to prefer the "mtls_endpoint_aliases" endpoints and to ask for binding on client registration
- *
- * OFF   only when a mutual-TLS client authentication method is in effect, i.e. never inferred
- *       from the presence of a certificate alone
- * AUTO  additionally when a certificate is configured and the OP advertises support through
- *       "tls_client_certificate_bound_access_tokens"
- * ON    additionally when a certificate is configured, regardless of what the OP advertises
- *
- * NB: oidc_metadata_provider_parse() resolves the configured value to ON or OFF on the provider
- *     struct it fills, recording the decision it took for the code that acts on it afterwards
+ * RFC 8705 certificate-bound token mode. OFF requires mTLS authentication, AUTO also accepts an
+ * advertised provider capability, and ON treats any configured certificate as sufficient.
  */
 typedef enum {
 	OIDC_CERT_BOUND_TOKENS_OFF = 1,
@@ -126,21 +116,8 @@ typedef enum {
 //     references them when building the oidc_cfg_cmds[] command table
 
 /*
- * Generators for the per-provider (oidc_provider_t) directive accessors.
- *
- * Three atoms each declare exactly one prototype; the aggregates below combine
- * them. For member `foo` the atoms declare:
- *
- *   const char *oidc_cmd_provider_foo_set(cmd_parms *, void *, const char *, ...); -- directive handler (cmds.c)
- *   const char *oidc_cfg_provider_foo_set(apr_pool_t *, oidc_provider_t *, ...);   -- setter (metadata *.c)
- *   <type>      oidc_cfg_provider_foo_get(const oidc_provider_t *);                -- getter (used everywhere)
- *
- * The matching bodies are generated in cfg/provider.c. Because the names are
- * token-pasted they are not findable by grepping for the literal symbol; only
- * an index that preprocesses can resolve them.
- *
- * Layering is kept to two: every aggregate (STR/TYPE/INT/KEYS/INT_INT/STR_LIST)
- * expands directly to these atoms, never to another aggregate.
+ * Generate directive-handler, setter, and getter declarations for provider members. Bodies are
+ * generated in provider.c; token-pasted names require a preprocessing-aware index.
  */
 
 /* the atoms: one prototype each */

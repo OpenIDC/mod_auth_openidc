@@ -98,13 +98,7 @@ char *oidc_util_base64_decode(apr_pool_t *pool, const char *input, char **output
 	return NULL;
 }
 
-/*
- * base64url decode a string; returns the decoded length on success, or a
- * non-positive value on failure (-1 for invalid input, 0 for a malformed
- * padding length). Callers MUST store the result in a signed integer type:
- * an unsigned int will turn the "<= 0" guard into "== 0" and silently let a
- * -1 error slip through (see commit dfa89ffb for a prior such bug).
- */
+/* Base64url decode length or a non-positive error. Callers must use a signed result type. */
 int oidc_util_base64url_decode(apr_pool_t *pool, char **dst, const char *src) {
 	if (src == NULL) {
 		return -1;

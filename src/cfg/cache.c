@@ -197,12 +197,7 @@ OIDC_CFG_MEMBER_FUNCS_CACHE_INT(memcache_hmax, OIDC_CACHE_MEMCACHE_CONNECTIONS_H
 				OIDC_CACHE_MEMCACHE_CONNECTIONS_HMAX_MAX, OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_HMAX)
 
 #define OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MIN (apr_interval_time_t)0
-/*
- *  Due to a design error in the apr-util 1.x apr_memcache_server_create prototype
- *  (it uses an apr_uint32_t instead of an apr_interval_time_t) we need to limit
- *  the maximum value to 4292 seconds which is the maximum value in microseconds
- *  that can be represented by an apr_uint32_t.
- */
+/* apr_memcache_server_create uses apr_uint32_t microseconds, limiting this to 4292 seconds. */
 #define OIDC_CACHE_MEMCACHE_CONNECTIONS_TTL_MAX apr_time_from_sec(4294)
 #define OIDC_DEFAULT_CACHE_MEMCACHE_CONNECTIONS_TTL apr_time_from_sec(60)
 

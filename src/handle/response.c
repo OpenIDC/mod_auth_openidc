@@ -322,24 +322,13 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 	char *sub = id_token_jwt->payload.sub;
 	oidc_debug(r, "provider->backchannel_logout_supported=%d",
 		   oidc_cfg_provider_backchannel_logout_supported_get(provider));
-	/*
-	 * Storing the sid in the session makes sense even if no backchannel logout
-	 * is supported as the front channel logout as specified in
-	 * "OpenID Connect Front-Channel Logout 1.0 - draft 05" at
-	 * https://openid.net/specs/openid-connect-frontchannel-1_0.html
-	 * might deliver a sid during front channel logout.
-	 */
+	/* Store sid even without back-channel support because front-channel logout may supply it. */
 	oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json, OIDC_CLAIM_SID, FALSE, &sid, NULL);
 	if (sid == NULL)
 		sid = sub;
 	session->sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
 
-	/*
-	 * when the OP supports back-channel logout and issued a distinct "sid", additionally index this session
-	 * by "sub" so a logout token that carries only "sub" (allowed per OpenID Connect Back-Channel Logout 1.0
-	 * section 2.6) can still locate it; only done when back-channel logout is enabled to avoid the extra
-	 * cache index otherwise
-	 */
+	/* Index by sub when back-channel logout may identify the session without sid. */
 	if ((oidc_cfg_provider_backchannel_logout_supported_get(provider)) && (sub != NULL) &&
 	    (_oidc_strcmp(sid, sub) != 0))
 		session->sub = oidc_response_make_sid_iss_unique(r, sub, oidc_cfg_provider_issuer_get(provider));
@@ -680,10 +669,7 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
 
-	/* session management: if the user in the new response is not equal to the old one, error out;
-	 * NB: this compares the (possibly claim/regexp-derived) remote user rather than the "sub" claim;
-	 * skip when there is no prior remote_user (no loaded session) so a successful prompt=none
-	 * response can establish a session instead of being rejected as "User changed!" */
+	/* For prompt=none, reject a different existing remote user. With no prior user, establish a new session. */
 	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0) && (session->remote_user != NULL) &&
 	    (_oidc_strcmp(session->remote_user, r->user) != 0)) {
 		oidc_warn(r, "user set from new id_token is different from current one");
@@ -691,22 +677,10 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		goto end;
 	}
 
-	/*
-	 * this is a new login, so start a new session rather than writing the new identity into
-	 * whatever session id the browser presented; see oidc_session_reset().
-	 *
-	 * NB: placement. Everything above still needs the previous session - the prompt=none check
-	 * just above compares its remote_user - and everything below stores values belonging to
-	 * this authentication, so the reset goes exactly here.
-	 */
+	/* Reset after checks that need the old session and before storing the new authentication. */
 	oidc_session_reset(r, c, session);
 
-	/*
-	 * only when session management is enabled (a check_session_iframe is configured) can a silent "check"
-	 * re-authentication be issued from the redirect URI; only then persist the per-path auth_request_params
-	 * and scope used for this authentication, so that re-authentication can reuse them instead of the
-	 * redirect URI's own (empty) per-path configuration - avoiding needless session storage otherwise
-	 */
+	/* Persist per-path settings only when session management may reuse them for silent reauthentication. */
 	if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
 		oidc_session_set_path_auth_request_params(r, session,
 							  oidc_proto_state_get_auth_request_params(proto_state));

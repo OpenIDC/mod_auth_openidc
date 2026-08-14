@@ -378,9 +378,7 @@ START_TEST(test_util_file) {
 }
 END_TEST
 
-/* symlinked config files are a fact of deployment life - a Kubernetes ConfigMap volume exposes
- * every file as a symlink into its ..data directory - so a symlink whose target is a regular
- * file must read fine; one pointing at a directory, or at nothing, is still refused */
+/* Accept symlinks to regular config files, but reject directory and dangling targets. */
 START_TEST(test_util_file_read_symlink) {
 	request_rec *r = oidc_test_request_get();
 	const char *dir = NULL;
@@ -420,10 +418,7 @@ START_TEST(test_util_file_read_symlink) {
 }
 END_TEST
 
-/* stat succeeds (it is a regular, readable file) but the subsequent open() fails. A mode-0000 file
- * would not exercise this when the suite runs as root, which permission checks do not apply to; a
- * file descriptor table exhausted down to exactly the fd the open() would need returns EMFILE
- * regardless of privilege, and stat(2) itself needs no fd so the preceding check is unaffected. */
+/* Exhaust descriptors so stat succeeds but open fails with EMFILE, even when tests run as root. */
 START_TEST(test_util_file_read_open_fails_after_stat) {
 	request_rec *r = oidc_test_request_get();
 	const char *dir = NULL;
@@ -534,9 +529,7 @@ START_TEST(test_util_file_read_server) {
 }
 END_TEST
 
-/* the final atomic rename() can itself fail -- e.g. the destination path already exists as a
- * non-empty directory, which rename(2) refuses to replace with a regular file -- and the temp
- * file must not be left behind dangling next to it when that happens */
+/* A failed final rename must not leave its temporary file behind. */
 START_TEST(test_util_file_write_rename_fails) {
 	request_rec *r = oidc_test_request_get();
 	const char *dir = NULL;
@@ -851,11 +844,7 @@ START_TEST(test_util_jwt) {
 	ck_assert_msg(oidc_util_jwt_verify(r, &passphrase, cser, &payload) == TRUE, "result is not TRUE");
 	ck_assert_str_eq(payload, str);
 
-	/*
-	 * the setting says how payloads are written from now on, not how an existing one was
-	 * written, so a payload must stay readable across a change to it. Reading it on the verify
-	 * side meant that toggling it under running traffic made every live session unreadable.
-	 */
+	/* The setting controls future writes; existing payloads must remain readable after it changes. */
 	apr_table_unset(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS");
 	ck_assert_msg(oidc_util_jwt_create(r, &passphrase, str, &cser) == TRUE, "compressed create failed");
 	apr_table_set(r->subprocess_env, "OIDC_JWT_INTERNAL_NO_COMPRESS", "true");
@@ -875,12 +864,7 @@ START_TEST(test_util_jwt) {
 }
 END_TEST
 
-/*
- * OIDCCryptoPassphrase takes a second, previous passphrase so that it can be rotated without
- * invalidating every live session and cache entry. Which of the two keys is used is decided from
- * the "kid" in the header of the payload in hand -- absent means it was written before the
- * rotation -- and none of that was covered.
- */
+/* Verify rotation between current and previous OIDCCryptoPassphrase keys selected by kid. */
 START_TEST(test_util_jwt_passphrase_rotation) {
 	request_rec *r = oidc_test_request_get();
 	const char *str = "{ \"key\": \"value\" }";
@@ -976,13 +960,7 @@ START_TEST(test_util_jwt_without_subprocess_env) {
 }
 END_TEST
 
-/*
- * regression: the decompressor decides from the payload's first two bytes, and that test has
- * false positives -- 19 printable two-character prefixes satisfy it. Session and state payloads
- * are JSON and cannot, but cache values go through the same create/verify pair and are arbitrary
- * strings, so an uncompressed cached value starting with e.g. "x " was declared compressed, failed
- * to inflate, and was lost.
- */
+/* Uncompressed cache values with zlib-like prefixes must survive JWT create/verify. */
 START_TEST(test_util_jwt_payload_that_looks_compressed) {
 	request_rec *r = oidc_test_request_get();
 	oidc_crypto_passphrase_t passphrase = {"secret-0123456789012345678901234", NULL};

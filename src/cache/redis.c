@@ -68,10 +68,10 @@ static oidc_cache_cfg_redis_t *oidc_cache_redis_cfg_create(apr_pool_t *pool) {
 	context->host_str = NULL;
 	context->port = 0;
 	context->rctx = NULL;
-	/* request-scoped connections by default; setting OIDC_REDIS_MUTEX_GLOBAL selects the
-	 * legacy model with one shared connection serialized under a global (cross-process)
-	 * mutex; the plain single-server hooks wired in the post-config hook below flip this
-	 * to TRUE - backends with their own connection management must leave it FALSE */
+	/*
+	 * Derived backends start in serialized mode and leave this false. Plain Redis post-config
+	 * enables request-scoped connections unless OIDC_REDIS_MUTEX_GLOBAL selects the legacy mode.
+	 */
 	context->request_scoped = FALSE;
 	context->idle_num = 0;
 	return context;
@@ -461,9 +461,7 @@ static apr_status_t oidc_cache_redis_connect(request_rec *r, oidc_cache_cfg_redi
 	return oidc_cache_redis_rctx_connect(r, context, &conn->rctx);
 }
 
-/* drop every connection sitting in the idle pool: called when a checked-out connection turns
- * out dead at the connection level, because checkout is LIFO - whatever closed that socket (a
- * Redis restart, a server-side idle timeout) closed the ones idle for even longer too */
+/* Flush the LIFO idle pool when checkout finds a dead connection; older sockets are likely dead too. */
 static void oidc_cache_redis_idle_flush(request_rec *r, oidc_cache_cfg_redis_t *context) {
 	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) != TRUE)
 		return;
@@ -497,11 +495,7 @@ redisReply *oidc_cache_redis_command(request_rec *r, oidc_cache_cfg_redis_t *con
 		oidc_cache_redis_conn_t *conn = oidc_cache_redis_conn_get(r, context);
 		redisFree(conn->rctx);
 		conn->rctx = NULL;
-		/* a pooled connection is only ever validated by its err flag, which cannot see the
-		 * peer closing the socket while it sat idle: without this flush every retry pops the
-		 * next dead socket, and the pool can hold more of those than there are retries, so
-		 * the operation failed with Redis perfectly reachable (and a session read that
-		 * fails sends the user back through authentication) */
+		/* A peer may close every idle socket without setting err; flush them before retrying. */
 		oidc_cache_redis_idle_flush(r, context);
 	}
 
@@ -526,12 +520,7 @@ static int oidc_cache_redis_env2int(const request_rec *r, const char *env_var_na
 		oidc_error(r, ##__VA_ARGS__);                                                                          \
 	}
 
-/*
- * wait before a connect retry; in the serialized (shared-connection) model release the mutex
- * during the sleep so other threads can proceed (and fail fast) instead of queueing behind this
- * sleeper, then re-acquire it; in request-scoped mode no mutex is held. Returns FALSE only when
- * the mutex could not be re-acquired.
- */
+/* Release the shared-connection mutex during retry delay, then reacquire it before returning. */
 static apr_byte_t oidc_cache_redis_backoff(request_rec *r, const oidc_cache_cfg_redis_t *context, apr_time_t interval) {
 	oidc_debug(r, "wait before retrying: %" APR_TIME_T_FMT " (msec)", apr_time_as_msec(interval));
 	if (context->request_scoped == FALSE)
@@ -543,12 +532,8 @@ static apr_byte_t oidc_cache_redis_backoff(request_rec *r, const oidc_cache_cfg_
 }
 
 /*
- * execute Redis command and deal with return value
- * NB: in the serialized (shared-connection) model the caller must hold context->mutex; the retry
- *     path temporarily releases it while sleeping so other threads are not stalled behind this
- *     one for the whole interval. When re-acquiring it fails, *mutex_held is cleared so the
- *     caller knows not to unlock a mutex it no longer holds: posting the semaphore twice would
- *     hand the "serialized" connection to two threads at once.
+ * Serialized callers hold context->mutex. Retries release it while sleeping and clear
+ * *mutex_held if reacquisition fails, preventing a second unlock of the shared connection.
  */
 static redisReply *oidc_cache_redis_exec(request_rec *r, oidc_cache_cfg_redis_t *context, apr_byte_t *mutex_held,
 					 const char *format, ...) {

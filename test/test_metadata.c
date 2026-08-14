@@ -259,11 +259,7 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
 }
 END_TEST
 
-/*
- * RFC 8705 section 5 aliases only the endpoints that "mtls_endpoint_aliases" lists, so an endpoint
- * it does not mention falls back to the conventional one - but an entry that is there and unusable
- * must not, since the conventional endpoint does not certificate-bind the access token.
- */
+/* Missing mTLS aliases may fall back; invalid aliases must not lose certificate binding. */
 START_TEST(test_metadata_parse_mtls_endpoint_aliases_invalid) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -305,12 +301,7 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases_invalid) {
 }
 END_TEST
 
-/*
- * RFC 8705 section 3: a TLS client certificate that is not used for client authentication asks for
- * certificate-bound access tokens, which selects the mtls_endpoint_aliases too. Whether that is
- * inferred from the certificate depends on OIDCCertBoundAccessTokens and, under its "auto" default,
- * on the OP advertising "tls_client_certificate_bound_access_tokens".
- */
+/* Cover certificate-only RFC 8705 binding under each OIDCCertBoundAccessTokens mode. */
 
 #define OIDC_TEST_METADATA_CERT_BOUND(advertised)                                                                      \
 	"{"                                                                                                            \
@@ -451,12 +442,7 @@ END_TEST
 	"\"token_endpoint_auth_signing_alg_values_supported\":[\"PS256\",\"ES256\"]"                                   \
 	"}"
 
-/*
- * an OP that separates client authentication from certificate binding: private_key_jwt is the only
- * supported authentication method, while the certificate is there for RFC 8705 section 3 binding.
- * Every advertised alias is applied - including the registration endpoint - and the authorization
- * endpoint (which carries no client credentials at all) is not.
- */
+/* Apply all advertised mTLS aliases when private_key_jwt authentication uses separate token binding. */
 START_TEST(test_metadata_parse_mtls_aliases_private_key_jwt) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -603,12 +589,7 @@ static const char *oidc_test_jwks_first_kid(const oidc_json_t *j) {
 	return oidc_json_string_value(oidc_json_object_get(oidc_json_array_get(keys, 0), "kid"));
 }
 
-/*
- * a forced refresh bypasses the cached JWKs and fetches the jwks_uri directly; it is triggered by an
- * unrecognized "kid" or a failed signature, i.e. straight off an unauthenticated request. It must
- * therefore be rate-limited per jwks_uri: a second forced refresh inside the window has to be served
- * from the cache rather than turning into another outbound fetch.
- */
+/* A second forced JWKS refresh within the per-URI window must use the cache. */
 START_TEST(test_metadata_jwks_get_forced_refresh_throttled) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1253,10 +1234,7 @@ START_TEST(test_metadata_disk_get_provider_only) {
 }
 END_TEST
 
-/* when live discovery succeeded and the result validated, a failing disk write of the metadata
- * cache file - a directory that admits pre-provisioned files but no new ones, a rename refused
- * by the platform - must not fail the authentication that triggered it: the in-memory result is
- * served and the write is retried by whichever request next misses the cache */
+/* A metadata cache write failure must not discard a valid live-discovery result. */
 START_TEST(test_metadata_disk_provider_write_failure_serves_in_memory) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1493,12 +1471,7 @@ START_TEST(test_metadata_conf_then_client_response_type_fallback) {
 }
 END_TEST
 
-/*
- * RFC 8705 in a multi-provider (OIDCMetadataDir) setup: the TLS client certificate and the profile
- * are configured in the .conf metadata of this OP, i.e. nowhere in the global configuration, and
- * must still drive the mutual-TLS endpoint selection - even though the .conf is parsed after the
- * provider metadata that the selection is made in
- */
+/* Per-provider .conf certificate settings must drive RFC 8705 endpoint selection. */
 START_TEST(test_metadata_disk_mtls_aliases_from_conf) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1636,12 +1609,7 @@ END_TEST
 /* live OpenID Connect Discovery: no cached/disk metadata, so the provider
  * document is fetched from <issuer>/.well-known/openid-configuration and
  * written to the metadata directory */
-/*
- * OIDCProviderMetadataRefreshInterval: with it set, a cached provider document is used until it is
- * older than the interval and re-fetched after that. None of that ran, including the part that
- * matters most in production -- what happens when the OP is unreachable at the moment the cached
- * document goes stale.
- */
+/* Cover provider metadata refresh and stale-cache behavior while the OP is unavailable. */
 
 /* the metadata body a provider at `issuer` would publish */
 static const char *e2e_provider_metadata_for(request_rec *r, const char *issuer) {
@@ -2094,9 +2062,7 @@ START_TEST(test_metadata_conf_parse_id_token_aud_values) {
 }
 END_TEST
 
-/* inline .conf "keys" wrap heap cjose objects that are not pool-managed; the per-request provider is
- * never cfg_provider_destroy'd, so without a request-pool cleanup they leak one key set per
- * authentication -- valgrind reports the leak without the fix and is clean with it */
+/* Request-pool cleanup must release heap-backed inline .conf keys. */
 START_TEST(test_metadata_conf_parse_inline_keys_no_leak) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();

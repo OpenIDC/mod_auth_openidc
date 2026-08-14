@@ -372,12 +372,7 @@ int oidc_request_authenticate_user(request_rec *r, oidc_cfg_t *c, oidc_provider_
 		oidc_proto_state_set_prompt(proto_state, prompt);
 	if (pkce_state)
 		oidc_proto_state_set_pkce_state(proto_state, pkce_state);
-	/*
-	 * a silent session-management "check" re-authentication is only ever issued (from the redirect URI)
-	 * when session management is enabled, i.e. a check_session_iframe is configured; only then remember the
-	 * per-path authentication request parameters and scope so they can be persisted in the session and
-	 * reused for that re-authentication - avoiding needless state-cookie and session storage otherwise
-	 */
+	/* Preserve per-path settings only when session management may need them for silent reauthentication. */
 	if (oidc_cfg_provider_check_session_iframe_get(provider) != NULL) {
 		if (auth_request_params)
 			oidc_proto_state_set_auth_request_params(proto_state, auth_request_params);

@@ -306,13 +306,7 @@ START_TEST(test_cache_shm_eviction_and_delete) {
 }
 END_TEST
 
-/*
- * churn the shm cache well past its capacity with per-key distinguishable values, interleaving
- * deletes and already-expired entries, and assert the only thing that must always hold: a key that
- * is still present returns *its own* value. The segment indexes slots through in-shm bucket chains
- * and a free list, so a mislinked chain, a slot on two lists at once, or a slot reused without
- * being unlinked would surface here as one key answering with another's value.
- */
+/* Churn beyond capacity and verify that reused or mislinked slots never cross values between keys. */
 START_TEST(test_cache_shm_churn_never_crosses_keys) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -451,11 +445,7 @@ START_TEST(test_cache_backend_true_null_miss) {
 }
 END_TEST
 
-/*
- * with OIDCCacheEncrypt off the value is stored as it is and the key is used as it is, which is a
- * different pair of paths through oidc_cache_get/oidc_cache_set than the encrypting default; only
- * the miss was covered, never a hit, and never a key long enough to be hashed anyway
- */
+/* Cover unencrypted cache hits and hashing of long keys. */
 START_TEST(test_cache_unencrypted_hit_and_long_key) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -484,11 +474,7 @@ START_TEST(test_cache_unencrypted_hit_and_long_key) {
 }
 END_TEST
 
-/*
- * a backend that reports a miss for the current passphrase and then errors on the retry with the
- * previous one: the read has to report the error rather than pass it off as a cache miss, which
- * would silently drop a session during a passphrase rotation
- */
+/* A previous-passphrase retry error must not be downgraded to a cache miss. */
 static int _e2e_flaky_get_calls = 0;
 
 static apr_byte_t e2e_flaky_get(request_rec *r, const char *section, const char *key, char **value) {
@@ -680,15 +666,7 @@ START_TEST(test_cache_compression_enabled_empty_secret2_fallback) {
 }
 END_TEST
 
-/*
- * Tests for cache/file.c — swap the cache backend from shm to file
- * (post_config-style) and run set/get/expiry/overwrite scenarios
- * against a fresh /tmp/oidc-test-cache.XXXXXX directory.
- *
- * The shared mutex (oidc_cfg_refresh_mutex_get / oidc_cache_mutex_*)
- * is intentionally NOT touched — the file backend reuses the same
- * mutex infrastructure the shm backend already initialized.
- */
+/* File-cache tests use a fresh temporary directory and the fixture's existing shared mutex. */
 
 static oidc_cache_t *e2e_switch_to_file_backend(request_rec *r) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -804,12 +782,7 @@ START_TEST(test_cache_file_default_tmp_dir) {
 }
 END_TEST
 
-/*
- * The tests below drive oidc_cache_file's get/set directly rather than through oidc_cache_get/set,
- * because they have to know the exact on-disk file in order to damage it: the wrapper hashes and
- * encodes the key, so the name it lands under is not predictable from the test. The keys are
- * chosen so that oidc_http_url_encode leaves them unchanged.
- */
+/* Use raw file-cache operations so corruption tests can predict and modify the on-disk path. */
 static char *e2e_file_cache_path(request_rec *r, const char *section, const char *key) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	return apr_psprintf(r->pool, "%s/mod-auth-openidc-%s-%s", cfg->cache.file_dir, section, key);
@@ -889,14 +862,7 @@ START_TEST(test_cache_file_rejects_oversized_value_length) {
 }
 END_TEST
 
-/*
- * reading an expired entry reports a miss and leaves the file where it is.
- *
- * The read path deliberately does not unlink it: a writer replaces an entry by renaming a freshly
- * written temp file over the path and never locks the path itself, so between finding the entry
- * expired and unlinking it that rename can have landed - and the unlink would then throw away the
- * entry that just replaced it. Reclaiming expired entries is the cleaning cycle's job.
- */
+/* Expired reads leave the file for the cleaner, avoiding a race with atomic replacement. */
 START_TEST(test_cache_file_expired_entry_left_for_cleaner) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -943,9 +909,7 @@ START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	/* clean on every write instead of once a minute */
 	cfg->cache.file_clean_interval = 0;
 
-	/* a directory carrying the cache file prefix. NB: opening a directory read-only succeeds on
-	 * Linux and it is the read that fails, so this lands on the "corrupt header" arm -- and its
-	 * removal then fails, which is the point: a directory must survive a cleaning cycle */
+	/* A directory reaches the corrupt-header path but must survive cleaning. */
 	const char *subdir = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "subdir");
 	ck_assert_int_eq(apr_dir_make(subdir, APR_FPROT_OS_DEFAULT, r->pool), APR_SUCCESS);
 
@@ -1077,10 +1041,8 @@ START_TEST(test_cache_file_delete_missing_and_rename_failure) {
 END_TEST
 
 /*
- * a write that cannot complete -- a full disk, a quota -- must fail the set and drop the partial
- * temporary file, rather than reporting a stored entry that only turns out to be unreadable later.
- * RLIMIT_FSIZE stands in for the full disk; SIGXFSZ has to be ignored for the duration or the
- * process is killed instead of the write failing.
+ * RLIMIT_FSIZE simulates a failed write. Ignore SIGXFSZ so the write fails instead of killing
+ * the process; the set must fail and remove its partial temp file.
  */
 START_TEST(test_cache_file_short_write_fails_the_set) {
 	request_rec *r = oidc_test_request_get();
@@ -1140,13 +1102,8 @@ END_TEST
 #ifdef USE_LIBHIREDIS
 
 /*
- * Tests for cache/redis.c — the Redis backend exposes its connect/command/disconnect
- * operations as function pointers on oidc_cache_cfg_redis_t. We install mock
- * implementations that fabricate redisReply objects, so the get/set/exec/retry logic
- * can be exercised fully offline, without a live Redis server.
- *
- * NB: replies are allocated with calloc()/strdup() because the backend frees them with
- * hiredis' freeReplyObject(), whose default allocator is plain free().
+ * Offline Redis tests inject connection and command operations. Mock replies use heap allocation
+ * because hiredis releases them with freeReplyObject().
  */
 
 typedef struct redis_mock_state_t {
@@ -1497,18 +1454,8 @@ START_TEST(test_cache_redis_helpers_short_circuit) {
 END_TEST
 
 /*
- * Live integration test against a real Redis server.
- *
- * Unlike the mock tests above (which fabricate redisReply objects so the
- * get/set/retry logic runs offline), this drives the real connect/command/
- * disconnect ops that oidc_cache_redis.post_config wires up, against the
- * server named by OIDC_TEST_REDIS_SERVER. The suite only registers this
- * tcase when that variable is set (see main), so an ordinary "make check"
- * without a server is unaffected; CI points it at a redis service container.
- *
- * We exercise the raw backend ops (oidc_cache_redis_get/set) rather than the
- * oidc_cache_set/get wrapper: the wrapper's encrypt/compress layer is already
- * covered by the core tcase, and going raw isolates the actual wire round-trip.
+ * Exercise raw Redis operations against OIDC_TEST_REDIS_SERVER. This test is registered only
+ * when that variable is set; wrapper encryption and compression are covered elsewhere.
  */
 START_TEST(test_cache_redis_live_roundtrip) {
 	request_rec *r = oidc_test_request_get();
@@ -1851,13 +1798,7 @@ START_TEST(test_cache_redis_live_half_dead_server) {
 }
 END_TEST
 
-/*
- * reset the redis mock as part of the per-test fixture. Under CK_FORK=no
- * (make valgrind) all tests share one process, so a test that does not call
- * redis_mock_install() would otherwise inherit the previous test's mock state;
- * under the default fork-per-test mode every test already starts from the
- * parent's pristine statics.
- */
+/* Reset static Redis mock state for CK_FORK=no runs. */
 static void redis_test_setup(void) {
 	oidc_test_setup();
 	redis_mock_reset();
@@ -1867,14 +1808,7 @@ static void redis_test_setup(void) {
 
 #ifdef USE_MEMCACHE
 
-/*
- * Tests for cache/memcache.c.
- *
- * The real per-server setup (apr_memcache_server_create) eagerly connects when the connection-pool
- * minimum is > 0, so to exercise the server-counting and pool-sizing logic offline (without a live
- * memcached) we install a mock add_server operation on the context. The mock records the pool sizes
- * it is handed and returns success without touching the network, mirroring the redis mock above.
- */
+/* Mock add_server to test memcache pool sizing without its eager network connection. */
 
 typedef struct memcache_mock_state_t {
 	int add_calls;	       /* number of times the per-server op was invoked */
@@ -2232,15 +2166,7 @@ START_TEST(test_cache_memcache_set_delete) {
 }
 END_TEST
 
-/*
- * Live integration test against a real memcached server.
- *
- * The mock tests above swap in fabricated data-path ops; this drives the real
- * apr_memcache-backed ops that oidc_cache_memcache.post_config wires up (and
- * which eagerly connect the pool), against the server named by
- * OIDC_TEST_MEMCACHE_SERVER. Registered only when that variable is set (see
- * main); CI points it at a memcached service container.
- */
+/* Exercise real memcache operations when OIDC_TEST_MEMCACHE_SERVER is configured. */
 START_TEST(test_cache_memcache_live_roundtrip) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();

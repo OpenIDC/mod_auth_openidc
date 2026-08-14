@@ -163,14 +163,7 @@ apr_byte_t oidc_proto_jwks_uri_keys(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t 
 		return FALSE;
 	}
 
-	/*
-	 * get the key corresponding to the kid from the header, referencing the key that
-	 * was used to sign this message (or get all keys in case no kid was set)
-	 *
-	 * we don't check the error return value because we'll treat "error" in the same
-	 * way as "key not found" i.e. by refreshing the keys from the JWKs URI if not
-	 * already done
-	 */
+	/* Select by kid, or all keys when absent. Errors follow the same refresh path as a miss. */
 	oidc_proto_jwks_key_get(r, jwt, j_jwks, keys);
 
 	/* no need anymore for the parsed oidc_json_t contents, release the it */

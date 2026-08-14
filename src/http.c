@@ -210,15 +210,7 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
 
 		char *s_value = apr_pstrdup(r->pool, value);
 
-		/*
-		 * sanitize the header value by replacing CR/LF with spaces
-		 * just like the Apache header input algorithms do for incoming headers
-		 *
-		 * this makes it impossible to have CR or LF in values but that is
-		 * compliant with RFC 7230 (and impossible for regular headers due to Apache's
-		 * parsing of headers anyway) and fixes a security vulnerability on
-		 * overwriting/setting outgoing headers when used in proxy mode
-		 */
+		/* Replace CR/LF to prevent response-header injection. */
 		char *p = NULL;
 		while ((p = strpbrk(s_value, "\r\n")))
 			*p = OIDC_CHAR_SPACE;
@@ -620,29 +612,15 @@ const char *oidc_http_redact_body_for_log(request_rec *r, const char *data) {
 	return result;
 }
 
-/*
- * names of JSON members that carry secrets or tokens in a provider response and must be
- * redacted before that response is written to the debug log; distinct from the request-side
- * list above because the sets differ: a response never carries a code_verifier, and a
- * registration response carries credentials a request never does
- */
+/* Sensitive response members differ from the request parameters redacted above. */
 static const char *_oidc_http_sensitive_json_members[] = {OIDC_PROTO_ACCESS_TOKEN,     OIDC_PROTO_REFRESH_TOKEN,
 							  OIDC_PROTO_ID_TOKEN,	       OIDC_PROTO_CLIENT_SECRET,
 							  "registration_access_token", NULL};
 
 /*
- * best-effort redaction of the members listed in _oidc_http_sensitive_json_members inside a
- * JSON response body, for debug-log purposes: the token, introspection and dynamic client
- * registration responses all carry credentials, and the request side is already redacted.
- *
- * Deliberately string surgery rather than a parse-and-re-encode: this must never fail, alter
- * or reorder what is logged when the body is not JSON at all (an error page, a truncated
- * response), and it runs off the back of a network round trip so the scan is free by
- * comparison. Tokens do not contain a quote, so the closing quote ends the value.
- */
-/*
- * redact every quoted string value of the member `needle` in `data`, returning the result; the
- * scan-and-skip rules are the ones oidc_http_redact_json_for_log documents
+ * Redact quoted JSON members without parsing, so malformed or non-JSON responses remain
+ * loggable and otherwise unchanged. This scanner assumes a sensitive value has no escaped quote:
+ * the next quote terminates the value.
  */
 static char *oidc_http_redact_json_member(apr_pool_t *pool, char *data, const char *needle) {
 	const apr_size_t needle_len = _oidc_strlen(needle);
@@ -670,13 +648,7 @@ static char *oidc_http_redact_json_member(apr_pool_t *pool, char *data, const ch
 			continue;
 		}
 		p++;
-		/*
-		 * keep everything up to and including the opening quote, then "***". A
-		 * truncated body has no closing quote, in which case everything from here on
-		 * is masked: the alternative is to leave the value alone and log the partial
-		 * token it starts with. Masking to the end also leaves this loop a single
-		 * exit, taken when there is nothing left to find.
-		 */
+		/* If the closing quote is missing, mask to the end rather than leak a partial token. */
 		const char *value_end = strchr(p, OIDC_CHAR_DQUOTE);
 		const apr_size_t prefix_len = p - data;
 		data = apr_psprintf(pool, "%.*s***%s", (int)prefix_len, data, value_end ? value_end : "");
@@ -1484,9 +1456,7 @@ apr_byte_t oidc_http_set_chunked_cookie(request_rec *r, const char *cookieName, 
 		return TRUE;
 	}
 
-	/* set a chunked cookie; NB: ceil division, or a length that is an exact multiple of the
-	 * chunk size would advertise a trailing empty chunk that oidc_http_set_cookie turns into a
-	 * delete, leaving the browser one chunk short of the counter and the whole value unreadable */
+	/* Use ceil division without advertising a trailing empty chunk for exact multiples. */
 	int chunkCountValue = (cookieLength + chunkSize - 1) / chunkSize;
 
 	/* refuse to write what oidc_http_get_chunked_cookie would refuse to read back: writing it
@@ -1562,13 +1532,7 @@ void oidc_http_cleanup(void) {
 	curl_global_cleanup();
 }
 
-/*
- * a small pool of reusable libcurl easy handles: curl_easy_reset clears all options but keeps
- * the handle's connection cache, DNS cache and TLS session cache, so consecutive requests to
- * the same endpoint (token, userinfo, introspection, JWKs, metadata) reuse the TCP/TLS
- * connection instead of paying DNS + TCP + TLS handshake on every call; curl easy handles must
- * not be used concurrently, so idle handles are kept in a mutex-protected stack
- */
+/* Pool reset handles to retain their connection, DNS, and TLS caches. */
 #define OIDC_HTTP_CURL_POOL_MAX 16
 
 static CURL *_oidc_http_curl_pool[OIDC_HTTP_CURL_POOL_MAX];

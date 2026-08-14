@@ -78,12 +78,8 @@ typedef struct oidc_test_http_server_t oidc_test_http_server_t;
 oidc_test_http_server_t *oidc_test_http_server_start(apr_pool_t *pool, const oidc_test_http_response_t *response);
 
 /*
- * Start a loopback HTTP server that serves `n_responses` connections, replying
- * with responses[i] to the i-th request and capturing each one. Use this to
- * test flows that issue more than one outbound request. The test must drive
- * exactly `n_responses` requests: accept() blocks, so a test that issues fewer
- * will stall at teardown until the libcheck per-test timeout fires. Returns
- * NULL on bad arguments or bind/listen failure.
+ * Serve and capture exactly n_responses loopback requests in order. Fewer requests leave accept()
+ * blocked until the test timeout; invalid arguments or bind/listen failures return NULL.
  */
 oidc_test_http_server_t *oidc_test_http_server_start_seq(apr_pool_t *pool, const oidc_test_http_response_t *responses,
 							 int n_responses);

@@ -480,10 +480,7 @@ START_TEST(test_proto_profile_helpers) {
 	/* the post-PAR redirect must carry client_id and request_uri only */
 	ck_assert_ptr_null(oidc_proto_profile_request_uri_scope_get(provider));
 
-	/* FAPI 2.0 section 5.3.2.1: access tokens are sender-constrained through *either* mutual-TLS or
-	 * DPoP, so with the access tokens certificate-bound (as resolved into the provider struct by
-	 * oidc_metadata_provider_parse) against an OP that does not support DPoP, DPoP is no longer
-	 * mandated and the configured mode applies */
+	/* FAPI 2.0 permits certificate binding instead of DPoP for sender-constrained tokens. */
 	oidc_cfg_provider_cert_bound_tokens_int_set(provider, OIDC_CERT_BOUND_TOKENS_ON);
 	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_OFF);
 	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(pool, provider, "required"));
@@ -2704,10 +2701,7 @@ START_TEST(test_proto_userinfo_request_composite_embedded_jwt) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
-	/* a composite-claims response with an inline alg=none JWT for the "address" source;
-	 * the JWT below decodes to {"address":{"street_address":"123 Main St","country":"US"}}.
-	 * The dispatcher walks _claim_names → _claim_sources → JWT and merges the payload
-	 * back into claims under the "address" key, then strips both meta-keys. */
+	/* Resolve the inline address source JWT and remove composite-claim metadata. */
 	const char *address_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0."
 				  "eyJhZGRyZXNzIjp7InN0cmVldF9hZGRyZXNzIjoiMTIzIE1haW4gU3QiLCJjb3VudHJ5IjoiVVMifX0.";
 	const char *body = apr_psprintf(r->pool,
@@ -3628,12 +3622,7 @@ START_TEST(test_proto_auth_request_params_cannot_duplicate_ours) {
 }
 END_TEST
 
-/*
- * OIDCAuthRequestParams is a configuration directive, so unlike the request-supplied variant above
- * it is allowed to override a parameter this module sets itself: the operator asked for it. A "#"
- * value means "forward the same-named parameter of the current request", which is request-supplied
- * whatever the source of the directive, and so is refused an override.
- */
+/* Configured parameters may override module values; request-forwarding "#" parameters may not. */
 START_TEST(test_proto_auth_request_params_configured) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3668,13 +3657,7 @@ START_TEST(test_proto_auth_request_params_configured) {
 }
 END_TEST
 
-/*
- * a key repeating within the directive itself is not a collision with a parameter this module
- * owns: some parameters are legitimately sent more than once (RFC 8707 sends "resource" once per
- * audience), so the duplicate guard must only fire against parameters that were already in the
- * request before the directive was processed, and every repeated occurrence must reach the
- * provider
- */
+/* Repeats within a directive remain valid for multi-valued parameters such as RFC 8707 resource. */
 START_TEST(test_proto_auth_request_params_repeated_key) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3702,13 +3685,7 @@ START_TEST(test_proto_auth_request_params_repeated_key) {
 }
 END_TEST
 
-/*
- * the same key split across OIDCAuthRequestParams and the per-path/dynamic parameters is the
- * cross-directive form of the repeat above (RFC 8707 "resource" may name one audience globally
- * and another on a path): what the first directive added is not a parameter this module owns,
- * so the second directive's occurrence must be sent alongside it rather than dropped - while a
- * dynamic parameter that duplicates a genuinely module-owned one is still refused
- */
+/* Repeated RFC 8707 resource values may span global and per-path directives. */
 START_TEST(test_proto_auth_request_params_across_directives) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -3856,12 +3833,7 @@ START_TEST(test_proto_jwks_uri_keys_kid_match) {
 }
 END_TEST
 
-/*
- * the process-local selection cache: the result of picking a key out of the JWKs is kept per
- * (uri, kid, x5t, kty), so validating a second token signed by the same key needs neither the
- * shared cache nor a parse. The second lookup here is served entirely from that cache - the
- * loopback server is already stopped by the time it runs.
- */
+/* The second lookup must use the process-local JWK selection cache after the server stops. */
 START_TEST(test_proto_jwks_uri_keys_selection_cached) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -4089,9 +4061,7 @@ START_TEST(test_proto_jwks_uri_keys_x5t_match) {
 	uri.uri = oidc_test_http_server_url(srv, r->pool);
 	uri.refresh_interval = 60;
 
-	/* no kid on the JWT, only an x5t that matches the JWKS entry's "x5t" field; oidc_jwt_hdr_get
-	 * (unlike the kid comparison, which reads the plain struct field) reads back from the cjose
-	 * protected header, so the x5t must actually be signed in rather than just set on the struct */
+	/* Match x5t from the protected JWT header when kid is absent. */
 	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", NULL);
 	jwt->header.x5t = apr_pstrdup(r->pool, "thumb-1");
 	oidc_jose_error_t sign_err;

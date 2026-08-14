@@ -377,11 +377,7 @@ START_TEST(test_config_openidc_own_redirect_uri_without_provider) {
 }
 END_TEST
 
-/*
- * ... but a vhost that only *inherits* OIDCRedirectURI from the base server says nothing about
- * doing OpenID Connect at all: a server-level redirect URI plus a vhost that does no OIDC (a
- * static site, a health check) must not take the whole server's startup down with it
- */
+/* An inherited redirect URI must not make an unrelated vhost require a complete RP configuration. */
 START_TEST(test_config_openidc_inherited_redirect_uri_without_provider) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	request_rec *r = oidc_test_request_get();

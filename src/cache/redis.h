@@ -73,11 +73,10 @@ typedef struct oidc_cache_cfg_redis_t {
 	oidc_cache_redis_connect_function_t connect;
 	oidc_cache_redis_command_function_t command;
 	oidc_cache_redis_disconnect_function_t disconnect;
-	/* request-scoped connection mode (plain single-server Redis only): each request checks a
-	 * connection out of the idle pool below - the mutex then only guards the (short) pool
-	 * push/pop instead of serializing every worker thread's network round-trip on a single
-	 * shared connection; backends that manage their own connection state (cluster, sentinel,
-	 * failover) must leave this FALSE to keep the serialized model */
+	/*
+	 * Request-scoped pooling avoids serializing network I/O for plain Redis. Backends managing
+	 * their own connections must retain the serialized model.
+	 */
 	apr_byte_t request_scoped;
 	redisContext *idle[OIDC_CACHE_REDIS_POOL_MAX];
 	int idle_num;

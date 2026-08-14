@@ -205,11 +205,8 @@ int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *sessi
 	if (_oidc_strcmp("check", cmd) == 0) {
 		id_token_hint = oidc_session_get_idtoken(r, session);
 		/*
-		 * this re-authentication runs at the redirect URI, so oidc_cfg_dir_path_auth_request_params_get
-		 * and oidc_cfg_dir_path_scope_get would resolve the per-path settings of the redirect URI itself
-		 * rather than of the originally protected path; reuse the values that were persisted in the
-		 * session at initial authentication instead, falling back to the redirect URI's own per-path
-		 * configuration for sessions that predate this being stored
+		 * Reuse settings persisted for the original protected path. Older sessions lack them, so fall
+		 * back to the current redirect URI's per-path settings.
 		 */
 		const char *auth_request_params = oidc_session_get_path_auth_request_params(r, session);
 		if (auth_request_params == NULL)

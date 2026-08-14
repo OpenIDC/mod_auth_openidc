@@ -137,15 +137,7 @@ const char *oidc_cfg_crypto_passphrase_secret2_get(const oidc_cfg_t *cfg) {
 	return cfg->crypto_passphrase.secret2;
 }
 
-/*
- * stretch the (by now finalized: user-configured or auto-generated) crypto passphrase(s) into
- * PBKDF2-derived key material, once, so the per-request JWE encrypt/decrypt path (see
- * oidc_util_jwt_create/oidc_util_jwt_verify) does not have to pay for the KDF on every request;
- * must be called after the passphrase has been finalized (see oidc_config_check_vhost_config)
- * and before any request is handled; operates directly on an oidc_crypto_passphrase_t so it can
- * also be used for the ad-hoc structs built for a single cache-decrypt attempt (see
- * oidc_cache_crypto_decrypt) or in unit tests, not just the one embedded in oidc_cfg_t
- */
+/* Derive finalized passphrases once, before requests use them for JWE operations. */
 apr_byte_t oidc_crypto_passphrase_derive_keys(oidc_crypto_passphrase_t *cp) {
 	/* an empty (non-NULL) secret is treated as "not configured", matching
 	 * oidc_util_key_symmetric_create()'s existing behavior for a client_secret */
@@ -175,14 +167,8 @@ apr_byte_t oidc_cfg_crypto_passphrase_derive_keys(oidc_cfg_t *cfg) {
 }
 
 /*
- * memoized variant of oidc_crypto_passphrase_derive_keys(), keyed on the secret text: a server
- * with hundreds of <VirtualHost>s that all inherit/set the same OIDCCryptoPassphrase would
- * otherwise pay for the ~210,000-iteration PBKDF2 once per vhost instead of once per distinct
- * secret. kdf_cache is an apr_hash_t (string -> OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN-byte
- * buffer) that the caller creates once (e.g. apr_hash_make(pool)) and passes into every
- * server_rec it checks in a single post_config pass; pool must outlive kdf_cache (a config
- * pool such as pconf is the right choice) since it is used to allocate the cached entries.
- * Passing kdf_cache == NULL falls back to always deriving, identical to the uncached function.
+ * Memoize PBKDF2 output by secret across vhosts. The pool must outlive kdf_cache; a NULL cache
+ * disables memoization.
  */
 apr_byte_t oidc_crypto_passphrase_derive_keys_cached(apr_pool_t *pool, apr_hash_t *kdf_cache,
 						     oidc_crypto_passphrase_t *cp) {
@@ -332,10 +318,7 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(store_id_token, int, OIDC_DEFAULT_STORE_ID_TOKEN)
 
 static const char *oidc_valid_endpoint_auth_method_impl(apr_pool_t *pool, const char *arg, apr_byte_t has_private_key,
 							apr_byte_t allow_mtls) {
-	/* NB: build the candidate list per call: the previous static list was mutated in place
-	 * for the private-key case and never reset, so once any private-key-carrying config had
-	 * validated, a later no-private-key validation (e.g. another vhost) would wrongly accept
-	 * private_key_jwt as well */
+	/* Build per call because private-key validation changes the candidate list. */
 	const char *options[9];
 	int i = 0;
 	options[i++] = OIDC_ENDPOINT_AUTH_CLIENT_SECRET_POST;
@@ -420,11 +403,7 @@ apr_byte_t oidc_cfg_endpoint_auth_is_mtls(const char *method) {
 	       (_oidc_strcmp(method, OIDC_ENDPOINT_AUTH_SELF_SIGNED_TLS_CLIENT_AUTH) == 0);
 }
 
-/*
- * return the right token endpoint authentication method validation function, based on whether private keys are
- * set and whether the RFC 8705 mutual-TLS methods are acceptable: auto-selection from provider metadata passes
- * allow_mtls only when a TLS client certificate has been configured, explicit configuration always allows them
- */
+/* Select endpoint-auth validation based on private-key availability and whether mTLS is allowed. */
 oidc_valid_function_t oidc_cfg_get_valid_endpoint_auth_function(const oidc_cfg_t *cfg, apr_byte_t allow_mtls) {
 	if (allow_mtls == FALSE)
 		return (cfg->private_keys != NULL) ? &oidc_cfg_valid_endpoint_auth_method_no_mtls_with_private_key
@@ -960,12 +939,7 @@ static void _oidc_cfg_merge_crypto_passphrase(oidc_crypto_passphrase_t *c, const
 	const oidc_crypto_passphrase_t *src = add->secret1 != NULL ? add : base;
 	c->secret1 = src->secret1;
 	c->secret2 = src->secret2;
-	/* carry over any already-derived PBKDF2 key material for src's secret(s), consistent with
-	 * "add wins as a whole": today oidc_cfg_crypto_passphrase_derive_keys() only ever runs on
-	 * the final merged config (after all merging is done), so src->derived_key{1,2}_set is
-	 * currently always FALSE here -- but the merge should not silently depend on that call
-	 * ordering, since a stale derived_key paired with a different secret would be used to
-	 * encrypt/decrypt with the wrong key */
+	/* Keep derived keys paired with the selected secrets, regardless of merge/derivation order. */
 	c->derived_key1_set = src->derived_key1_set;
 	if (src->derived_key1_set)
 		_oidc_memcpy(c->derived_key1, src->derived_key1, OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
@@ -1022,11 +996,8 @@ void *oidc_cfg_server_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 }
 
 /*
- * build a shallow, request-scoped view of the server config with a private oauth struct. The view
- * shares every allocation with the (process-lifetime) server config; only its oauth member is a
- * separate shallow copy, so a request can overwrite the metadata-derived introspection endpoints
- * without mutating the shared config (which is unsafe under threaded MPMs). Read-only for everything
- * else -- never write non-oauth members through the returned pointer.
+ * Build a read-only request view with a private OAuth struct, allowing metadata endpoints to
+ * change without mutating shared server state. Other members remain shared.
  */
 oidc_cfg_t *oidc_cfg_request_view(apr_pool_t *pool, const oidc_cfg_t *c) {
 	oidc_cfg_t *rc = apr_pmemdup(pool, c, sizeof(*c));

@@ -46,12 +46,8 @@
 #include "proto/proto.h"
 
 /*
- * single source of truth for the simple pointer-merged and int-merged members of oidc_provider_t:
- * the struct declaration, oidc_cfg_provider_init and oidc_cfg_provider_merge are generated from
- * this list (see the same pattern in cfg/oauth.c); INT() carries the member type since several are
- * enums that initialize to OIDC_CONFIG_POS_INT_UNSET and merge on that sentinel. Members with
- * grouped or deep-copy semantics are listed separately below and handled by hand in all three
- * places.
+ * Generate the declaration, initialization, and merge logic for simple provider members.
+ * Members needing grouped or deep-copy handling remain explicit below.
  */
 #define OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                     \
 	PTR(char *, metadata_url)                                                                                      \
@@ -120,13 +116,7 @@ struct oidc_provider_t {
 	apr_array_header_t *client_keys;
 };
 
-/*
- * Body generators for the per-provider (oidc_provider_t) accessors declared in
- * cfg/provider.h: for member `foo` they emit oidc_cmd_provider_foo_set(),
- * oidc_cfg_provider_foo_set() and oidc_cfg_provider_foo_get().
- * OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF is the common base the typed variants
- * build on. The emitted names are token-pasted and so appear in no source line.
- */
+/* Generate provider accessor bodies declared in provider.h. */
 #define OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, type, def_val)                                                     \
                                                                                                                        \
 	const char *oidc_cmd_provider_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                     \
@@ -238,11 +228,7 @@ struct oidc_provider_t {
 #define OIDC_PROVIDER_MEMBER_FUNCS_URL(member)                                                                         \
 	OIDC_PROVIDER_MEMBER_FUNCS_PARSE_STR(member, oidc_cfg_parse_is_valid_http_url, NULL)
 
-/*
- * Like OIDC_PROVIDER_MEMBER_FUNCS_URL, but the directive accepts an empty value (raw-args) to explicitly disable the
- * associated endpoint. The empty string is stored (and preserved as non-NULL), so a value advertised in the metadata
- * obtained from OIDCProviderMetadataURL does not override it; callers must treat the empty string as "disabled".
- */
+/* URL accessor variant that preserves an empty string as an explicit endpoint disable. */
 #define OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY(member)                                                                   \
 	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \
 		const char *rv = oidc_cfg_parse_is_valid_http_url(pool, arg);                                          \
@@ -659,13 +645,7 @@ const char *oidc_cfg_provider_signed_jwks_uri_keys_set(apr_pool_t *pool, oidc_pr
 
 end:
 
-	/*
-	 * fall back to a private (cjose-retaining) copy of the default (globally configured
-	 * OIDCProviderSignedJwksUri) verification keys when the .conf supplied no "signed_jwks_uri_key"
-	 * (json == NULL) or an unparseable one (rv != NULL); copying rather than aliasing the global keys
-	 * keeps jwk_list uniformly owned by this provider so a per-request caller can always release it
-	 * (a successfully parsed key set is already owned and left in place)
-	 */
+	/* Copy default verification keys so every provider owns and can release its JWK list. */
 	if ((json == NULL) || (rv != NULL))
 		provider->jwks_uri.jwk_list = oidc_jwk_list_copy(pool, def_val);
 
@@ -762,13 +742,7 @@ int oidc_cfg_provider_userinfo_refresh_interval_get(const oidc_provider_t *provi
 		   : OIDC_DEFAULT_USERINFO_REFRESH_INTERVAL;
 }
 
-/*
- * endpoint URLs that accept an empty value to explicitly disable the endpoint (see
- * OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY); callers gate on both NULL and the empty string:
- * - userinfo_endpoint_url: e.g. with Microsoft Entra ID, where the access token cannot be used against the
- *   UserInfo Endpoint and all required claims are already present in the id_token
- * - revocation_endpoint_url: must allow empty string in base config
- */
+/* Endpoint URLs where an empty string explicitly disables the endpoint. */
 OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY(userinfo_endpoint_url)
 OIDC_PROVIDER_MEMBER_FUNCS_URL_EMPTY(revocation_endpoint_url)
 
@@ -800,10 +774,7 @@ static void oidc_cfg_provider_init(oidc_provider_t *provider) {
 void oidc_cfg_provider_merge(apr_pool_t *pool, oidc_provider_t *dst, const oidc_provider_t *base,
 			     const oidc_provider_t *add) {
 	OIDC_PROVIDER_CFG_SIMPLE_MEMBERS(OIDC_PROVIDER_M_MERGE_PTR, OIDC_PROVIDER_M_MERGE_INT)
-	/* token_endpoint_auth carries an optional ":<alg>" suffix parsed into token_endpoint_auth_alg;
-	 * merge the pair as a unit, so a vhost that re-sets the method takes its (possibly absent) alg
-	 * instead of inheriting the base server's alg. When add did not set the method the macro above
-	 * already inherited both from base. */
+	/* Merge token endpoint method and optional algorithm as one setting. */
 	if (add->token_endpoint_auth != NULL)
 		dst->token_endpoint_auth_alg = add->token_endpoint_auth_alg;
 	dst->jwks_uri.uri = _oidc_cfg_merge_ptr(add->jwks_uri.uri, base->jwks_uri.uri);

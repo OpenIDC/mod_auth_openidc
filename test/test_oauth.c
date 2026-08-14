@@ -188,9 +188,7 @@ START_TEST(test_oauth_check_userid_introspection_inactive) {
 }
 END_TEST
 
-/* with no "active" member the token's validity rests solely on the mandatory expiry claim; a
- * NumericDate may hold a non-integer value (RFC 7519 section 2), so a JSON real must satisfy it
- * rather than be rejected as malformed and fail the whole introspection */
+/* Without active, a real-valued NumericDate expiry can establish token validity. */
 START_TEST(test_oauth_check_userid_introspection_mandatory_real_expiry) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -768,13 +766,10 @@ START_TEST(test_oauth_check_userid_jwt_no_audience_configured) {
 }
 END_TEST
 
-/* a NumericDate may hold a non-integer value (RFC 7519 section 2), so a JWT access token whose "exp"
- * is a JSON real must be validated and cached like any other
- *
- * NB: on this path a real "exp" that is not read back as a number only shortens the cache entry to
- *     the default TTL, and the cache API exposes no way to read that TTL back, so this test cannot
- *     assert it; test_oauth_check_userid_introspection_mandatory_real_expiry is what guards the
- *     number-vs-integer read, since there the same claim decides whether the token is accepted */
+/*
+ * RFC 7519 permits a real-valued exp. This test checks acceptance and cache presence; the
+ * mandatory introspection test guards numeric parsing because the cache API does not expose TTL.
+ */
 START_TEST(test_oauth_check_userid_jwt_real_exp) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -791,11 +786,7 @@ START_TEST(test_oauth_check_userid_jwt_real_exp) {
 }
 END_TEST
 
-/* an encrypted (JWE) JWT access token is decrypted with the dedicated
- * OIDCOAuthDecryptSharedKeys key - not the client_secret fallback: the JWE key
- * deliberately differs from the client_secret set by e2e_setup_jwt_validation,
- * so decryption can only succeed through the configured shared decryption key -
- * and the inner HS256 signature is verified against OIDCOAuthVerifySharedKeys */
+/* Decrypt with OIDCOAuthDecryptSharedKeys and verify the inner token with OIDCOAuthVerifySharedKeys. */
 START_TEST(test_oauth_check_userid_jwt_encrypted_decrypt_shared_keys) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();

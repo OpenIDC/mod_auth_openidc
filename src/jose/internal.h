@@ -58,11 +58,7 @@
 	apr_psprintf(pool, "%s [file: %s, function: %s, line: %ld]", cjose_err.message, cjose_err.file,                \
 		     cjose_err.function, cjose_err.line)
 
-/*
- * the backend-independent OIDC_JOSE_JWK_KTY_* values carried in oidc_jwk_t.kty are kept identical to the
- * cjose enum so that no translation is needed at the boundary; assert that invariant at compile time so a
- * future cjose renumbering fails the build loudly instead of silently breaking key selection
- */
+/* Assert that backend-independent key types still match cjose's values. */
 OIDC_STATIC_ASSERT(OIDC_JOSE_JWK_KTY_RSA == CJOSE_JWK_KTY_RSA, kty_rsa);
 OIDC_STATIC_ASSERT(OIDC_JOSE_JWK_KTY_EC == CJOSE_JWK_KTY_EC, kty_ec);
 OIDC_STATIC_ASSERT(OIDC_JOSE_JWK_KTY_OCT == CJOSE_JWK_KTY_OCT, kty_oct);

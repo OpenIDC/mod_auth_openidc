@@ -255,11 +255,7 @@ ap_hook_handler(int (*handler)(request_rec *r), const char *const *aszPre, const
 }
 
 AP_DECLARE(int) ap_is_initial_req(request_rec *r) {
-	/* match Apache semantics: a request is "initial" when it is neither a
-	 * sub-request (r->main NULL) nor an internal-redirect carryover
-	 * (r->prev NULL). The previous stub hard-returned 0 which forced every
-	 * caller through the sub-request branch and hid initial-request paths
-	 * from coverage (e.g. oidc_oauth_check_userid_redirect_uri). */
+	/* Match Apache: an initial request has neither main nor prev. */
 	return (r->main == NULL) && (r->prev == NULL);
 }
 
@@ -284,12 +280,7 @@ AP_DECLARE(const char *) ap_expr_str_exec(request_rec *r, const ap_expr_info_t *
 	return expr->filename;
 }
 
-/*
- * Apache runs the command and hands back its first output line, or NULL when it could not be
- * run at all. Tests prime the answer with oidc_test_exec_line_prime rather than spawning a
- * process, so an "exec:" directive can be driven through all of its outcomes; the unprimed
- * default is NULL, i.e. "the command could not be run".
- */
+/* Return the primed first command-output line; an unprimed command fails with NULL. */
 AP_DECLARE(char *) ap_get_exec_line(apr_pool_t *p, const char *cmd, const char *const *argv) {
 	return (_oidc_test_exec_line_output == NULL) ? NULL : apr_pstrdup(p, _oidc_test_exec_line_output);
 }
@@ -412,10 +403,7 @@ void oidc_test_added_input_filter_reset(void) {
 AP_DECLARE(apr_status_t)
 ap_get_brigade(ap_filter_t *filter, apr_bucket_brigade *bucket, ap_input_mode_t mode, apr_read_type_e block,
 	       apr_off_t readbytes) {
-	/* feed the caller the request body the next call is primed with, followed by EOS; an unprimed
-	 * call yields an empty brigade, as before. The input filter under test only appends its
-	 * captured POST parameters once it sees the EOS bucket, so a stub that produced nothing at all
-	 * left that half of it unreachable. */
+	/* Return the primed request body followed by EOS; unprimed calls return an empty brigade. */
 	if (_oidc_test_brigade_body != NULL) {
 		apr_bucket_alloc_t *ba = bucket->bucket_alloc;
 		APR_BRIGADE_INSERT_TAIL(

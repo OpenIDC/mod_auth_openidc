@@ -164,9 +164,7 @@ START_TEST(test_handle_userinfo_retrieve_non_401_no_refresh) {
 	oidc_cfg_provider_userinfo_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
-	/* point the token endpoint at a dead port: had a refresh been (wrongly) attempted it would have failed
-	 * there and left a FAILED marker in the refresh-token cache under the refresh token, which we assert is
-	 * absent to prove the refresh grant was never entered */
+	/* A dead endpoint and absent FAILED marker prove no refresh was attempted. */
 	int free_port = oidc_test_http_free_port(r->pool);
 	ck_assert_int_ne(free_port, 0);
 	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider,
@@ -1039,10 +1037,7 @@ START_TEST(test_handle_refresh_grant_cached_results_clamps_and_id_token) {
 	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, NULL), TRUE);
 	ck_assert_str_eq(new_at, "AT-CACHED");
 	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-CACHED-1b");
-	/* the session expiry was aligned with the id_token exp (now + 600); deliberately not
-	 * ck_assert_int_gt: check 0.9.x (el7) assigns both operands to an "int" before comparing
-	 * them, which truncates an apr_time_t to its low 32 bits and makes this comparison fail
-	 * whenever the sum crosses the signed boundary - ~14% of the time, on a 71.6 minute cycle */
+	/* Avoid ck_assert_int_gt: check 0.9.x truncates apr_time_t operands to int. */
 	apr_time_t session_expires = oidc_session_get_session_expires(r, session);
 	apr_time_t now = apr_time_now();
 	ck_assert_msg(session_expires > now,
@@ -1247,10 +1242,7 @@ START_TEST(test_handle_refresh_grant_cache_locks) {
 				     apr_time_now() + apr_time_from_msec(600));
 	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL), FALSE);
 
-	/* a lock marker that outlives the bounded back-off (its expiry exceeds the lock TTL the
-	 * wait is bounded to) exhausts the retries: the timeout branch gives up waiting and
-	 * attempts its own refresh, which fails against the dead endpoint. NB: this scenario
-	 * spends the full bounded wait (~OIDC_REFRESH_LOCK_TTL seconds) sleeping */
+	/* An overlong lock marker exhausts the bounded wait, then the dead endpoint fails our refresh. */
 	oidc_session_set_refresh_token(r, session, "RT-LOCKSTUCK");
 	oidc_cache_set_refresh_token(r, "RT-LOCKSTUCK", TEST_REFRESH_LOCK_VALUE,
 				     apr_time_now() + apr_time_from_sec(30));
@@ -2289,10 +2281,7 @@ START_TEST(test_handle_discovery_response_3rd_party_ignores_scopes_and_params) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
-	/* no CSRF cookie, so this is 3rd-party initiated SSO: "scopes" and "auth_request_params"
-	 * did not come back from a Discovery page we rendered, and must not shape the
-	 * authorization request - otherwise any cross-site link picks the scopes the victim's
-	 * session ends up with */
+	/* Third-party SSO without CSRF proof must ignore Discovery-only request parameters. */
 	r->args = "iss=https%3A%2F%2Fidp.example.com"
 		  "&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2Fwhatever"
 		  "&scopes=adminscope"
@@ -2388,12 +2377,7 @@ START_TEST(test_handle_discovery_response_account_discovery_fails) {
 }
 END_TEST
 
-/*
- * OIDCDiscoverIssuersAllowed must reject a disallowed host *before* the webfinger
- * discovery HTTP call is attempted, not just against the issuer it would resolve to:
- * with the allow-list configured, 127.0.0.1 (which would otherwise fail with a
- * connection-refused 404, as in the tests above) must instead be rejected outright.
- */
+/* Reject a disallowed discovery host before attempting its WebFinger request. */
 START_TEST(test_handle_discovery_response_url_based_issuer_not_allowed) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -4928,9 +4912,7 @@ START_TEST(test_handle_logout_backchannel_encrypted) {
 	const char *secret = "backchannel-logout-shared-secret-XYZ";
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
 
-	/* an HS256-signed logout token, symmetrically encrypted with a key derived from the client secret:
-	 * the module must decrypt it using that same client-secret-derived key (the provider is only known
-	 * after decryption, so this exercises the client-secret decryption key added at parse time) */
+	/* Decrypt an HS256 logout token before its provider is known using the client-secret-derived key. */
 	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
 							   "jti-enc", TRUE, FALSE, secret);
 	char *logout_jwe = e2e_encrypt_symmetric(r, logout_jwt, secret);
@@ -5235,15 +5217,9 @@ START_TEST(test_handle_logout_frontchannel_accept_png_pixel) {
 }
 END_TEST
 
-/* a front-channel logout by sid for a session present in the cache revokes its tokens */
 /*
- * a front-channel logout carries no signature and no session cookie, so the caller has not shown
- * that the sid it names is theirs: it must clear the local session but must not revoke that
- * session's tokens at the OP, which is a side effect the user cannot undo by logging in again.
- *
- * the second, authenticated logout is the positive control: the mock server serves exactly one
- * request, so the captured one is the first that arrived. Had the front-channel leg revoked, it
- * would be that leg's POST carrying RT-victim rather than this one's RT-owner.
+ * An unauthenticated front-channel logout clears local state without revoking tokens. The later
+ * authenticated logout is the positive control for the mock server's single request.
  */
 START_TEST(test_handle_logout_frontchannel_by_sid_does_not_revoke) {
 	request_rec *r = oidc_test_request_get();
@@ -5257,12 +5233,7 @@ START_TEST(test_handle_logout_frontchannel_by_sid_does_not_revoke) {
 	oidc_cfg_provider_revocation_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
 	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
 
-	/*
-	 * the mock server serves exactly one request and its thread then exits, so a regression that
-	 * makes the front-channel leg revoke would leave the second leg's POST unanswered: bound the
-	 * timeout it uses so that fails fast and the assertions below report the cause, rather than
-	 * the whole test dying on check's timeout with no indication of why
-	 */
+	/* Bound the positive-control POST so an unexpected earlier revocation fails quickly. */
 	oidc_http_timeout_t *timeout = oidc_cfg_http_timeout_long_get(c);
 	timeout->request_timeout = 1;
 	timeout->connect_timeout = 1;
@@ -5466,9 +5437,7 @@ static apr_byte_t e2e_jti_cache_set(request_rec *r, const char *section, const c
 static oidc_cache_t e2e_jti_failure_cache = {"jti-section-failure", 1,	 NULL, NULL, e2e_jti_cache_get,
 					     e2e_jti_cache_set,	    NULL};
 
-/* jti replay detection fails OPEN: a jti cache read (mode 1) or write (mode 2) error is logged but
- * must not turn a valid back-channel logout into a failure. The section-scoped mock leaves the sid
- * index lookup working, so the logout still completes and clears the index despite the jti error. */
+/* JTI cache errors fail open without preventing back-channel logout from clearing the sid index. */
 START_TEST(test_handle_logout_backchannel_jti_cache_errors_fail_open) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -5822,12 +5791,7 @@ START_TEST(test_handle_dispatch_logout_takes_precedence_over_post_authn) {
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
-	/* a POST with a ?logout= query parameter must be routed to oidc_logout
-	 * (back-channel logout), not to the POST authorization-response handler:
-	 * the dispatcher checks for the logout parameter BEFORE oidc_proto_response_is_post.
-	 * Without a logout_token in the form body, oidc_logout returns BAD_REQUEST —
-	 * if routing went to the POST authn branch instead we'd see a different code
-	 * (typically a state-mismatch failure). */
+	/* A POST with ?logout= must reach back-channel logout before authorization-response handling. */
 	r->args = "logout=backchannel";
 	r->method_number = M_POST;
 	apr_table_set(r->headers_in, "Content-Type", "application/x-www-form-urlencoded");
@@ -6187,11 +6151,7 @@ START_TEST(test_handle_authz_24_unautz_authenticate_redirects) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAutzAction);
 	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(cmd, dir_cfg, "auth", NULL));
 
-	/* the fixture sets no Accept header by default (oidc_is_auth_capable_request would
-	 * otherwise deny outright); an HTML-accepting browser-like request is auth-capable, and
-	 * with no unauth_expression configured the AUTHENTICATE case falls straight through to
-	 * oidc_request_authenticate_user - no metadata_dir means it uses the static provider and
-	 * redirects there, landing in the "Stepup Authentication" HTML-refresh branch */
+	/* An HTML-capable request without an unauth expression reaches static-provider step-up authentication. */
 	apr_table_set(r->headers_in, "Accept", "text/html");
 	authz_status rc = oidc_authz_24_checker_claim(r, "claim sub:bob", NULL);
 	ck_assert_int_eq(rc, AUTHZ_DENIED);
@@ -6238,11 +6198,10 @@ START_TEST(test_handle_authz_24_unautz_authenticate_expr_bypasses_xhr_check) {
 	/* OIDCUnAutzAction must be explicitly set to "auth" to reach the AUTHENTICATE case */
 	ck_assert_ptr_null(oidc_cmd_dir_unautz_action_set(oidc_test_cmd_get(OIDCUnAutzAction), dir_cfg, "auth", NULL));
 
-	/* with an OIDCUnAuthAction expression configured, the expression replaces the built-in
-	 * XHR-capability heuristic entirely: even an XHR-shaped request proceeds to the
-	 * authenticate fall-through when the effective action is "auth". NB: the stubbed
-	 * boolean ap_expr_exec always reports an evaluation error, so unauth_action_get falls
-	 * back to its default (authenticate) here - the expr-denies arm needs a real evaluator */
+	/*
+	 * An OIDCUnAuthAction expression replaces the XHR heuristic. Here the stub evaluator reports
+	 * an error, so the default authenticate action drives the redirect.
+	 */
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCUnAuthAction);
 	ck_assert_ptr_null(oidc_cmd_dir_unauth_action_set(cmd, dir_cfg, "401", "req('X-Requested-With')"));
 	apr_table_set(r->headers_in, "X-Requested-With", "XMLHttpRequest");
@@ -6653,11 +6612,7 @@ START_TEST(test_handle_refresh_grant_with_id_token) {
 	oidc_session_load(r, &session);
 	oidc_session_set_refresh_token(r, session, "RT-IDTOKEN");
 
-	/* the refresh-token grant consults a shared cache first; with a persistent
-	 * cache backend a prior test's entry under the same key could short-circuit
-	 * the token-endpoint call and skip applying the id_token. Use a dedicated key
-	 * and evict any stale grant result so this test always refreshes against the
-	 * OP, independent of the configured cache backend. */
+	/* Use a clean refresh-cache key so this test always reaches the token endpoint. */
 	oidc_cache_set_refresh_token(r, "RT-IDTOKEN", NULL, 0);
 
 	/* the token endpoint also returns an id_token => triggers

@@ -65,15 +65,8 @@
 #define OIDC_SESSION_FORMAT_VERSION_KEY "v"
 
 /*
- * the session payload layout that this module writes.
- *
- * Bump it when a change to the payload cannot be read correctly by a module that predates the
- * change: a mixed-version fleet sharing one cache backend then gets a session it does not
- * understand *rejected*, i.e. the user re-authenticates, instead of silently misparsed.
- *
- * Sessions written before this field existed carry no version at all, which is why an absent
- * value reads as version 1 rather than as an error - adding the field is not itself a format
- * change, since a reader takes the keys it knows and ignores the rest in both directions.
+ * Bump only when older readers cannot safely interpret the payload. Adding keys is compatible
+ * because readers ignore unknown keys. A missing version means the original, version-1 layout.
  */
 #define OIDC_SESSION_FORMAT_VERSION 1
 
@@ -99,12 +92,7 @@ static apr_byte_t oidc_session_encode(request_rec *r, const oidc_cfg_t *c, const
 	return TRUE;
 }
 
-/*
- * check that the decoded payload is a layout this module understands; see
- * OIDC_SESSION_FORMAT_VERSION. A session from a newer module is rejected rather than read with
- * the wrong meaning attached to its keys - the caller treats that as "no session", so the user
- * re-authenticates against this server and a payload is written in the layout it does write.
- */
+/* Reject payloads from newer layouts so the caller re-authenticates instead of misreading them. */
 static apr_byte_t oidc_session_version_supported(request_rec *r, oidc_session_t *z) {
 	int version = 0;
 	/* absent: written before the field existed, i.e. the original layout */
@@ -174,20 +162,9 @@ static void oidc_session_clear(request_rec *r, oidc_session_t *z) {
 }
 
 /*
- * start a brand new session for a newly authenticated user
- *
- * A login stores the new identity into whatever session the browser presented, keeping its
- * id: oidc_session_load() mints a fresh uuid but oidc_session_load_cache_by_uuid() replaces
- * it with the one from the cookie whenever that cache entry exists. So an attacker who can
- * set a cookie for this host - the related-domain attacker an OIDCCookieDomain deployment
- * creates - can authenticate first to make a live entry, plant its id on the victim, and
- * still hold that id after the victim has logged in. Whatever they left in the entry (a
- * refresh token, say) would also survive into the victim's session, and be handed to the
- * application by OIDCPassRefreshToken.
- *
- * Drop the old entry, discard its contents and issue a new id. Client-cookie sessions are
- * self-contained and were never exposed to this, but are re-keyed too so both types behave
- * the same.
+ * Replace the presented session on login. Reusing its id or contents would allow a planted
+ * server-cache cookie to survive authentication; client-cookie sessions are re-keyed for
+ * consistent behavior.
  */
 void oidc_session_reset(request_rec *r, const oidc_cfg_t *c, oidc_session_t *z) {
 	if ((oidc_cfg_session_type_get(c) == OIDC_SESSION_TYPE_SERVER_CACHE) && (z->uuid != NULL))
@@ -303,17 +280,9 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 		/* cache backend does not contain an entry for the given key */
 		if (z->state == NULL) {
 
-			/* With OIDCSessionCacheFallbackToCookie the cookie is not necessarily a key into the
-			 * cache at all: oidc_session_save falls back to storing the whole session in it
-			 * whenever the cache write fails, and a backend that fails writes while reporting a
-			 * plain miss on reads - a file cache on a directory it cannot write to, say - arrives
-			 * here holding exactly such a session. Deleting the cookie would throw it away, and
-			 * returning success would skip the fallback in oidc_session_load, so the user would be
-			 * sent round the authentication loop on every request. Report failure instead and let
-			 * that fallback read the cookie as the session it is.
-			 *
-			 * A cookie that turns out to be neither is left in place rather than cleaned up here;
-			 * it is overwritten by the next successful login.
+			/*
+			 * With OIDCSessionCacheFallbackToCookie this may be a complete session, not a cache key.
+			 * Preserve it and report failure so oidc_session_load() can try the cookie fallback.
 			 */
 			if (oidc_cfg_session_cache_fallback_to_cookie_get(c))
 				return FALSE;
@@ -385,11 +354,7 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oid
 		if (z->sid != NULL)
 			oidc_cache_set_sid(r, z->sid, NULL, 0);
 		if (z->sub != NULL) {
-			/* unlike the per-login sid, the sub index is a single slot shared by all of this
-			 * user's sessions (last writer wins): killing one session must not delete an entry
-			 * that meanwhile points at a surviving session, or a back-channel logout token
-			 * carrying only a sub would no longer find that one; a stale entry left behind is
-			 * reported as "no session" there, which is harmless */
+			/* Delete the shared sub index only when it still points to this session. */
 			char *sub_uuid = NULL;
 			oidc_cache_get_sid(r, z->sub, &sub_uuid);
 			if ((sub_uuid == NULL) || (_oidc_strcmp(sub_uuid, z->uuid) == 0))
@@ -431,9 +396,7 @@ static apr_byte_t oidc_session_save_cookie(request_rec *r, const oidc_session_t 
 	if ((z->state != NULL) && (oidc_session_encode(r, c, z, &cookieValue, TRUE) == FALSE))
 		return FALSE;
 
-	/* a session too large to be split over the maximum number of cookie chunks is a hard failure:
-	 * writing it anyway would have the browser drop it on the next request and send the user round
-	 * the authentication loop for ever, so report it to the caller instead */
+	/* Reject sessions that exceed the cookie-chunk limit to avoid an authentication loop. */
 	return oidc_http_set_chunked_cookie(
 	    r, oidc_cfg_dir_cookie_get(r), cookieValue, oidc_cfg_persistent_session_cookie_get(c) ? z->expiry : -1,
 	    oidc_cfg_session_cookie_chunk_size_get(c),

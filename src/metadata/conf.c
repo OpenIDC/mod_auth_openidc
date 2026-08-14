@@ -257,13 +257,7 @@ static void oidc_metadata_conf_parse_response(request_rec *r, oidc_cfg_t *cfg, c
 				    oidc_proto_profile_pkce_get(provider)->method);
 	OIDC_METADATA_PROVIDER_SET(pkce, value);
 
-	/*
-	 * only override response_type when it is explicitly present in the .conf; unlike the other string
-	 * members we must NOT substitute the global-config default here, because that would make
-	 * oidc_cfg_provider_response_type_is_set() true and defeat the fallback to the first advertised
-	 * "response_types" entry that oidc_metadata_client_parse_response_type() applies afterwards (the
-	 * global-config default is applied there too)
-	 */
+	/* Preserve an absent response_type so client parsing can prefer the first advertised value. */
 	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_RESPONSE_TYPE, &value, NULL);
 	OIDC_METADATA_PROVIDER_SET(response_type, value);
 
@@ -294,13 +288,7 @@ static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *c
 	const char *global_auth = oidc_cfg_provider_token_endpoint_auth_get(primary);
 	const char *global_alg = oidc_cfg_provider_token_endpoint_auth_alg_get(primary);
 
-	/*
-	 * fall back to the globally configured method; the method and its algorithm are stored separately but
-	 * oidc_cfg_provider_token_endpoint_auth_set() re-parses the combined "method:alg" form, so re-append
-	 * the ":<alg>" suffix (if any) to the fallback value to inherit token_endpoint_auth_alg too rather
-	 * than dropping it (a token_endpoint_auth explicitly set in the .conf overrides both and does not
-	 * inherit the global algorithm)
-	 */
+	/* Recombine the global method and algorithm so the fallback inherits both. */
 	const char *fallback = global_auth;
 	if ((global_auth != NULL) && (global_alg != NULL))
 		fallback = apr_psprintf(r->pool, "%s:%s", global_auth, global_alg);
@@ -380,17 +368,8 @@ static void oidc_metadata_conf_parse_auth_request_method(request_rec *r, const o
 }
 
 /*
- * apply the subset of the conf metadata that parsing the provider metadata depends on
- *
- * the RFC 8705 mutual-TLS decisions taken while parsing the provider metadata - which token endpoint
- * authentication method to select out of "token_endpoint_auth_methods_supported" and whether to
- * prefer the "mtls_endpoint_aliases" endpoints - need to know about the TLS client certificate, the
- * profile and the authentication method configured for this OP. Those live in the .conf metadata,
- * which is otherwise only applied *after* the provider metadata (so that it overrides it), leaving
- * the decisions to be taken on the global configuration alone: a certificate configured in the .conf
- * of a multi-provider (OIDCMetadataDir) setup would go unnoticed and its OP would keep talking to
- * the conventional endpoints. Hence they are applied up front here, and again (idempotently) by
- * oidc_metadata_conf_parse() in its regular slot.
+ * Apply profile, authentication, and certificate overrides before provider parsing because its
+ * RFC 8705 decisions depend on them. The full conf parse applies them again later.
  */
 void oidc_metadata_conf_parse_pre_provider(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
 					   oidc_provider_t *provider) {

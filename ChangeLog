@@ -1,3 +1,6 @@
+08/14/2026
+- source/test: simplify overly detailed comments while preserving essential rationale and invariants
+
 08/12/2026
 - handle/oauth/util: reject a duplicated security-critical protocol parameter at the endpoints that
   consume it - "state"/"code"/"access_token"/"id_token" in an authorization response, "access_token"

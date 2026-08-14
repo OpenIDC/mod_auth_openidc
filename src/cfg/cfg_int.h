@@ -72,11 +72,8 @@ static inline apr_interval_time_t _oidc_cfg_merge_timeout(apr_interval_time_t ad
 }
 
 /*
- * single source of truth for the simple members of oidc_cfg_cache_t: the struct declaration and
- * the create/merge functions in cfg/cache.c are generated from these lists (see the same pattern
- * in cfg/oauth.c). Preprocessor conditionals cannot appear inside a macro body, so each
- * conditionally-compiled backend contributes its members through its own guarded sub-macro -
- * which is also how a derived branch adds backend members of its own.
+ * Generate cache struct members and create/merge logic from these lists. Optional backends add
+ * members through guarded sub-macros because macro bodies cannot contain conditionals.
  */
 #ifdef USE_MEMCACHE
 #define OIDC_CACHE_CFG_MEMCACHE_MEMBERS(PTR, INT, TIMEOUT)                                                             \
@@ -135,12 +132,7 @@ struct oidc_cfg_cache_t {
 	OIDC_CACHE_CFG_SIMPLE_MEMBERS(OIDC_CACHE_M_DECL, OIDC_CACHE_M_DECL, OIDC_CACHE_M_DECL_TIMEOUT)
 };
 
-/*
- * single source of truth for the simple pointer-merged and int-merged members of oidc_cfg_t: the
- * struct declaration below and oidc_cfg_server_create/oidc_cfg_server_merge in cfg/cfg.c are
- * generated from this list (see the same pattern in cfg/oauth.c); members with special create or
- * merge semantics remain hand-written in all three places
- */
+/* Generate declaration, initialization, and merge logic for simple server members. */
 #define OIDC_SVR_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                          \
 	/* the redirect URI as configured with the OpenID Connect OP's that we talk to */                              \
 	PTR(char *, redirect_uri)                                                                                      \
@@ -229,10 +221,7 @@ struct oidc_cfg_t {
 
 	/* indicates whether this is a derived config, merged from a base one */
 	unsigned int merged;
-	/* indicates whether redirect_uri was inherited from the base server rather than set in this
-	 * server's own configuration section; the merged value alone cannot tell the two apart, and
-	 * only a deliberately configured one expresses the intent to act as an OpenID Connect RP
-	 * (see oidc_config_check_vhost_config) */
+	/* Distinguish an inherited redirect URI from one that declares RP intent on this vhost. */
 	unsigned int redirect_uri_inherited;
 };
 
@@ -240,13 +229,7 @@ struct oidc_cfg_t {
 	rv != NULL ? apr_psprintf(cmd->pool, "Invalid value for directive '%s': %s", cmd->directive->directive, rv)    \
 		   : NULL
 
-/*
- * Body generators for the per-server (oidc_cfg_t) accessors declared in
- * cfg/cfg.h. For member `foo` these emit the getter oidc_cfg_foo_get() and the
- * directive handler oidc_cmd_foo_set(), matching the prototypes declared there;
- * the OIDC_CFG_MEMBER_FUNCS_* aggregates in cfg/cfg.c build on them. The names
- * are token-pasted and so appear in no source line.
- */
+/* Generate server accessor bodies declared in cfg.h. */
 #define OIDC_CFG_MEMBER_FUNC_GET(member, type)                                                                         \
 	type oidc_cfg_##member##_get(const oidc_cfg_t *cfg) {                                                          \
 		return cfg->member;                                                                                    \

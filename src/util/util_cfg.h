@@ -43,15 +43,7 @@
 #ifndef _MOD_AUTH_OPENIDC_UTIL_CFG_H_
 #define _MOD_AUTH_OPENIDC_UTIL_CFG_H_
 
-/*
- * the util/ functions that take a configuration type, split out of util/util.h so that header does
- * not drag cfg/cfg.h - and through it cfg/provider.h, cfg/oauth.h, cache/cache.h - into every one
- * of its consumers. util/util.h is included nearly everywhere, so that transitive edge made any
- * directive change rebuild almost the whole module and left util/ unable to build on its own.
- *
- * Include this instead of util/util.h where one of the declarations below is used; it provides
- * everything util/util.h does.
- */
+/* Configuration-dependent utilities, split out to keep cfg headers out of util/util.h. */
 
 #include "cfg/cfg.h"
 #include "cfg/dir.h"

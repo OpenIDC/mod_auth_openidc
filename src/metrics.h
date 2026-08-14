@@ -123,13 +123,7 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	}
 
 // NB: order must match what is defined in metrics.c in array _oidc_metrics_counters_info
-/*
- * single source of truth binding each counter's enum value to its exported class, metric name
- * and description: the oidc_metrics_counter_type_t enum below and the
- * _oidc_metrics_counters_info table in metrics.c are both generated from this list, so the
- * index correspondence between them can no longer skew (the OM_CLASS_* string constants are
- * defined in metrics.c, where the table is expanded)
- */
+/* Generate both counter enum values and metadata, preserving their index correspondence. */
 // clang-format off
 #define OIDC_METRICS_COUNTERS_LIST(X) \
 	X(OM_AUTHTYPE_MOD_AUTH_OPENIDC,            OM_CLASS_AUTH_TYPE,     "mod_auth_openidc",              "requests handled by mod_auth_openidc") \

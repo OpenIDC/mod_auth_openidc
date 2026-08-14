@@ -181,12 +181,7 @@ START_TEST(test_session_cookie_roundtrip) {
 }
 END_TEST
 
-/*
- * the process-local parsed-session cache is shared by every virtual host in the process, so it must
- * not let a session cross between them. In client-cookie mode the cookie is the whole session and
- * the JWE decrypt under this vhost's OIDCCryptoPassphrase is the only thing authenticating it, so a
- * cache hit that skipped the decrypt would hand vhost B the session vhost A minted.
- */
+/* A process-local parsed-session cache must not bypass per-vhost client-cookie authentication. */
 START_TEST(test_session_cookie_not_shared_across_vhosts) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -553,10 +548,7 @@ START_TEST(test_session_load_mutate_reload) {
 }
 END_TEST
 
-/* the sub logout index is one shared slot per user, last writer wins: killing an older session
- * must not delete the entry that meanwhile points at the user's newer session, or a back-channel
- * logout token carrying only a sub would no longer find that one; killing the session the entry
- * actually points at still clears it */
+/* Removing an older session must preserve a sub index that now points to a newer session. */
 START_TEST(test_session_sub_index_survives_older_session_kill) {
 	request_rec *r = oidc_test_request_get();
 	const char *uuid1 = "1111111111111111111111111111111111111111111111111111111111111111";

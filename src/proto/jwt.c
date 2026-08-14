@@ -162,12 +162,7 @@ apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *
 	return TRUE;
 }
 
-/*
- * merge the statically configured and dynamically obtained (JWKS) verification keys, giving precedence to the
- * dynamically obtained keys when the same "kid" appears in both sets: the provider's currently published JWKS
- * is authoritative for its signing keys, so a locally configured key with a colliding "kid" is treated as
- * stale and must not shadow it
- */
+/* Merge verification keys, letting the provider's current JWKS override static keys with the same kid. */
 static apr_hash_t *oidc_proto_jwt_verify_keys_merge(request_rec *r, apr_hash_t *static_keys, apr_hash_t *dynamic_keys) {
 	if ((static_keys != NULL) && (dynamic_keys != NULL)) {
 		for (apr_hash_index_t *hi = apr_hash_first(r->pool, static_keys); hi != NULL; hi = apr_hash_next(hi)) {
@@ -275,9 +270,7 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 		oidc_warn(r, "oidc_base64url_decode returned an error");
 		return NULL;
 	}
-	/* NB: "kid" belongs in this condition too: leaving it out meant that a caller asking only
-	 * for the key id skipped the parse entirely and was handed NULL, which reads as "the header
-	 * carries no kid" rather than as "you did not ask for anything I decode" */
+	/* Parse when kid alone is requested; otherwise a present key ID would be reported as absent. */
 	if ((alg != NULL) || (enc != NULL) || (kid != NULL)) {
 		oidc_json_t *json = NULL;
 		oidc_json_decode_object(r, result, &json);

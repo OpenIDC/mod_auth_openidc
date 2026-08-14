@@ -44,25 +44,8 @@
 #define _MOD_AUTH_OPENIDC_CFG_DIRECTIVES_H_
 
 /*
- * Single source of truth for the names of the OIDC* Apache configuration
- * directives.
- *
- * Each directive name is defined as a macro whose value equals its own spelling
- * (#define OIDCFoo "OIDCFoo"). That redundancy buys two things:
- *   - the cfg/cmds.c command table and the log/error messages reference one
- *     symbol instead of repeating the literal, so a rename happens in one place;
- *   - a misspelled directive becomes a *compile* error (unknown identifier)
- *     rather than a silently-ignored bare string.
- *
- * The names used to live scattered across cfg.h / provider.h / oauth.h / dir.h /
- * cache.h, interleaved with the accessor-generating macros. They are collected
- * here so those headers carry only structure and API. This header is pulled in
- * via cfg.h, which every other cfg header includes.
- *
- * Grouping below mirrors the config struct that owns each directive; ordering
- * within a group is historical. The memcache/redis names are defined
- * unconditionally (a string macro is free); only their *use* in cmds.c is
- * guarded by USE_MEMCACHE / USE_LIBHIREDIS.
+ * Shared directive names for the command table and diagnostics. Using symbols instead of
+ * repeated literals makes misspellings compile-time errors. Groups follow the owning config.
  */
 
 /*

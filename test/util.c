@@ -51,28 +51,11 @@
 #include "util/util.h"
 #include <openssl/evp.h>
 
-/*
- * Per-test fixture state. oidc_test_setup() recreates both every test and
- * oidc_test_teardown() frees and NULLs them, so they do not carry over between
- * tests even under CK_FORK=no (make valgrind), where the whole suite runs in
- * one process. Tests that keep their own module-level statics (e.g. the cache
- * mocks in test_cache.c) must reset them in their fixture for the same reason.
- */
+/* Per-test fixture state; module-level test statics need their own CK_FORK=no reset. */
 static apr_pool_t *pool = NULL;
 static request_rec *request = NULL;
 
-/*
- * memoize the real PBKDF2-HMAC-SHA256 derivation (210,000 iterations, see
- * oidc_util_key_derive_passphrase_key) by raw secret text, for the lifetime of the test
- * process. oidc_test_setup() re-derives on every one of the ~570 tests in the suite, and
- * test_cache.c's passphrase-rotation tests re-derive several times per test, but the whole
- * suite only ever uses a handful of distinct secret strings -- so caching collapses ~600 KDF
- * calls down to a handful without weakening what any test actually checks (the KDF itself is
- * only under test in test_util.c's test_util_jwt, which calls oidc_crypto_passphrase_derive_keys()
- * directly and bypasses this cache). This matters most under `make valgrind` (CK_FORK=no),
- * where the entire suite runs in one process and memcheck instrumentation makes each 210,000-
- * iteration call ~100x slower (~20ms natively vs. ~2s under valgrind).
- */
+/* Cache PBKDF2 by secret across tests; direct KDF tests bypass this optimization. */
 #define OIDC_TEST_KDF_CACHE_MAX 32
 static struct {
 	char secret[128];
@@ -253,13 +236,7 @@ cmd_parms *oidc_test_cmd_get(const char *primitive) {
 	return cmd;
 }
 
-/*
- * tests that poke cfg->crypto_passphrase.secret{1,2} directly at runtime (to simulate a
- * passphrase rotation without spinning up a new config) must call this afterwards so the
- * cached PBKDF2-derived key material (see oidc_cfg_crypto_passphrase_derive_keys()) is
- * recomputed for the new raw secret(s); in production this only ever happens once, at
- * post_config time, after a config reload
- */
+/* Re-derive keys after tests directly replace passphrase secrets at runtime. */
 void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg) {
 	cfg->crypto_passphrase.derived_key1_set = FALSE;
 	cfg->crypto_passphrase.derived_key2_set = FALSE;

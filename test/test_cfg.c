@@ -836,12 +836,7 @@ START_TEST(test_cmd_session_type) {
 }
 END_TEST
 
-/*
- * Tests for cfg/parse.c helpers that aren't already exercised through the
- * cmd setters in the other tests. These functions are used by callers in
- * cfg/cfg.c, cfg/oauth.c and cfg/provider.c that share the same parse
- * helpers - exercising them here gives coverage to many shared code paths.
- */
+/* Direct coverage for shared cfg/parse.c helpers not reached through command setters. */
 
 START_TEST(test_cfg_parse_is_valid_url) {
 	apr_pool_t *pool = oidc_test_pool_get();
@@ -1074,11 +1069,7 @@ START_TEST(test_cmd_crypto_passphrase) {
 }
 END_TEST
 
-/*
- * "exec:<command>" runs a command and takes the passphrase from its first output line, so that
- * the secret does not have to sit in the configuration file. Every outcome of that has to be
- * reported as a configuration error rather than leaving the passphrase silently unset.
- */
+/* Cover every exec: passphrase outcome without silently leaving the secret unset. */
 START_TEST(test_cmd_crypto_passphrase_exec) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCCryptoPassphrase);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -1656,11 +1647,7 @@ START_TEST(test_cfg_server_merge_crypto_passphrase_derived_keys) {
 }
 END_TEST
 
-/*
- * the memoized KDF variant must derive on a cache miss, copy on a cache hit (instead of paying
- * for the ~210,000-iteration PBKDF2 again), key the cache on the secret text so distinct
- * secrets do not collide, and fall back to plain derivation when no cache is passed
- */
+/* Cover memoized KDF misses, hits, distinct secrets, and the no-cache fallback. */
 START_TEST(test_cfg_crypto_passphrase_derive_keys_cached) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	apr_hash_t *kdf_cache = apr_hash_make(pool);
@@ -1738,12 +1725,7 @@ START_TEST(test_cfg_child_init) {
 }
 END_TEST
 
-/*
- * which endpoint authentication methods are considered valid depends on two things: whether
- * mutual-TLS is allowed at this call site (it is not when selecting out of an OP's advertised
- * list for a client that has a secret) and whether a private key is configured for
- * private_key_jwt. All four combinations are picked out by oidc_cfg_get_valid_endpoint_auth_function.
- */
+/* Cover endpoint-auth validation with and without mTLS permission and private keys. */
 START_TEST(test_cfg_valid_endpoint_auth_function) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	request_rec *r = oidc_test_request_get();
@@ -1991,14 +1973,7 @@ START_TEST(test_cfg_dir_config_merge) {
 }
 END_TEST
 
-/*
- * Regression coverage for the dir-config merge resolution rules that
- * test_cfg_dir_config_merge does not exercise: the _merge_pos_int helper (incl.
- * an explicit "off"/0 overriding a truthy base) and the _merge_introspect_interval
- * special case (the -2 "unset" sentinel must fall back to base, not reset to the
- * getter default). These are the empty/sentinel paths that have historically
- * regressed in config merging.
- */
+/* Cover explicit zero and unset-sentinel directory merge behavior. */
 START_TEST(test_cfg_dir_config_merge_inherit) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	request_rec *r = oidc_test_request_get();

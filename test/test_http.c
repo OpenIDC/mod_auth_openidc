@@ -408,12 +408,7 @@ START_TEST(test_set_chunked_cookie_too_many_chunks) {
 }
 END_TEST
 
-/*
- * a value whose length is an exact multiple of the chunk size must produce only full chunks
- * and a matching counter: the old floor+1 chunk count advertised a trailing empty chunk that
- * oidc_http_set_cookie turned into a delete, so a browser stored one chunk fewer than the
- * counter claimed and oidc_http_get_chunked_cookie refused the whole value
- */
+/* Exact multiples must not advertise a trailing empty cookie chunk. */
 START_TEST(test_set_chunked_cookie_exact_multiple_roundtrip) {
 	request_rec *r = oidc_test_request_get();
 	apr_time_t expires = apr_time_now() + apr_time_from_sec(3600);

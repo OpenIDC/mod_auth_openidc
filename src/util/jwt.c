@@ -185,22 +185,13 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	}
 	apr_hash_set(keys, "1", APR_HASH_KEY_STRING, jwk);
 
-	/* import_must_succeed=TRUE: the header was pinned to dir/A256GCM above, so require a genuine,
-	 * GCM-authenticated JWE here. With FALSE, a value that merely carries that header but is not an
-	 * importable JWE would be handed back verbatim and reported as verified - a fail-open in a
-	 * function named _verify; the caller must never treat unauthenticated input as authenticated. */
+	/* Require JWE import so a matching header cannot make unauthenticated input pass verification. */
 	if (oidc_jwe_decrypt(r->pool, compact_encoded_jwt, keys, &plaintext, &plaintext_len, &err, TRUE) == FALSE) {
 		oidc_error(r, "decrypting JWE failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;
 	}
 
-	/*
-	 * unconditionally, rather than gated on OIDC_JWT_INTERNAL_NO_COMPRESS as the write side is:
-	 * that variable says how payloads are written from now on, not how the one in hand was
-	 * written. Reading it here meant that setting or clearing it under running traffic made
-	 * every existing session unreadable. oidc_jose_uncompress() decides from the payload and
-	 * passes an uncompressed one through untouched.
-	 */
+	/* Always detect on read; OIDC_JWT_INTERNAL_NO_COMPRESS controls only future writes. */
 	if (oidc_jose_uncompress(r->pool, plaintext, plaintext_len, &payload, &payload_len, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_uncompress failed: %s", oidc_jose_e2s(r->pool, err));
 		goto end;

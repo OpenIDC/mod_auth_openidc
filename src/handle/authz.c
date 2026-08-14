@@ -535,14 +535,7 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 		r->header_only = 1;
 		return AUTHZ_DENIED;
 	case OIDC_UNAUTZ_AUTHENTICATE:
-		/*
-		 * exception handling: if this looks like an HTTP request that cannot
-		 * complete an authentication round trip to the provider, we
-		 * won't redirect the user and thus avoid creating a state cookie
-		 *
-		 * NB: when the expression argument to OIDCUnAuthAction is configured,
-		 * it is re-used here to detect XHR requests.
-		 */
+		/* Do not redirect requests that cannot complete authentication; OIDCUnAuthAction may identify them. */
 		if (oidc_cfg_dir_unauth_expr_is_set(r) == TRUE) {
 			if (oidc_cfg_dir_unauth_action_get(r) != OIDC_UNAUTH_AUTHENTICATE) {
 				OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ACTION_401);
@@ -598,10 +591,7 @@ authz_status oidc_authz_24_checker(request_rec *r, const char *require_args, con
 			return AUTHZ_GRANTED;
 	}
 
-	/* build the merged set of claims (as set in the authentication part earlier) fresh for each
-	 * evaluation: it is NOT safe to memoize it across a request, because Apache evaluates the
-	 * authorization provider in phases/subrequests where the underlying claim state in the
-	 * request context is not necessarily the same, so a cached merge can go stale */
+	/* Rebuild merged claims for each authorization phase or subrequest; request state may have changed. */
 	oidc_json_t *claims = oidc_authz_merge_claims(r);
 
 	/* dispatch to the >=2.4 specific authz routine */

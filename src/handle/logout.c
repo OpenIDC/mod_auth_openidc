@@ -146,13 +146,7 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 
 	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, oidc_cfg_provider_issuer_get(provider));
 
-	/*
-	 * NB: when a logout token carries "sub" rather than a true "sid" (either because the OP does not use
-	 * "sid", or per OpenID Connect Back-Channel Logout 1.0 section 2.6), the session is located via the
-	 * "sub"-based index. When multiple hosts share the *same* cache backend and OIDCCryptoPassphrase that
-	 * index is shared, so a "sub"-based logout will also invalidate the corresponding session on those hosts
-	 * (non-memory caching is encrypted by default and shm caching uses per-host segments, which limits this).
-	 */
+	/* A sub-based logout may span hosts that share both the cache and OIDCCryptoPassphrase. */
 
 	sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
 	oidc_cache_get_sid(r, sid, &uuid);
@@ -205,13 +199,7 @@ static apr_byte_t oidc_logout_is_back_channel(const char *logout_param_value) {
 		(_oidc_strcmp(logout_param_value, OIDC_BACKCHANNEL_STYLE_LOGOUT_PARAM_VALUE) == 0));
 }
 
-/*
- * resolve the provider for a front-channel logout based on the sid/iss
- * parameters from the request as specified in "OpenID Connect Front-Channel
- * Logout 1.0 - draft 05" at https://openid.net/specs/openid-connect-frontchannel-1_0.html;
- * *sid is set when the OP supplied a sid parameter, regardless of whether a
- * provider could be resolved
- */
+/* Resolve the front-channel provider from sid/iss; preserve sid even when resolution fails. */
 static oidc_provider_t *oidc_logout_request_front_channel_provider(request_rec *r, oidc_cfg_t *c, char **sid) {
 
 	char *iss = NULL;
@@ -234,17 +222,8 @@ static oidc_provider_t *oidc_logout_request_front_channel_provider(request_rec *
 }
 
 /*
- * handle the front-channel branch of a local logout: try to clear the
- * session based on sid/iss (when no session was provided), emit the
- * recommended cache-control headers and return the iframe body or
- * transparent pixel response
- *
- * NB: this branch is reached without any proof that the caller owns the session it names: a
- * front-channel logout carries no signature (unlike a back-channel logout token) and, by the
- * nature of the third-party iframe it is called from, no session cookie either. It therefore
- * does *not* revoke the session's tokens at the OP, exactly as the back-channel handler does
- * not; that is a side effect outside of this server which the user cannot undo by logging in
- * again. Clearing the local session is what front-channel logout is for and is kept.
+ * Clear local state for front-channel logout, but never revoke tokens: the unsigned request and
+ * third-party iframe provide no proof that the caller owns the named session.
  */
 static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, const char *url,
 					     apr_byte_t no_session_provided) {
@@ -352,11 +331,8 @@ static int oidc_logout_backchannel_parse_jwt(request_rec *r, oidc_cfg_t *cfg, co
 	char *alg = NULL;
 
 	/*
-	 * a back-channel logout token is unsolicited, so the issuer - and thus the specific provider - is not
-	 * known until the token has been parsed; when the token is symmetrically encrypted it will have been
-	 * encrypted with a key derived from the configured provider's client secret, so peek the (unencrypted)
-	 * JOSE header to size that key correctly and add it to the decryption key set alongside the RP's private
-	 * keys (cjose selects a compatible key for the actual decryption)
+	 * The issuer is unknown before decryption. Size the client-secret-derived key from the JOSE
+	 * header and try it alongside the RP private keys.
 	 */
 	oidc_proto_jwt_header_peek(r, logout_token, &alg, NULL, NULL);
 	oidc_util_key_symmetric_create(r, oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(cfg)),
@@ -405,9 +381,7 @@ static int oidc_logout_backchannel_verify_jwt(request_rec *r, oidc_cfg_t *cfg, o
 		oidc_error(r, "id_token signature could not be validated, aborting");
 		return HTTP_BAD_REQUEST;
 	}
-	/* NB: "iat" is REQUIRED in a logout token (OpenID Connect Back-Channel Logout 1.0, 2.4),
-	 * and it is what bounds replay: without it a captured token stays valid indefinitely once
-	 * the jti cache entry expires. "exp" is not required by that spec, so it stays optional. */
+	/* Back-Channel Logout 2.4 requires iat to bound replay; exp remains optional. */
 	if (oidc_proto_jwt_validate(
 		r, jwt, oidc_cfg_provider_validate_issuer_get(provider) ? oidc_cfg_provider_issuer_get(provider) : NULL,
 		FALSE, TRUE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
@@ -426,9 +400,7 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 
 	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_JTI, &jti, NULL);
 
-	/* "jti" is REQUIRED in a logout token (OpenID Connect Back-Channel Logout 1.0, 2.4) and is
-	 * what makes replay detectable at all; a token without one used to skip the check entirely
-	 * and then write a cache entry under a NULL key that no lookup ever reads */
+	/* Back-Channel Logout 2.4 requires jti for replay detection. */
 	if (jti == NULL) {
 		oidc_error(r, "logout token does not contain the required \"%s\" claim", OIDC_CLAIM_JTI);
 		return HTTP_BAD_REQUEST;
@@ -489,9 +461,9 @@ static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_pr
 		return rc;
 
 	/*
-	 * a logout token may carry "sub" even when the id_token returned a "sid" (OpenID Connect Back-Channel
-	 * Logout 1.0 section 2.6); when the OP supports back-channel logout the session is additionally indexed
-	 * by "sub" at creation time (see oidc_response_save_in_session), so cleanup below resolves it either way
+	 * With back-channel logout enabled, a distinct sub gets an additional index; when sid equals
+	 * sub, the sid index already uses it. A sub-only token can then resolve the session, but not when
+	 * a distinct sid was stored without back-channel support.
 	 */
 	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, sid, NULL);
 	if (*sid == NULL)

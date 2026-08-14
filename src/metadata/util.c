@@ -193,11 +193,8 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 }
 
 /*
- * RFC 8705: select the endpoint authentication method from the metadata array at "key",
- * auto-selecting and preferring a mutual-TLS method only when a TLS client certificate has been
- * configured (b_cert) *and* no client secret is set (b_secret): a configured secret signals
- * client_secret_* authentication with the certificate merely presented for RFC 8705 section 3
- * certificate-bound access tokens, so it must not be silently upgraded to tls_client_auth
+ * Prefer RFC 8705 mTLS authentication only when a certificate is present without a client
+ * secret. With a secret, the certificate may be intended only for token binding.
  */
 const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
 					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value) {
@@ -208,16 +205,8 @@ const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t 
 }
 
 /*
- * RFC 8705: decide whether the mutual-TLS behaviour applies to a provider, i.e. whether to prefer
- * its "mtls_endpoint_aliases" endpoints (section 5) and to ask for certificate-bound access tokens
- * on client registration (section 6.1).
- *
- * That is the case when a mutual-TLS client authentication method is in effect (`auth`), and also
- * when a TLS client certificate is configured (`b_cert`) that is used for section 3 token binding
- * only - the latter as far as `mode` allows inferring that intent from the certificate alone:
- * "auto" additionally requires the OP to advertise support for certificate-bound access tokens,
- * "on" takes the certificate itself as the signal and "off" never infers it. `j_provider` may be
- * NULL when no provider metadata is at hand (nothing is advertised then).
+ * Enable RFC 8705 behavior for mTLS client authentication or, as cert_bound_tokens permits, a
+ * configured certificate used only for token binding. Auto mode also requires provider support.
  */
 apr_byte_t oidc_metadata_cert_bound_tokens_enabled(request_rec *r, const oidc_json_t *j_provider,
 						   oidc_cert_bound_tokens_t mode, const char *auth, apr_byte_t b_cert) {

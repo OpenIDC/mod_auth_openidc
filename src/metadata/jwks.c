@@ -59,11 +59,8 @@ static const char *oidc_metadata_jwks_cache_key(const oidc_jwks_uri_t *jwks_uri)
 #define OIDC_METADATA_JWKS_FORCED_REFRESH_POSTFIX "#forced"
 
 /*
- * the length of the forced-refresh rate-limit window in seconds, overridable per server/directory
- * with the OIDC_JWKS_FORCED_REFRESH_INTERVAL environment variable (0 - 3600, where 0 disables the
- * guard). A value that is not an integer in that range falls back to the default, so a typo cannot
- * silently remove the guard; the warning may repeat within a request, since the window is consulted
- * on both the throttle check and the stamp that follows it.
+ * Forced-refresh rate-limit window. OIDC_JWKS_FORCED_REFRESH_INTERVAL accepts 0-3600 seconds;
+ * invalid values retain the safe default.
  */
 static int oidc_metadata_jwks_forced_refresh_interval(request_rec *r) {
 	int interval = 0;
@@ -94,17 +91,9 @@ static const char *oidc_metadata_jwks_forced_refresh_key(request_rec *r, const o
 }
 
 /*
- * TRUE when a forced refresh of this jwks_uri was already attempted within the rate-limit window.
- *
- * A forced refresh bypasses the cached JWKs and fetches the jwks_uri directly. It is triggered by an
- * unrecognized "kid"/"x5t" or by a signature that does not verify, both of which come straight off an
- * unauthenticated request when the module runs as a Resource Server. Without a rate limit every such
- * request turns into a synchronous outbound fetch: an amplification vector against the OP, and a way
- * to pin a worker thread for up to OIDCHTTPTimeoutLong. The window is short enough that a genuine key
- * rollover still recovers on the first request that observes it.
- *
- * Deliberately free of side effects, so the selection-cache purge in proto/jwks.c can gate on the
- * same decision; oidc_metadata_jwks_get() records the attempt.
+ * Check whether this URI was forcibly refreshed within the rate-limit window. Unauthenticated
+ * unknown-key requests must not each trigger an outbound fetch. This check has no side effects;
+ * oidc_metadata_jwks_get() records the attempt.
  */
 apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oidc_jwks_uri_t *jwks_uri) {
 	char *value = NULL;
@@ -113,9 +102,7 @@ apr_byte_t oidc_metadata_jwks_forced_refresh_throttled(request_rec *r, const oid
 	if (oidc_metadata_jwks_forced_refresh_interval(r) == 0)
 		return FALSE;
 	if (oidc_cache_get_jwks(r, oidc_metadata_jwks_forced_refresh_key(r, jwks_uri), &value) == FALSE) {
-		/* a cache backend error must not read as "not throttled": that would let every unknown-"kid"
-		 * request drive a synchronous OP JWKs fetch during a cache outage. Fail closed and rely on the
-		 * cached JWKs; a genuine key rollover still recovers once the shared cache is healthy again */
+		/* Fail the throttle closed on cache errors to prevent unknown-key fetches during an outage. */
 		oidc_warn(r, "cache lookup for the JWKs forced-refresh throttle failed; treating the forced refresh "
 			     "as throttled");
 		return TRUE;

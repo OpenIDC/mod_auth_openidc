@@ -811,12 +811,7 @@ end:
 	return rv;
 }
 
-/*
- * read a public key from the BIO, falling back to an X.509 certificate chain
- * when the BIO does not contain a bare PEM public key; on success, the
- * extracted EVP_PKEY is returned in *pkey (out_x509 carries the cert that must
- * be X509_free'd by the caller, when non-NULL)
- */
+/* Read a bare PEM key or fall back to X.509; callers free a returned out_x509. */
 static apr_byte_t oidc_jwk_pem_bio_read_public(apr_pool_t *pool, BIO *input, oidc_jwk_t *jwk, EVP_PKEY **pkey,
 					       X509 **out_x509, oidc_jose_error_t *err) {
 

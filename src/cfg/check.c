@@ -62,12 +62,7 @@
 #include <apr_hash.h>
 #include <apr_strings.h>
 
-/*
- * identify the (virtual) host that a message below applies to: httpd does not record which
- * server_rec a post_config message was logged against, so in a configuration with more than one
- * vhost the message on its own does not say which one needs fixing - and a single offending vhost
- * aborts the startup of the whole server
- */
+/* Prefix post-config messages with the vhost because httpd does not add that context. */
 static const char *oidc_check_config_vhost(const server_rec *s) {
 	apr_pool_t *pool = s->process->pconf;
 	const char *name = (s->server_hostname != NULL) ? s->server_hostname : "(no ServerName)";
@@ -249,24 +244,9 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
 }
 
 /*
- * derive this server's PBKDF2 key material for its crypto passphrase, once finalized; unlike
- * the OIDC/OAuth completeness checks below, this must happen for every server config that
- * could end up handling a live request -- including the base server even when other vhosts
- * have merged configs of their own -- since the base server can still directly serve requests
- * (e.g. as the fallback vhost) and each oidc_cfg_t carries its own copy of the passphrase and
- * (once derived) its key material.
- *
- * when auto_generate is TRUE, an unset passphrase is first auto-generated -- the original
- * behavior for a server config that is the only one in play (no vhosts override it). When
- * FALSE, an unset passphrase is left alone: the base server may deliberately be left without
- * its own crypto passphrase when vhosts each set/override their own OIDCCryptoPassphrase, and
- * must keep starting up that way rather than silently gaining a freshly-manufactured one.
- *
- * kdf_cache memoizes the (expensive, ~210,000-iteration PBKDF2) derivation by secret text across
- * every server_rec checked in this post_config pass -- see oidc_crypto_passphrase_derive_keys_cached().
- * A deployment with hundreds of <VirtualHost>s that all inherit/set the same OIDCCryptoPassphrase
- * would otherwise re-run the KDF once per vhost instead of once per distinct secret, which can
- * turn into a multi-second startup/graceful-restart delay.
+ * Derive keys for every live server config, including the base server. Auto-generation is
+ * optional because vhosts may deliberately leave the base passphrase unset. Cache PBKDF2 by
+ * secret so vhosts sharing a passphrase derive it only once.
  */
 static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, apr_byte_t auto_generate,
 						apr_hash_t *kdf_cache) {
@@ -292,13 +272,7 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s, apr_h
 
 	oidc_sdebug(s, "enter");
 
-	/*
-	 * turning the masking off is a deliberate, temporary troubleshooting step, so say so on every
-	 * start: it is the one setting whose whole effect is to write credentials - access, refresh and
-	 * ID tokens, client secrets, authorization codes - to the error log in the clear, where the log
-	 * shipper and everyone with read access to it will pick them up. A warning here is what keeps it
-	 * from being switched on for an incident and quietly left on afterwards.
-	 */
+	/* Warn on every start because disabling masking exposes credentials in the error log. */
 	if (oidc_cfg_debug_mask_secrets_get(cfg) == 0)
 		oidc_check_swarn(
 		    s,
@@ -321,15 +295,10 @@ static int oidc_config_check_vhost_config(apr_pool_t *pool, server_rec *s, apr_h
 	    (oidc_cfg_oauth_verify_jwks_uri_get(cfg) != NULL) || (oidc_cfg_oauth_verify_public_keys_get(cfg) != NULL) ||
 	    (oidc_cfg_oauth_verify_shared_keys_get(cfg) != NULL);
 
-	/* a vhost that sets OIDCRedirectURI *itself* without any OAuth 2.0 RS settings intends to act
-	 * as an OpenID Connect RP: run the RP check even when no provider source is configured, so
-	 * that omission is a startup error instead of a request-time authentication/discovery failure.
-	 *
-	 * an inherited one says nothing about this vhost's intent: OIDCRedirectURI is commonly set
-	 * once at server level, from where it lands in the merged config of every vhost - including
-	 * those that do no OpenID Connect at all (a static site, a health check, a redirect-only
-	 * vhost). Inferring RP intent there would refuse to start the whole server over a vhost that
-	 * never asked for an RP in the first place */
+	/*
+	 * Without OAuth RS settings, an explicitly configured OIDCRedirectURI implies RP intent.
+	 * An inherited URI does not, because unrelated vhosts commonly inherit the server default.
+	 */
 	const int rp_intent = (oidc_cfg_redirect_uri_get(cfg) != NULL) && (!oidc_cfg_redirect_uri_inherited_get(cfg)) &&
 			      (!oauth_configured);
 
@@ -358,12 +327,10 @@ static int oidc_config_check_merged_vhost_configs(apr_pool_t *pool, server_rec *
 			/* a merged vhost config is checked in full, exactly as before */
 			status = oidc_config_check_vhost_config(pool, sp, kdf_cache);
 		} else {
-			/* the base server "s" itself is never flagged as merged (its config comes
-			 * straight from create_server_config, not merge_server_config). Derive keys for
-			 * it only if it already has its own explicitly-configured passphrase (do not
-			 * auto-generate one): both leaving the base without a passphrase (vhosts set/
-			 * override their own) and the full OIDC/OAuth completeness checks must keep
-			 * behaving exactly as before */
+			/*
+			 * Derive an explicit base-server passphrase, but do not generate one when only
+			 * vhosts need it.
+			 */
 			status = oidc_config_ensure_crypto_passphrase(sp, cfg, FALSE, kdf_cache);
 		}
 		sp = sp->next;
@@ -386,19 +353,7 @@ static int oidc_config_merged_vhost_configs_exist(server_rec *s) {
 	return FALSE;
 }
 
-/*
- * Apache has a base vhost that true vhosts derive from.
- * There are two startup scenarios:
- *
- * 1. Only the base vhost contains OIDC settings.
- *    No server configs have been merged.
- *    Only the base vhost needs to be checked.
- *
- * 2. The base vhost contains zero or more OIDC settings.
- *    One or more vhosts override these.
- *    These vhosts have a merged config.
- *    All merged configs need to be checked.
- */
+/* Check only the base config when nothing was merged; otherwise check every merged vhost. */
 int oidc_cfg_check_vhosts(apr_pool_t *pool, server_rec *s) {
 	if (!oidc_config_merged_vhost_configs_exist(s)) {
 		/* nothing merged, only check the base vhost -- a single server_rec, so there is

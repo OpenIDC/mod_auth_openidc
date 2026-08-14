@@ -59,11 +59,8 @@ typedef struct oidc_cache_cfg_shm_t {
 #define OIDC_CACHE_SHM_KEY_MAX OIDC_CACHE_KEY_SIZE_MAX
 
 /*
- * The segment is laid out as: header | bucket array | slot array. All references between
- * them are 1-based slot indexes (0 = nil) since the segment maps at different addresses in
- * different processes. Entries are chained per hash bucket and unused slots sit on a free
- * list, so get/set are O(chain length) instead of a linear scan over all slots, and the
- * global mutex is correspondingly held for a fraction of the time.
+ * Layout: header | buckets | slots. Cross-process links use 1-based slot indexes rather than
+ * pointers. Buckets and a free list avoid full-slot scans.
  */
 typedef struct oidc_cache_shm_header_t {
 	/* number of (fixed size) cache entry slots */
@@ -106,13 +103,9 @@ static oidc_cache_shm_entry_t *oidc_cache_shm_slot(oidc_cache_shm_header_t *hdr,
 }
 
 /*
- * the working base header: the apr_shm segment rounded up to a 64-byte boundary. apr_shm's raw base
- * address is not guaranteed to be 64-aligned, yet oidc_cache_shm_entry_t is declared aligned(64) -
- * which entitles the compiler to emit aligned SIMD stores into the slots (a misaligned aligned-move
- * faults with SIGSEGV) - so the whole header|buckets|slots layout is anchored at a 64-aligned
- * address here. The segment is over-allocated by 64 bytes (see oidc_cache_shm_segment_size) to
- * absorb the shift, and, being anonymous and inherited across fork, maps at the same base with the
- * same alignment in every worker process, so all processes compute identical slot addresses.
+ * Align the layout base to match oidc_cache_shm_entry_t; APR does not guarantee raw alignment.
+ * The anonymous segment is fork-inherited at the same base, so every worker selects the same
+ * offset. Segment sizing includes space for this adjustment.
  */
 static oidc_cache_shm_header_t *oidc_cache_shm_base(const oidc_cache_cfg_shm_t *context) {
 	return (oidc_cache_shm_header_t *)APR_ALIGN((uintptr_t)apr_shm_baseaddr_get(context->shm), 64);
@@ -322,11 +315,7 @@ static void oidc_cache_shm_unlink(oidc_cache_shm_header_t *hdr, apr_uint32_t idx
 	}
 }
 
-/*
- * obtain a slot for a new entry when the free list is empty: sample a bounded number of
- * pseudo-randomly chosen occupied slots and evict an expired one, or else the least-recently-used
- * one of the sample; must be called with the mutex held
- */
+/* With the mutex held, sample occupied slots and evict an expired or least-recently-used entry. */
 static apr_uint32_t oidc_cache_shm_evict(request_rec *r, const oidc_cfg_t *cfg, oidc_cache_shm_header_t *hdr,
 					 apr_time_t current_time) {
 	apr_uint32_t victim = 0;
@@ -386,13 +375,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	if (section_key == NULL)
 		return FALSE;
 
-	/*
-	 * how many value bytes fit in a slot, computed in a *signed* type on purpose: entry_size_max is
-	 * an int and sizeof() is unsigned, so the subtraction would otherwise be done unsigned and wrap
-	 * into a huge limit if the configured slot size were ever smaller than the entry header - the
-	 * check would then pass and the _oidc_strcpy below would run off the end of the slot. The
-	 * configured minimum keeps that out of reach today; this does not depend on it.
-	 */
+	/* Use signed subtraction so an undersized slot cannot wrap into a large value limit. */
 	const apr_ssize_t value_size_max = (apr_ssize_t)entry_size_max - (apr_ssize_t)sizeof(oidc_cache_shm_entry_t);
 
 	/* check that the passed in value is valid; reject at ">=" rather than ">" so the NUL terminator

@@ -60,13 +60,7 @@ typedef enum {
 	OIDC_INTROSPECTION_METHOD_POST = 2
 } oidc_oauth_introspection_endpoint_method_t;
 
-/*
- * Generators for the OAuth resource-server (oidc_oauth_t) directive accessors.
- * For member `foo` they declare oidc_cmd_oauth_foo_set() (directive handler),
- * oidc_cfg_oauth_foo_set() (setter, used from metadata/oauth.c) and
- * oidc_cfg_oauth_foo_get() (getter). Bodies live in cfg/oauth.c. At most two
- * macro layers: an aggregate expands directly to the single-prototype atoms.
- */
+/* Generate OAuth directive-handler, setter, and getter declarations; bodies live in oauth.c. */
 
 /* <type> oidc_cfg_oauth_<member>_get(const oidc_cfg_t *) */
 #define OIDC_CFG_OAUTH_MEMBER_FUNC_GET_DECL(member, type) type oidc_cfg_oauth_##member##_get(const oidc_cfg_t *cfg);

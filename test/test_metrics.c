@@ -109,14 +109,7 @@ START_TEST(test_metrics_counter_names_unique) {
 }
 END_TEST
 
-/*
- * Lifecycle tests for the metrics subsystem: bring it up via
- * oidc_metrics_post_config, push a counter + timing sample through the
- * macro-style API, drive oidc_metrics_handle_request through each output
- * format, and tear the subsystem down via oidc_metrics_cleanup. The
- * subsystem holds process-wide state so each lifecycle test owns the full
- * setup/teardown.
- */
+/* Each metrics lifecycle test owns setup and teardown of the process-wide subsystem. */
 
 /* enable metrics on the cfg by registering one counter and one timing class */
 static void enable_metrics_hook_data(request_rec *r) {
@@ -221,14 +214,7 @@ START_TEST(test_metrics_handle_request_with_samples) {
 }
 END_TEST
 
-/*
- * "flushed" tcase — the background flush thread copies the locally-buffered
- * counters/timings into shared memory every OIDC_METRICS_CACHE_STORAGE_INTERVAL
- * milliseconds. The tests below force the interval down via the env var,
- * push a sample, and sleep long enough to guarantee one flush, then drive
- * each formatter against the now-populated shm so we cover the real-data
- * branches that the "lifecycle" tcase deliberately doesn't reach.
- */
+/* Force a background flush so formatter tests exercise populated shared-memory data. */
 
 static void e2e_force_metrics_flush(request_rec *r, oidc_cfg_t *c) {
 	OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_REQUEST_ERROR_URL);
@@ -343,11 +329,7 @@ START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
 }
 END_TEST
 
-/* reset=true walks oidc_metrics_reset_server's "counters" object and recurses into any entry
- * that is itself a nested object (oidc_metrics_reset_integer_tree's object arm) -- a value-indexed
- * counter is exactly that shape, but only once it is real shm-committed data (the "lifecycle"
- * tcase's reset=true test resets before ever flushing, so the shm side is still empty there and
- * this recursive arm is never reached) */
+/* Reset a flushed value-indexed counter to exercise recursive cleanup of nested metric objects. */
 START_TEST(test_metrics_handle_request_flushed_reset_nested_counter) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -372,11 +354,7 @@ START_TEST(test_metrics_handle_request_flushed_reset_nested_counter) {
 }
 END_TEST
 
-/* a flush clears the local hashtable entry (oidc_metrics_cache_flush's "reset the
- * local hashtables"), so every other test's repeated INC calls always recreate a
- * fresh entry (count<=0 branch). Incrementing the same value-indexed counter twice
- * back-to-back, with no flush in between, is what reaches oidc_metrics_counter_inc's
- * "existing counter" else-branch (the overflow check + count++) instead */
+/* Increment twice before flushing to exercise the existing-counter branch. */
 START_TEST(test_metrics_handle_request_flushed_counter_inc_twice_before_flush) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -390,8 +368,8 @@ START_TEST(test_metrics_handle_request_flushed_counter_inc_twice_before_flush) {
 	ck_assert_int_eq(rc, OK);
 	const char *body = oidc_request_state_get(r, "sent_body");
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strstr(body, "OK: 2") != NULL, "expected the twice-incremented counter to read back as 2, got: %s",
-		      body);
+	ck_assert_msg(_oidc_strstr(body, "OK: 2") != NULL,
+		      "expected the twice-incremented counter to read back as 2, got: %s", body);
 
 	e2e_metrics_teardown_flushed(r);
 }

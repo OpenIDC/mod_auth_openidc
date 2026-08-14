@@ -99,13 +99,7 @@ typedef enum {
 	OIDC_UNAUTZ_RETURN302 = 4
 } oidc_unautz_action_t;
 
-/*
- * Generators for the per-directory (oidc_dir_cfg_t) directive accessors. For
- * member `foo` they declare oidc_cmd_dir_foo_set() (directive handler) and
- * oidc_cfg_dir_foo_get() (getter; takes the request_rec because per-dir config
- * is merged per request). Bodies live in cfg/dir.c. At most two macro layers:
- * the FUNCS aggregate expands directly to the single-prototype atoms.
- */
+/* Generate per-directory directive-handler and request-aware getter declarations. */
 
 /* const char *oidc_cmd_dir_<member>_set(cmd_parms *, void *, const char *, ...) */
 #define OIDC_CMD_DIR_MEMBER_FUNC_DECL(member, ...)                                                                     \

@@ -135,11 +135,7 @@ void oidc_util_appinfo_set(request_rec *r, const char *s_key, const char *s_valu
 
 #define OIDC_JSON_MAX_INT_STR_LEN 64
 
-/*
- * escape the escape character and the delimiter within a single array element value, so that a delimiter
- * occurring inside a value cannot be mistaken for an element separator by the application; the escaping is
- * reversible: "\\" decodes back to a literal "\" and "\<delimiter>" to a literal "<delimiter>"
- */
+/* Reversibly escape backslashes and delimiters within an array element. */
 static const char *oidc_util_appinfo_escape(request_rec *r, const char *claim_delimiter, const char *s_value) {
 	size_t dlen = _oidc_strlen(claim_delimiter);
 
@@ -168,12 +164,7 @@ static const char *oidc_util_appinfo_escape(request_rec *r, const char *claim_de
 	return dst;
 }
 
-/*
- * concatenate the (string/boolean) elements of a JSON array into a single delimiter-separated string;
- * non-string/non-boolean elements are skipped with a debug message; a delimiter (or the backslash escape
- * character) occurring inside an element value is escaped by oidc_util_appinfo_escape so it cannot be
- * mistaken for an element separator
- */
+/* Join string and boolean array elements, escaping embedded delimiters and skipping other types. */
 static const char *oidc_util_appinfo_array_concat(request_rec *r, const oidc_json_t *j_array,
 						  const char *claim_delimiter, const char *s_key) {
 

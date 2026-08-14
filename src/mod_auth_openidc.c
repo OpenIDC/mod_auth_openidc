@@ -463,15 +463,7 @@ static apr_byte_t oidc_check_max_session_duration(request_rec *r, oidc_cfg_t *cf
 	return TRUE;
 }
 
-/*
- * validate received session cookie against the domain it was issued for:
- *
- * this handles the case where the cache configured is a the same single memcache, Redis, or file
- * backend for different (virtual) hosts, or a client-side cookie protected with the same secret
- *
- * it also handles the case that a cookie is unexpectedly shared across multiple hosts in
- * name-based virtual hosting even though the OP(s) would be the same
- */
+/* Reject session cookies issued for another host sharing the cache or encryption key. */
 apr_byte_t oidc_check_cookie_domain(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session) {
 	const char *c_cookie_domain = oidc_cfg_cookie_domain_get(cfg)
 					  ? oidc_cfg_cookie_domain_get(cfg)
@@ -584,17 +576,8 @@ void oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_sessio
 
 	if (extend_session) {
 		/*
-		 * reset the session inactivity timer
-		 * but only do this once per 10% of the inactivity timeout interval (with a max to 60 seconds)
-		 * for performance reasons
-		 *
-		 * now there's a small chance that the session ends 10% (or a minute) earlier than configured/expected
-		 * cq. when there's a request after a recent save (so no update) and then no activity happens until
-		 * a request comes in just before the session should expire
-		 * ("recent" and "just before" refer to 10%-with-a-max-of-60-seconds of the inactivity interval after
-		 * the start/last-update and before the expiry of the session respectively)
-		 *
-		 * this is be deemed acceptable here because of performance gain
+		 * Limit inactivity updates to once per 10% of the timeout, capped at 60 seconds. This
+		 * reduces writes but may expire a session by up to that interval earlier than expected.
 		 */
 		apr_time_t interval = apr_time_from_sec(oidc_cfg_session_inactivity_timeout_get(cfg));
 		apr_time_t now = apr_time_now();
@@ -1078,11 +1061,8 @@ typedef struct oidc_redirect_uri_dispatch_t {
 } oidc_redirect_uri_dispatch_t;
 
 /*
- * redirect_uri sub-feature dispatch table, tried in order
- *
- * Note that logout is checked *before* a POST authorization response to handle backchannel POST-based
- * logout: any POST to the Redirect URI that does not have a logout query parameter will be handled as
- * an authorization response; alternatively we could assume that a POST response has no parameters
+ * Ordered redirect_uri dispatch. Logout precedes POST authorization responses so back-channel
+ * logout reaches its handler.
  */
 // clang-format off
 static const oidc_redirect_uri_dispatch_t _oidc_redirect_uri_dispatch[] = {
@@ -1180,11 +1160,7 @@ apr_byte_t oidc_subrequest_recycle_user(request_rec *r) {
 	return TRUE;
 }
 
-/*
- * on an internal redirect the new (main) request starts with an empty request-state hash while
- * the previous request's state is still alive: restore the already-parsed token state from there
- * instead of re-loading and re-parsing the whole session from the cache
- */
+/* Restore parsed token state from the previous request after an internal redirect. */
 static apr_byte_t oidc_copy_tokens_from_prev_request_state(request_rec *r) {
 	const oidc_json_t *id_token = NULL;
 	const oidc_json_t *claims = NULL;

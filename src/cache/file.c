@@ -184,10 +184,7 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 		return TRUE;
 	}
 
-	/* the file exists, now lock it: a shared lock suffices for reading - writers never lock
-	 * the target file (they write a temp file and atomically rename it into place) and the
-	 * expiry cleaner's exclusive lock still waits for/excludes shared readers - so concurrent
-	 * requests reading the same (e.g. session) entry no longer serialize on the lock */
+	/* Shared locks allow concurrent reads while still excluding the expiry cleaner. */
 	apr_file_lock(fd, APR_FLOCK_SHARED);
 
 	/* move the read pointer to the very start of the cache file */
@@ -211,15 +208,8 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 	if (apr_time_now() >= info.expire) {
 
 		/*
-		 * report the miss and leave the file where it is rather than unlinking it here.
-		 *
-		 * A writer replaces an entry by renaming a freshly written temp file over this path and
-		 * never locks the path itself, so nothing orders that rename against this read: between
-		 * finding the entry expired and unlinking it, the rename can have landed, and the unlink
-		 * would then throw away the entry that just replaced it - a silently lost session, with
-		 * the user sent back through authentication. Reclaiming expired entries is
-		 * oidc_cache_file_clean's job, which is what already reclaimed every expired entry that
-		 * was never read again.
+		 * Leave expired files for the cleaner. Unlinking here could race a writer's atomic rename
+		 * and remove the replacement entry.
 		 */
 		apr_file_unlock(fd);
 		apr_file_close(fd);
@@ -320,17 +310,8 @@ static apr_byte_t oidc_cache_file_clean_due(request_rec *r, const oidc_cfg_t *cf
 }
 
 /*
- * whether `path` still refers to the file that `ident` was taken from.
- *
- * A writer replaces a cache entry by renaming a freshly written temp file over its path and takes
- * no lock on that path, so an entry can be replaced between being inspected here and being removed
- * - and the removal would then throw away the fresh entry rather than the expired one. Confirming
- * the identity immediately before the unlink leaves only the two syscalls between as a window,
- * instead of everything from the header read onwards.
- *
- * `have_ident` is FALSE on a platform that cannot report a device/inode pair, where the caller gets
- * the unconditional removal it had before: refusing to remove would leave expired entries behind
- * for good, which is worse than the race this narrows.
+ * Recheck the device/inode before unlinking so a concurrent atomic replacement is not removed.
+ * Platforms without that identity information retain the unconditional cleanup behavior.
  */
 static apr_byte_t oidc_cache_file_is_same(request_rec *r, const char *path, const apr_finfo_t *ident,
 					  apr_byte_t have_ident) {

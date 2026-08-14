@@ -55,12 +55,7 @@
 /*
  * directory related configuration
  */
-/*
- * single source of truth for the simple pointer-merged and int-merged members of oidc_dir_cfg_t:
- * the struct declaration, oidc_cfg_dir_config_create and oidc_cfg_dir_config_merge are generated
- * from this list (see the same pattern in cfg/oauth.c); members with special semantics are listed
- * separately below the macro expansion and handled by hand in all three places
- */
+/* Generate declaration, initialization, and merge logic for simple directory members. */
 #define OIDC_DIR_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                          \
 	PTR(char *, discover_url)                                                                                      \
 	PTR(char *, cookie_path)                                                                                       \

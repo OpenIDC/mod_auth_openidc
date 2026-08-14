@@ -212,14 +212,7 @@ char *oidc_pcre_subst(apr_pool_t *pool, const struct oidc_pcre *pcre, const char
 	return rv;
 }
 
-/*
- * compile a regular expression into a wrapper allocated from `pool`; `error_str` may be NULL when
- * the caller has no use for the message.
- *
- * Nothing is allocated from `pool` unless the compile succeeds: APR pools cannot release individual
- * allocations, so a caller that compiles the same invalid pattern repeatedly against a long-lived
- * pool would otherwise retain the wrapper and the message from every attempt.
- */
+/* Compile before allocating pool state so repeated invalid patterns do not accumulate allocations. */
 struct oidc_pcre *oidc_pcre_compile(apr_pool_t *pool, const char *regexp, char **error_str) {
 #ifdef HAVE_LIBPCRE2
 	pcre2_code *preg = NULL;
