@@ -130,6 +130,7 @@ noinst_HEADERS = \
 	handle/handle.h \
 	proto/proto.h \
 	cache/cache.h \
+	cache/shm.h \
 	util/util.h \
 	util/util_cfg.h \
 	util/request_state.h \

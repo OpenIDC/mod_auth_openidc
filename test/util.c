@@ -173,6 +173,13 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	cfg->cache.impl = &oidc_cache_shm;
 	cfg->cache.cfg = NULL;
 	cfg->cache.shm_size_max = 500;
+	const char *shm_size = getenv("OIDC_TEST_SHM_SIZE");
+	if (shm_size != NULL) {
+		char *end = NULL;
+		long parsed = strtol(shm_size, &end, 10);
+		if ((end != shm_size) && (*end == '\0') && (parsed >= 128) && (parsed <= 1000000))
+			cfg->cache.shm_size_max = (int)parsed;
+	}
 	cfg->cache.shm_entry_size_max = 16384 + 255 + 17;
 	cfg->cache.encrypt = 1;
 	/* full post-config so the cache backend AND the shared refresh-grant mutex get set up */

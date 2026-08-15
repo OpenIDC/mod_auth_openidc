@@ -42,6 +42,7 @@
  **************************************************************************/
 
 #include "cache/cache.h"
+#include "cache/shm.h"
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/provider.h"
@@ -50,10 +51,15 @@
 #include "util.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
+#include <apr_thread_proc.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#if APR_HAS_FORK
+#include <sys/wait.h>
+#endif
 #include <unistd.h>
 
 #ifdef USE_LIBHIREDIS
@@ -345,6 +351,9 @@ START_TEST(test_cache_shm_churn_never_crosses_keys) {
 	ck_assert_msg(present <= nslots, "%d entries present in a cache of %d slots", present, nslots);
 	/* ... and after that much churn it should not have collapsed to (nearly) nothing either */
 	ck_assert_msg(present > 0, "no entry at all survived the churn");
+	const char *error = NULL;
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure: %s",
+		      error != NULL ? error : "unknown");
 }
 END_TEST
 
@@ -378,6 +387,210 @@ START_TEST(test_cache_shm_get_key_bounds_negative) {
 	cfg->cache.encrypt = old_encrypt;
 }
 END_TEST
+
+START_TEST(test_cache_shm_hash_size_and_value_boundaries) {
+	const apr_uint64_t key[2] = {0x0706050403020100ULL, 0x0f0e0d0c0b0a0908ULL};
+	unsigned char input[15];
+	for (apr_size_t i = 0; i < sizeof(input); i++)
+		input[i] = (unsigned char)i;
+	ck_assert_uint_eq(oidc_cache_shm_siphash(input, 0, key), 0x726fdb47dd0e0e31ULL);
+	ck_assert_uint_eq(oidc_cache_shm_siphash(input, sizeof(input), key), 0xa129ca6149be45e5ULL);
+
+	apr_size_t segment_size = 0;
+	ck_assert_int_eq(oidc_cache_shm_segment_size(10000, 16928, 16384, &segment_size), TRUE);
+	ck_assert_uint_gt(segment_size, (apr_size_t)10000 * 16928);
+	ck_assert_int_eq(oidc_cache_shm_segment_size(10000, 16928, 16384, NULL), FALSE);
+	ck_assert_int_eq(oidc_cache_shm_segment_size(0, 16928, 1, &segment_size), FALSE);
+	ck_assert_int_eq(oidc_cache_shm_segment_size(INT_MAX, INT_MAX, 1U << 30, &segment_size), FALSE);
+
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int old_encrypt = cfg->cache.encrypt;
+	cfg->cache.encrypt = 0;
+	const apr_ssize_t limit = oidc_cache_shm_value_size_max(oidc_cfg_cache_shm_entry_size_max_get(cfg));
+	char *value = apr_palloc(r->pool, (apr_size_t)limit + 1);
+	_oidc_memset(value, 'x', (apr_size_t)limit);
+	value[limit] = '\0';
+	value[limit - 1] = '\0';
+	ck_assert_int_eq(
+	    oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "boundary-ok", value, apr_time_now() + apr_time_from_sec(60)),
+	    TRUE);
+	value[limit - 1] = 'x';
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "boundary-too-large", value,
+					apr_time_now() + apr_time_from_sec(60)),
+			 FALSE);
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
+START_TEST(test_cache_shm_delete_missing_from_full_cache_is_noop) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int old_encrypt = cfg->cache.encrypt;
+	const int nslots = oidc_cfg_cache_shm_size_max_get(cfg);
+	const apr_time_t expiry = apr_time_now() + apr_time_from_sec(3600);
+	cfg->cache.encrypt = 0;
+
+	for (int i = 0; i < nslots; i++)
+		ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "full-%d", i),
+						apr_psprintf(r->pool, "value-%d", i), expiry),
+				 TRUE);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "full-missing", NULL, 0), TRUE);
+	for (int i = 0; i < nslots; i++) {
+		char *value = NULL;
+		ck_assert_int_eq(
+		    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "full-%d", i), &value), TRUE);
+		ck_assert_ptr_nonnull(value);
+		ck_assert_str_eq(value, apr_psprintf(r->pool, "value-%d", i));
+	}
+	const char *error = NULL;
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure: %s",
+		      error != NULL ? error : "unknown");
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
+START_TEST(test_cache_shm_pressure_reclaims_expired_before_live) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int old_encrypt = cfg->cache.encrypt;
+	const int nslots = oidc_cfg_cache_shm_size_max_get(cfg);
+	const apr_time_t past = apr_time_now() - apr_time_from_sec(1);
+	const apr_time_t future = apr_time_now() + apr_time_from_sec(3600);
+	cfg->cache.encrypt = 0;
+
+	for (int i = 0; i < nslots; i++)
+		ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "expired-%d", i),
+						"expired", past),
+				 TRUE);
+	for (int i = 0; i < nslots; i++)
+		ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION,
+						apr_psprintf(r->pool, "replacement-%d", i),
+						apr_psprintf(r->pool, "live-%d", i), future),
+				 TRUE);
+	for (int i = 0; i < nslots; i++) {
+		char *value = NULL;
+		ck_assert_int_eq(
+		    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "replacement-%d", i), &value),
+		    TRUE);
+		ck_assert_ptr_nonnull(value);
+		ck_assert_str_eq(value, apr_psprintf(r->pool, "live-%d", i));
+	}
+	const char *error = NULL;
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure: %s",
+		      error != NULL ? error : "unknown");
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
+typedef struct oidc_cache_shm_thread_ctx_t {
+	request_rec *base;
+	int id;
+	int failures;
+} oidc_cache_shm_thread_ctx_t;
+
+static void *APR_THREAD_FUNC oidc_cache_shm_thread(apr_thread_t *thread, void *data) {
+	oidc_cache_shm_thread_ctx_t *ctx = data;
+	apr_pool_t *pool = NULL;
+	if (apr_pool_create(&pool, NULL) != APR_SUCCESS) {
+		ctx->failures++;
+		return NULL;
+	}
+	request_rec r = *ctx->base;
+	r.pool = pool;
+	const apr_time_t expiry = apr_time_now() + apr_time_from_sec(3600);
+	for (int i = 0; i < 1000; i++) {
+		const char *key = apr_psprintf(pool, "thread-%d-%d", ctx->id, i);
+		const char *expected = apr_psprintf(pool, "value-%d-%d", ctx->id, i);
+		char *value = NULL;
+		if (oidc_cache_set(&r, OIDC_CACHE_SECTION_SESSION, key, expected, expiry) != TRUE) {
+			ctx->failures++;
+			break;
+		}
+		if (oidc_cache_get(&r, OIDC_CACHE_SECTION_SESSION, key, &value) != TRUE) {
+			ctx->failures++;
+			break;
+		}
+		if ((value != NULL) && (_oidc_strcmp(value, expected) != 0)) {
+			ctx->failures++;
+			break;
+		}
+		apr_pool_clear(pool);
+	}
+	apr_pool_destroy(pool);
+	return NULL;
+}
+
+START_TEST(test_cache_shm_concurrent_shard_churn) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int old_encrypt = cfg->cache.encrypt;
+	cfg->cache.encrypt = 0;
+
+	apr_thread_t *threads[8];
+	oidc_cache_shm_thread_ctx_t contexts[8];
+	for (int i = 0; i < 8; i++) {
+		contexts[i].base = r;
+		contexts[i].id = i;
+		contexts[i].failures = 0;
+		ck_assert_int_eq(apr_thread_create(&threads[i], NULL, oidc_cache_shm_thread, &contexts[i], r->pool),
+				 APR_SUCCESS);
+	}
+	for (int i = 0; i < 8; i++) {
+		apr_status_t status = APR_SUCCESS;
+		ck_assert_int_eq(apr_thread_join(&status, threads[i]), APR_SUCCESS);
+		ck_assert_int_eq(status, APR_SUCCESS);
+		ck_assert_int_eq(contexts[i].failures, 0);
+	}
+	const char *error = NULL;
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure: %s",
+		      error != NULL ? error : "unknown");
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
+#if APR_HAS_FORK
+START_TEST(test_cache_shm_multiprocess_churn) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int old_encrypt = cfg->cache.encrypt;
+	cfg->cache.encrypt = 0;
+	pid_t children[4];
+
+	for (int child = 0; child < 4; child++) {
+		children[child] = fork();
+		ck_assert_msg(children[child] >= 0, "fork failed");
+		if (children[child] != 0)
+			continue;
+		if (cfg->cache.impl->child_init(r->pool, r->server) != APR_SUCCESS)
+			_exit(2);
+		const apr_time_t expiry = apr_time_now() + apr_time_from_sec(3600);
+		for (int i = 0; i < 1000; i++) {
+			const char *key = apr_psprintf(r->pool, "process-%d-%d", child, i);
+			const char *expected = apr_psprintf(r->pool, "value-%d-%d", child, i);
+			char *value = NULL;
+			if (oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, key, expected, expiry) != TRUE)
+				_exit(3);
+			if (oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, key, &value) != TRUE)
+				_exit(4);
+			if ((value != NULL) && (_oidc_strcmp(value, expected) != 0))
+				_exit(5);
+		}
+		_exit(0);
+	}
+	for (int child = 0; child < 4; child++) {
+		int status = 0;
+		ck_assert_int_eq(waitpid(children[child], &status, 0), children[child]);
+		ck_assert_msg(WIFEXITED(status) && (WEXITSTATUS(status) == 0), "child %d failed with status %d", child,
+			      status);
+	}
+	const char *error = NULL;
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure: %s",
+		      error != NULL ? error : "unknown");
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+#endif
 
 START_TEST(test_cache_secret1_empty_secret2_fallback) {
 	request_rec *r = oidc_test_request_get();
@@ -2225,6 +2438,13 @@ int main(void) {
 	tcase_add_test(core, test_cache_shm_eviction_and_delete);
 	tcase_add_test(core, test_cache_shm_churn_never_crosses_keys);
 	tcase_add_test(core, test_cache_shm_get_key_bounds_negative);
+	tcase_add_test(core, test_cache_shm_hash_size_and_value_boundaries);
+	tcase_add_test(core, test_cache_shm_delete_missing_from_full_cache_is_noop);
+	tcase_add_test(core, test_cache_shm_pressure_reclaims_expired_before_live);
+	tcase_add_test(core, test_cache_shm_concurrent_shard_churn);
+#if APR_HAS_FORK
+	tcase_add_test(core, test_cache_shm_multiprocess_churn);
+#endif
 	tcase_add_test(core, test_cache_secret1_empty_secret2_fallback);
 	tcase_add_test(core, test_cache_backend_true_null_miss);
 	tcase_add_test(core, test_cache_unencrypted_hit_and_long_key);

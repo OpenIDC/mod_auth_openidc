@@ -1,3 +1,7 @@
+08/15/2026
+- cache/shm: shard hash locking, use per-segment SipHash, safely bound segment sizing, preferentially
+  sweep expired slots, and rate-limit capacity warnings outside cache locks; extend pressure/concurrency tests
+
 08/14/2026
 - source/test: simplify overly detailed comments while preserving essential rationale and invariants
 

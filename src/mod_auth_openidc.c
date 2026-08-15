@@ -42,8 +42,6 @@
  * https://github.com/Jasig/mod_auth_cas
  *
  * Other code copied/borrowed/adapted:
- * shared memory caching: mod_auth_mellon
- *
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  *
  **************************************************************************/
