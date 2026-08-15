@@ -41,6 +41,7 @@
 #ifndef _MOD_AUTH_OPENIDC_CACHE_SHM_H_
 #define _MOD_AUTH_OPENIDC_CACHE_SHM_H_
 
+#include "const.h"
 #include <apr.h>
 #include <httpd.h>
 
