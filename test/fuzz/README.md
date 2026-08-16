@@ -15,6 +15,8 @@ parser, reusing the libcheck test fixture (`test/util.c`) for a ready
 | `fuzz_cookie` | `oidc_http_get_cookie`             | raw `Cookie` request header tokenizing            |
 | `fuzz_response_header` | `oidc_http_response_header` | raw OP response header line parsing (curl callback) |
 | `fuzz_form_params` | `oidc_util_read_form_encoded_params` | authz response / back-channel logout param parsing |
+| `fuzz_metadata` | `oidc_metadata_{provider_is_valid,provider_parse,conf_parse,client_parse}` | provider/conf/client metadata field extraction (discovery responses) |
+| `fuzz_state_cookie` | `oidc_proto_state_from_cookie` | state cookie JWE decrypt + decompress + JSON decode |
 
 ## Three build modes
 

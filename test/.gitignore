@@ -43,6 +43,8 @@
 /fuzz_cookie
 /fuzz_response_header
 /fuzz_form_params
+/fuzz_metadata
+/fuzz_state_cookie
 /fuzz/*.o
 /fuzz/.deps/
 /fuzz/.dirstamp

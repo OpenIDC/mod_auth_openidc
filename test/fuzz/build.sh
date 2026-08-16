@@ -53,7 +53,7 @@ libs="$(pkg-config --libs $pkgs) -lcjose -lhiredis -ljq -lz -lldap -llber \
 	-lm -lrt -lpthread $FUZZ_LIBS"
 
 mkdir -p "$OUT"
-for t in base64 url jwt json cookie response_header form_params; do
+for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
 	src="$here/fuzz_$t.c"
 	[ -f "$src" ] || continue
 	echo "building $OUT/fuzz_$t"

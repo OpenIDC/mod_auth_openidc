@@ -109,7 +109,7 @@ libs="$prefix/lib/libcjose.a $prefix/lib/libjansson.a \
       $(pkg-config --libs apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8) \
       -lz -lm -lrt -lpthread"
 
-for t in base64 url jwt json cookie response_header form_params; do
+for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
 	src="$root/test/fuzz/fuzz_$t.c"
 	[[ -f "$src" ]] || continue
 	echo "=== building fuzz_$t"
@@ -133,7 +133,7 @@ done
 # this is worth doing first is that it is what makes check_build pass at all.
 # ---------------------------------------------------------------------------
 mkdir -p "$OUT/lib"
-for t in base64 url jwt json cookie response_header form_params; do
+for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
 	[[ -f "$OUT/fuzz_$t" ]] || continue
 	ldd "$OUT/fuzz_$t" | awk '/=> \//{print $3}'
 done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc_s|ld-linux)[.-]' \
@@ -145,7 +145,7 @@ done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc
 # fuzz_url additionally gets the curated open-redirect payload list, one input
 # per file -- the same 834 payloads test_handle.c asserts are all rejected.
 # ---------------------------------------------------------------------------
-for t in base64 url jwt json cookie response_header form_params; do
+for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
 	seed="$WORK/seed_$t"
 	rm -rf "$seed" && mkdir -p "$seed"
 	cp "$root"/test/fuzz/corpus/"$t"/* "$seed"/ 2>/dev/null || true
