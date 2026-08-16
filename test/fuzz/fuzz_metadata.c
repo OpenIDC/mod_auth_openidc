@@ -19,10 +19,17 @@
  */
 
 #include "fuzz.h"
+/* util.h pulls in const.h before any Apache header does, so config.h's
+ * PACKAGE_* defines win the race against Apache's own (empty) ones in
+ * ap_config_auto.h -- json.h includes httpd.h directly; keep util.h ahead
+ * of it, see cfg/cfg.h's own ordering (clang-format's include sorting
+ * would undo exactly that, hence the guard) */
+/* clang-format off */
+#include "util.h"      /* test fixture */
 #include "json.h"
 #include "metadata.h"
-#include "util.h"      /* test fixture */
 #include "util/util.h" /* oidc_json_decode_object */
+/* clang-format on */
 
 #include <apr_pools.h>
 #include <apr_strings.h>
