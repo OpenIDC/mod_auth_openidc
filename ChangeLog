@@ -1,3 +1,7 @@
+08/19/2026
+- cache/shm: serialize shared-memory operations with one cross-process mutex and use an exact
+  expired-or-LRU scan only when the cache is full
+
 08/15/2026
 - cache/shm: shard hash locking, use per-segment SipHash, safely bound segment sizing, preferentially
   sweep expired slots, and rate-limit capacity warnings outside cache locks; extend pressure/concurrency tests

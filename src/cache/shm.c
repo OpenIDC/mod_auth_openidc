@@ -38,7 +38,7 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * bounded shared-memory cache with sharded hash lookup and approximate LRU eviction
+ * bounded shared-memory cache with hash lookup and exact LRU eviction
  *
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
@@ -54,26 +54,20 @@
 /* size of key in cached key/value pairs */
 #define OIDC_CACHE_SHM_KEY_MAX OIDC_CACHE_KEY_SIZE_MAX
 
-#define OIDC_CACHE_SHM_SHARDS 16
-#define OIDC_CACHE_SHM_MUTEXES (OIDC_CACHE_SHM_SHARDS + 1)
-#define OIDC_CACHE_SHM_ALLOC_MUTEX OIDC_CACHE_SHM_SHARDS
-#define OIDC_CACHE_SHM_EVICT_SAMPLES 8
-#define OIDC_CACHE_SHM_EXPIRE_SAMPLES 8
 #define OIDC_CACHE_SHM_PRESSURE_WARN_INTERVAL apr_time_from_sec(60)
 /* Reject accidental configurations large enough to monopolize a host even on 64-bit platforms. */
 #define OIDC_CACHE_SHM_SEGMENT_SIZE_MAX ((apr_uint64_t)16 * 1024 * 1024 * 1024)
 
 typedef struct oidc_cache_cfg_shm_t {
 	apr_shm_t *shm;
-	oidc_cache_mutex_t *mutex[OIDC_CACHE_SHM_MUTEXES];
-	apr_uint32_t mutexes_ready;
+	oidc_cache_mutex_t *mutex;
+	apr_byte_t mutex_ready;
 	apr_byte_t is_parent;
 } oidc_cache_cfg_shm_t;
 
 /*
  * Layout: header | buckets | slots. Links use 1-based indexes because processes may map the segment
- * at different addresses. Bucket locks are sharded; a separate allocation lock protects the global
- * free list and the bounded full-cache eviction path so all slots remain available to every shard.
+ * at different addresses. One cross-process mutex protects the buckets, slots and free list.
  */
 typedef struct oidc_cache_shm_header_t {
 	/* number of (fixed size) cache entry slots */
@@ -82,15 +76,10 @@ typedef struct oidc_cache_shm_header_t {
 	apr_uint32_t nbuckets;
 	/* configured size of one slot, including the entry struct itself */
 	apr_uint32_t entry_size;
-	/* fixed number of independently locked cache partitions */
-	apr_uint32_t nshards;
 	/* per-segment SipHash key, initialized before workers fork */
 	apr_uint64_t hash_key[2];
-	/* fields below are serialized by the allocation mutex */
+	/* fields below are serialized by the cache mutex */
 	apr_uint32_t free_head;
-	apr_uint32_t sweep_cursor;
-	apr_uint32_t random_state;
-	apr_uint32_t reserved;
 	apr_time_t last_pressure_warning;
 } oidc_cache_shm_header_t;
 
@@ -214,33 +203,12 @@ apr_ssize_t oidc_cache_shm_value_size_max(int entry_size_max) {
 
 #undef OIDC_CACHE_SHM_SIPROUND
 
-/* Put an already-unlinked slot on the free list; the allocation mutex must be held. */
+/* Put an already-unlinked slot on the free list; the cache mutex must be held. */
 static void oidc_cache_shm_slot_free(oidc_cache_shm_header_t *hdr, oidc_cache_shm_entry_t *t, apr_uint32_t idx) {
 	t->section_key[0] = '\0';
 	t->access = 0;
 	t->next = hdr->free_head;
 	hdr->free_head = idx;
-}
-
-static apr_byte_t oidc_cache_shm_lock_shards(apr_pool_t *pool, server_rec *s, const oidc_cache_cfg_shm_t *context,
-					     apr_uint32_t count, apr_uint32_t *locked) {
-	*locked = 0;
-	while (*locked < count) {
-		if (oidc_cache_mutex_lock(pool, s, context->mutex[*locked]) == FALSE)
-			return FALSE;
-		(*locked)++;
-	}
-	return TRUE;
-}
-
-static apr_byte_t oidc_cache_shm_unlock_shards(apr_pool_t *pool, server_rec *s, const oidc_cache_cfg_shm_t *context,
-					       apr_uint32_t locked) {
-	apr_byte_t rv = TRUE;
-	while (locked > 0) {
-		if (oidc_cache_mutex_unlock(pool, s, context->mutex[--locked]) == FALSE)
-			rv = FALSE;
-	}
-	return rv;
 }
 
 static apr_byte_t oidc_cache_shm_validate_buckets(request_rec *r, oidc_cache_shm_header_t *hdr, apr_byte_t *visited,
@@ -298,23 +266,15 @@ apr_byte_t oidc_cache_shm_validate(request_rec *r, const char **error) {
 	const oidc_cache_cfg_shm_t *context = (oidc_cache_cfg_shm_t *)cfg->cache.cfg;
 	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	apr_byte_t valid = TRUE;
-	apr_uint32_t locked = 0;
 	*error = NULL;
 
-	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE)
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
-	if (oidc_cache_shm_lock_shards(r->pool, r->server, context, hdr->nshards, &locked) == TRUE) {
-		apr_byte_t *visited = apr_pcalloc(r->pool, (apr_size_t)hdr->nslots + 1);
-		valid = oidc_cache_shm_validate_buckets(r, hdr, visited, error) &&
-			oidc_cache_shm_validate_free_list(r, hdr, visited, error) &&
-			oidc_cache_shm_validate_ownership(r, hdr, visited, error);
-	} else {
-		valid = FALSE;
-	}
-
-	if (oidc_cache_shm_unlock_shards(r->pool, r->server, context, locked) == FALSE)
-		valid = FALSE;
-	if (oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE)
+	apr_byte_t *visited = apr_pcalloc(r->pool, (apr_size_t)hdr->nslots + 1);
+	valid = oidc_cache_shm_validate_buckets(r, hdr, visited, error) &&
+		oidc_cache_shm_validate_free_list(r, hdr, visited, error) &&
+		oidc_cache_shm_validate_ownership(r, hdr, visited, error);
+	if (oidc_cache_mutex_unlock(r->pool, r->server, context->mutex) == FALSE)
 		valid = FALSE;
 	return valid;
 }
@@ -323,8 +283,7 @@ apr_byte_t oidc_cache_shm_validate(request_rec *r, const char **error) {
 static void *oidc_cache_shm_cfg_create(apr_pool_t *pool) {
 	oidc_cache_cfg_shm_t *context = apr_pcalloc(pool, sizeof(oidc_cache_cfg_shm_t));
 	context->shm = NULL;
-	for (int i = 0; i < OIDC_CACHE_SHM_MUTEXES; i++)
-		context->mutex[i] = oidc_cache_mutex_create(pool, TRUE);
+	context->mutex = oidc_cache_mutex_create(pool, TRUE);
 	context->is_parent = TRUE;
 	return context;
 }
@@ -371,15 +330,10 @@ static int oidc_cache_shm_post_config(apr_pool_t *pool, server_rec *s) {
 	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	hdr->nslots = (apr_uint32_t)size_max;
 	hdr->nbuckets = nbuckets;
-	hdr->nshards = OIDC_CACHE_SHM_SHARDS;
 	/* round the slot stride up to the entry's 64-byte alignment (see oidc_cache_shm_segment_size) */
 	hdr->entry_size = (apr_uint32_t)APR_ALIGN((apr_size_t)entry_size_max, 64);
 	if (apr_generate_random_bytes((unsigned char *)hdr->hash_key, sizeof(hdr->hash_key)) != APR_SUCCESS) {
 		oidc_serror(s, "apr_generate_random_bytes failed to seed the shared memory cache hash");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-	if (apr_generate_random_bytes((unsigned char *)&hdr->random_state, sizeof(hdr->random_state)) != APR_SUCCESS) {
-		oidc_serror(s, "apr_generate_random_bytes failed to seed shared memory cache eviction");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 	hdr->last_pressure_warning = 0;
@@ -391,21 +345,15 @@ static int oidc_cache_shm_post_config(apr_pool_t *pool, server_rec *s) {
 		t->next = i < hdr->nslots ? i + 1 : 0;
 	}
 	hdr->free_head = 1;
-	hdr->sweep_cursor = 0;
-	if (hdr->random_state == 0)
-		hdr->random_state = 1;
 
-	for (apr_uint32_t i = 0; i < OIDC_CACHE_SHM_MUTEXES; i++) {
-		const char *name = i < hdr->nshards ? apr_psprintf(pool, "shm-%u", i) : "shm-alloc";
-		if (oidc_cache_mutex_post_config(pool, s, context->mutex[i], name) == FALSE)
-			return HTTP_INTERNAL_SERVER_ERROR;
-		context->mutexes_ready++;
-	}
+	if (oidc_cache_mutex_post_config(pool, s, context->mutex, "shm") == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
+	context->mutex_ready = TRUE;
 
 	oidc_sdebug(s,
 		    "initialized shared memory with a cache size (# entries) of: %d, a max (single) entry size of: %d, "
-		    "%d lock shards and a segment size of: %" APR_SIZE_T_FMT,
-		    size_max, entry_size_max, OIDC_CACHE_SHM_SHARDS, segment_size);
+		    "and a segment size of: %" APR_SIZE_T_FMT,
+		    size_max, entry_size_max, segment_size);
 
 	oidc_slog(s, APLOG_TRACE1, "create: %pp (shm=%pp,s=%pp, p=%d)", context, context ? context->shm : 0, s,
 		  context ? context->is_parent : -1);
@@ -427,13 +375,7 @@ static int oidc_cache_shm_child_init(apr_pool_t *p, server_rec *s) {
 		return APR_SUCCESS;
 	context->is_parent = FALSE;
 
-	/* initialize each shard lock for the child process */
-	for (apr_uint32_t i = 0; i < context->mutexes_ready; i++) {
-		apr_status_t rv = oidc_cache_mutex_child_init(p, s, context->mutex[i]);
-		if (rv != APR_SUCCESS)
-			return rv;
-	}
-	return APR_SUCCESS;
+	return oidc_cache_mutex_child_init(p, s, context->mutex);
 }
 
 /*
@@ -481,45 +423,19 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	const apr_uint64_t hash = oidc_cache_shm_hash(section_key, hdr->hash_key);
 	const apr_uint32_t bucket_idx = (apr_uint32_t)hash & (hdr->nbuckets - 1);
-	const apr_uint32_t shard_idx = bucket_idx & (hdr->nshards - 1);
 
-	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex[shard_idx]) == FALSE)
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
 
 	apr_uint32_t *bucket = &oidc_cache_shm_buckets(hdr)[bucket_idx];
 	const apr_time_t current_time = apr_time_now();
 	apr_uint32_t prev = 0;
 	apr_uint32_t idx = oidc_cache_shm_find(hdr, bucket, section_key, &prev);
-	apr_byte_t expired = FALSE;
 	if (idx != 0) {
 		oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
 		if (t->expires > current_time) {
 			t->access = current_time;
-			/* The copy must finish while the shard lock prevents a concurrent replacement. */
-			*value = apr_pstrdup(r->pool, t->value);
-		} else
-			expired = TRUE;
-	}
-
-	if (oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[shard_idx]) == FALSE)
-		return FALSE;
-	if (expired == FALSE)
-		return TRUE;
-
-	/* Retry an expired hit under allocation->shard lock order, then unlink and recycle it safely. */
-	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE)
-		return FALSE;
-	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex[shard_idx]) == FALSE) {
-		oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]);
-		return FALSE;
-	}
-	prev = 0;
-	idx = oidc_cache_shm_find(hdr, bucket, section_key, &prev);
-	if (idx != 0) {
-		oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
-		const apr_time_t retry_time = apr_time_now();
-		if (t->expires > retry_time) {
-			t->access = retry_time;
+			/* The copy must finish while the mutex prevents a concurrent replacement. */
 			*value = apr_pstrdup(r->pool, t->value);
 		} else {
 			if (prev != 0)
@@ -529,10 +445,7 @@ static apr_byte_t oidc_cache_shm_get(request_rec *r, const char *section, const 
 			oidc_cache_shm_slot_free(hdr, t, idx);
 		}
 	}
-	apr_byte_t rv = oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[shard_idx]);
-	if (oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE)
-		rv = FALSE;
-	return rv;
+	return oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
 }
 
 /*
@@ -556,60 +469,30 @@ static apr_byte_t oidc_cache_shm_unlink(oidc_cache_shm_header_t *hdr, apr_uint32
 	return FALSE;
 }
 
-static apr_uint32_t oidc_cache_shm_random_next(apr_uint32_t *state) {
-	apr_uint32_t v = *state;
-	v ^= v << 13;
-	v ^= v >> 17;
-	v ^= v << 5;
-	*state = v;
-	return v;
-}
-
-/* Allocation and every shard lock are held: reclaim expired entries, then use sampled LRU.
- * The caller invokes this only when free_head == 0, so every sampled slot is occupied. */
+/* The cache mutex is held: reclaim an expired entry, otherwise use exact LRU. */
 static apr_uint32_t oidc_cache_shm_evict(oidc_cache_shm_header_t *hdr, apr_time_t current_time,
 					 apr_time_t *pressure_age) {
-	apr_uint32_t victim = 0;
+	apr_uint32_t expired_victim = 0;
+	apr_uint32_t lru_victim = 0;
 	apr_time_t oldest = 0;
-	apr_byte_t expired = FALSE;
 	*pressure_age = -1;
-	if (hdr->nslots == 0)
-		return 0;
-
-	/* Advance a persistent cursor so repeated pressure examines every slot, not just random samples. */
-	const apr_uint32_t expire_samples =
-	    hdr->nslots < OIDC_CACHE_SHM_EXPIRE_SAMPLES ? hdr->nslots : OIDC_CACHE_SHM_EXPIRE_SAMPLES;
-	for (apr_uint32_t i = 0; i < expire_samples; i++) {
-		const apr_uint32_t idx = hdr->sweep_cursor++ % hdr->nslots + 1;
-		if (oidc_cache_shm_slot(hdr, idx)->expires <= current_time) {
-			victim = idx;
-			expired = TRUE;
-			break;
-		}
-	}
-	hdr->sweep_cursor %= hdr->nslots;
-
-	if (expired == FALSE) {
-		const apr_uint32_t start = oidc_cache_shm_random_next(&hdr->random_state) % hdr->nslots;
-		const apr_uint32_t lru_samples =
-		    hdr->nslots < OIDC_CACHE_SHM_EVICT_SAMPLES ? hdr->nslots : OIDC_CACHE_SHM_EVICT_SAMPLES;
-		for (apr_uint32_t i = 0; i < lru_samples; i++) {
-			/* The prime Weyl step gives distinct positions within the bounded sample. */
-			const apr_uint32_t idx =
-			    (apr_uint32_t)(((apr_uint64_t)start + (apr_uint64_t)i * 2654435761u) % hdr->nslots) + 1;
-			const oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
-			if ((victim == 0) || (t->access < oldest)) {
-				victim = idx;
-				oldest = t->access;
-			}
+	for (apr_uint32_t idx = 1; idx <= hdr->nslots; idx++) {
+		const oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
+		if (t->section_key[0] == '\0')
+			continue;
+		if ((expired_victim == 0) && (t->expires <= current_time))
+			expired_victim = idx;
+		if ((lru_victim == 0) || (t->access < oldest)) {
+			lru_victim = idx;
+			oldest = t->access;
 		}
 	}
 
-	/* cannot happen when the free list is empty (all slots occupied), but stay safe */
+	const apr_uint32_t victim = expired_victim != 0 ? expired_victim : lru_victim;
 	if (victim == 0)
 		return 0;
 
-	if (expired == FALSE) {
+	if (expired_victim == 0) {
 		const apr_time_t access = oidc_cache_shm_slot(hdr, victim)->access;
 		const apr_time_t age = current_time >= access ? (current_time - access) / 1000000 : 0;
 		if ((age < 3600) &&
@@ -624,24 +507,6 @@ static apr_uint32_t oidc_cache_shm_evict(oidc_cache_shm_header_t *hdr, apr_time_
 		return 0;
 
 	return victim;
-}
-
-static apr_byte_t oidc_cache_shm_lock_allocation_and_shard(request_rec *r, const oidc_cache_cfg_shm_t *context,
-							   apr_uint32_t shard_idx) {
-	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE)
-		return FALSE;
-	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex[shard_idx]) == TRUE)
-		return TRUE;
-	oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]);
-	return FALSE;
-}
-
-static apr_byte_t oidc_cache_shm_unlock_allocation_and_shard(request_rec *r, const oidc_cache_cfg_shm_t *context,
-							     apr_uint32_t shard_idx) {
-	apr_byte_t rv = oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[shard_idx]);
-	if (oidc_cache_mutex_unlock(r->pool, r->server, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE)
-		rv = FALSE;
-	return rv;
 }
 
 static void oidc_cache_shm_entry_update(oidc_cache_shm_header_t *hdr, apr_uint32_t idx, const char *value,
@@ -663,115 +528,14 @@ static void oidc_cache_shm_entry_insert(oidc_cache_shm_header_t *hdr, apr_uint32
 	oidc_cache_shm_entry_update(hdr, idx, value, expiry, access);
 }
 
-typedef struct oidc_cache_shm_operation_t {
-	request_rec *r;
-	const oidc_cfg_t *cfg;
-	const oidc_cache_cfg_shm_t *context;
-	oidc_cache_shm_header_t *hdr;
-	apr_uint32_t *bucket;
-	apr_uint32_t shard_idx;
-	const char *section_key;
-} oidc_cache_shm_operation_t;
-
-static apr_byte_t oidc_cache_shm_delete(const oidc_cache_shm_operation_t *op) {
-	/* Deletion mutates both a bucket and the global free list: use allocation->shard lock order. */
-	if (oidc_cache_shm_lock_allocation_and_shard(op->r, op->context, op->shard_idx) == FALSE)
-		return FALSE;
-
-	apr_uint32_t prev = 0;
-	const apr_uint32_t idx = oidc_cache_shm_find(op->hdr, op->bucket, op->section_key, &prev);
-	if (idx != 0) {
-		oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(op->hdr, idx);
-		if (prev != 0)
-			oidc_cache_shm_slot(op->hdr, prev)->next = t->next;
-		else
-			*op->bucket = t->next;
-		oidc_cache_shm_slot_free(op->hdr, t, idx);
-	}
-	return oidc_cache_shm_unlock_allocation_and_shard(op->r, op->context, op->shard_idx);
-}
-
-static apr_byte_t oidc_cache_shm_try_update(const oidc_cache_shm_operation_t *op, const char *value, apr_time_t expiry,
-					    apr_byte_t *updated) {
-	*updated = FALSE;
-	if (oidc_cache_mutex_lock(op->r->pool, op->r->server, op->context->mutex[op->shard_idx]) == FALSE)
-		return FALSE;
-
-	apr_uint32_t prev = 0;
-	const apr_uint32_t idx = oidc_cache_shm_find(op->hdr, op->bucket, op->section_key, &prev);
-	if (idx != 0) {
-		oidc_cache_shm_entry_update(op->hdr, idx, value, expiry, apr_time_now());
-		*updated = TRUE;
-	}
-	return oidc_cache_mutex_unlock(op->r->pool, op->r->server, op->context->mutex[op->shard_idx]);
-}
-
 static void oidc_cache_shm_warn_pressure(request_rec *r, const oidc_cfg_t *cfg, apr_time_t pressure_age) {
 	if (pressure_age < 0)
 		return;
 	oidc_warn(r,
-		  "dropping sampled-LRU entry with age = %" APR_TIME_T_FMT
+		  "dropping least-recently-used entry with age = %" APR_TIME_T_FMT
 		  "s, which is less than one hour; consider increasing the shared memory caching space "
 		  "(which is %d now) with the (global) " OIDCCacheShmMax " setting.",
 		  pressure_age, oidc_cfg_cache_shm_size_max_get(cfg));
-}
-
-/* The allocation mutex is held and the target shard mutex has been released on entry. */
-static apr_byte_t oidc_cache_shm_insert_full(const oidc_cache_shm_operation_t *op, const char *value,
-					     apr_time_t expiry) {
-	apr_uint32_t locked = 0;
-	if (oidc_cache_shm_lock_shards(op->r->pool, op->r->server, op->context, op->hdr->nshards, &locked) == FALSE) {
-		oidc_cache_shm_unlock_shards(op->r->pool, op->r->server, op->context, locked);
-		oidc_cache_mutex_unlock(op->r->pool, op->r->server, op->context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]);
-		return FALSE;
-	}
-
-	const apr_time_t current_time = apr_time_now();
-	apr_time_t pressure_age = -1;
-	const apr_uint32_t idx = oidc_cache_shm_evict(op->hdr, current_time, &pressure_age);
-	if (idx != 0)
-		oidc_cache_shm_entry_insert(op->hdr, op->bucket, idx, op->section_key, value, expiry, current_time);
-
-	apr_byte_t rv = oidc_cache_shm_unlock_shards(op->r->pool, op->r->server, op->context, locked);
-	if (oidc_cache_mutex_unlock(op->r->pool, op->r->server, op->context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) ==
-	    FALSE)
-		rv = FALSE;
-	if (idx == 0) {
-		oidc_error(op->r, "could not obtain a cache slot");
-		return FALSE;
-	}
-	if (rv == FALSE)
-		return FALSE;
-	oidc_cache_shm_warn_pressure(op->r, op->cfg, pressure_age);
-	return TRUE;
-}
-
-static apr_byte_t oidc_cache_shm_insert_new(const oidc_cache_shm_operation_t *op, const char *value,
-					    apr_time_t expiry) {
-	/* New keys draw from the global free list. Recheck after taking allocation->shard locks. */
-	if (oidc_cache_shm_lock_allocation_and_shard(op->r, op->context, op->shard_idx) == FALSE)
-		return FALSE;
-
-	apr_uint32_t prev = 0;
-	const apr_uint32_t existing = oidc_cache_shm_find(op->hdr, op->bucket, op->section_key, &prev);
-	if (existing != 0) {
-		oidc_cache_shm_entry_update(op->hdr, existing, value, expiry, apr_time_now());
-		return oidc_cache_shm_unlock_allocation_and_shard(op->r, op->context, op->shard_idx);
-	}
-
-	if (op->hdr->free_head != 0) {
-		const apr_uint32_t idx = op->hdr->free_head;
-		op->hdr->free_head = oidc_cache_shm_slot(op->hdr, idx)->next;
-		oidc_cache_shm_entry_insert(op->hdr, op->bucket, idx, op->section_key, value, expiry, apr_time_now());
-		return oidc_cache_shm_unlock_allocation_and_shard(op->r, op->context, op->shard_idx);
-	}
-
-	/* Full-cache eviction touches an arbitrary bucket, so lock every shard in stable order. */
-	if (oidc_cache_mutex_unlock(op->r->pool, op->r->server, op->context->mutex[op->shard_idx]) == FALSE) {
-		oidc_cache_mutex_unlock(op->r->pool, op->r->server, op->context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]);
-		return FALSE;
-	}
-	return oidc_cache_shm_insert_full(op, value, expiry);
 }
 
 /*
@@ -805,65 +569,72 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	oidc_cache_shm_header_t *hdr = oidc_cache_shm_base(context);
 	const apr_uint64_t hash = oidc_cache_shm_hash(section_key, hdr->hash_key);
 	const apr_uint32_t bucket_idx = (apr_uint32_t)hash & (hdr->nbuckets - 1);
-	const apr_uint32_t shard_idx = bucket_idx & (hdr->nshards - 1);
 	apr_uint32_t *bucket = &oidc_cache_shm_buckets(hdr)[bucket_idx];
-	const oidc_cache_shm_operation_t op = {
-	    .r = r,
-	    .cfg = cfg,
-	    .context = context,
-	    .hdr = hdr,
-	    .bucket = bucket,
-	    .shard_idx = shard_idx,
-	    .section_key = section_key,
-	};
-
-	if (value == NULL)
-		return oidc_cache_shm_delete(&op);
-
-	/* Existing-value updates need only their bucket shard. */
-	apr_byte_t updated = FALSE;
-	if (oidc_cache_shm_try_update(&op, value, expiry, &updated) == FALSE)
+	if (oidc_cache_mutex_lock(r->pool, r->server, context->mutex) == FALSE)
 		return FALSE;
-	if (updated == TRUE)
-		return TRUE;
-	return oidc_cache_shm_insert_new(&op, value, expiry);
+
+	apr_uint32_t prev = 0;
+	apr_uint32_t idx = oidc_cache_shm_find(hdr, bucket, section_key, &prev);
+	if (value == NULL) {
+		if (idx != 0) {
+			oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
+			if (prev != 0)
+				oidc_cache_shm_slot(hdr, prev)->next = t->next;
+			else
+				*bucket = t->next;
+			oidc_cache_shm_slot_free(hdr, t, idx);
+		}
+		return oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
+	}
+
+	const apr_time_t current_time = apr_time_now();
+	apr_time_t pressure_age = -1;
+	if (idx != 0) {
+		oidc_cache_shm_entry_update(hdr, idx, value, expiry, current_time);
+	} else {
+		if (hdr->free_head != 0) {
+			idx = hdr->free_head;
+			hdr->free_head = oidc_cache_shm_slot(hdr, idx)->next;
+		} else {
+			idx = oidc_cache_shm_evict(hdr, current_time, &pressure_age);
+		}
+		if (idx != 0)
+			oidc_cache_shm_entry_insert(hdr, bucket, idx, section_key, value, expiry, current_time);
+	}
+
+	const apr_byte_t unlocked = oidc_cache_mutex_unlock(r->pool, r->server, context->mutex);
+	if (idx == 0) {
+		oidc_error(r, "could not obtain a cache slot");
+		return FALSE;
+	}
+	if (unlocked == FALSE)
+		return FALSE;
+	oidc_cache_shm_warn_pressure(r, cfg, pressure_age);
+	return TRUE;
 }
 
 static apr_status_t oidc_cache_shm_destroy_segment(apr_pool_t *pool, server_rec *s, oidc_cache_cfg_shm_t *context) {
-	apr_uint32_t locked = 0;
-	apr_byte_t allocation_locked = FALSE;
-
-	if (context->mutexes_ready == OIDC_CACHE_SHM_MUTEXES) {
-		allocation_locked = oidc_cache_mutex_lock(pool, s, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]);
-		if (allocation_locked == FALSE)
+	apr_byte_t locked = FALSE;
+	if (context->mutex_ready == TRUE) {
+		locked = oidc_cache_mutex_lock(pool, s, context->mutex);
+		if (locked == FALSE)
 			return APR_EGENERAL;
-		if (oidc_cache_shm_lock_shards(pool, s, context, OIDC_CACHE_SHM_SHARDS, &locked) == FALSE) {
-			oidc_cache_shm_unlock_shards(pool, s, context, locked);
-			oidc_cache_mutex_unlock(pool, s, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]);
-			return APR_EGENERAL;
-		}
 	}
 
 	apr_status_t rv = apr_shm_destroy(context->shm);
 	oidc_sdebug(s, "apr_shm_destroy returned: %d", rv);
 	context->shm = NULL;
-	if (oidc_cache_shm_unlock_shards(pool, s, context, locked) == FALSE)
-		rv = APR_EGENERAL;
-	if ((allocation_locked == TRUE) &&
-	    (oidc_cache_mutex_unlock(pool, s, context->mutex[OIDC_CACHE_SHM_ALLOC_MUTEX]) == FALSE))
+	if ((locked == TRUE) && (oidc_cache_mutex_unlock(pool, s, context->mutex) == FALSE))
 		rv = APR_EGENERAL;
 	return rv;
 }
 
-static apr_status_t oidc_cache_shm_destroy_mutexes(server_rec *s, oidc_cache_cfg_shm_t *context) {
-	apr_status_t rv = APR_SUCCESS;
-	for (apr_uint32_t i = 0; i < OIDC_CACHE_SHM_MUTEXES; i++) {
-		if ((context->mutex[i] != NULL) && (oidc_cache_mutex_destroy(s, context->mutex[i]) != TRUE))
-			rv = APR_EGENERAL;
-		context->mutex[i] = NULL;
-	}
-	context->mutexes_ready = 0;
-	return rv;
+static apr_status_t oidc_cache_shm_destroy_mutex(server_rec *s, oidc_cache_cfg_shm_t *context) {
+	if ((context->mutex != NULL) && (oidc_cache_mutex_destroy(s, context->mutex) != TRUE))
+		return APR_EGENERAL;
+	context->mutex = NULL;
+	context->mutex_ready = FALSE;
+	return APR_SUCCESS;
 }
 
 static int oidc_cache_shm_destroy(apr_pool_t *pool, server_rec *s) {
@@ -878,7 +649,7 @@ static int oidc_cache_shm_destroy(apr_pool_t *pool, server_rec *s) {
 		return rv;
 	if ((context->is_parent == TRUE) && (context->shm != NULL))
 		rv = oidc_cache_shm_destroy_segment(pool, s, context);
-	if (oidc_cache_shm_destroy_mutexes(s, context) != APR_SUCCESS)
+	if (oidc_cache_shm_destroy_mutex(s, context) != APR_SUCCESS)
 		rv = APR_EGENERAL;
 	return rv;
 }
