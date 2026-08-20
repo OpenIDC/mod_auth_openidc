@@ -236,14 +236,6 @@ jobs:
         while IFS= read -r line; do printf '%s' "$line" > "$tmp/p$i"; i=$((i + 1)); done \
           < ../open-redirect-payload-list.txt
         ./build/fuzz_url "$tmp"/*
-    - name: Short fuzzing run
-      run: |
-        cd test/fuzz
-        for t in base64 url jwt json cookie response_header form_params metadata state_cookie jwks discovery_response pem_key; do
-          echo "== fuzz_$t =="
-          dict=""; [ -f dict/$t.dict ] && dict="-dict=dict/$t.dict"
-          ./build/fuzz_$t -max_total_time=20 -print_final_stats=1 $dict corpus/$t
-        done
     - name: Upload crashes
       if: failure()
       uses: actions/upload-artifact@v7

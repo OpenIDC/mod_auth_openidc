@@ -80,7 +80,7 @@ cd test && ./fuzz_url crash-file          # one input per file
 2. Add `fuzz_<name>` to `oidc_fuzz_targets` and a `fuzz_<name>_SOURCES` line in
    `test/Makefile.am`, and a `replay` line in `run-fuzzers.sh`.
 3. Add `<name>` to the `targets=` list in `oss-fuzz-build.sh` and `build.sh`, and
-   to the replay/fuzz loops in `.github/workflows/build.yml`.
+   to the replay loop in `.github/workflows/build.yml`.
 4. Drop a few seed inputs in `corpus/<name>/` -- include at least one input that
    takes the success path (a token that verifies, a document that parses), not
    only rejects -- and, when the parser has a vocabulary, a `dict/<name>.dict`

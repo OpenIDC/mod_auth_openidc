@@ -4,6 +4,9 @@
   partially built key list in oidc_jwks_parse_json() when a later JWKs element fails to parse
 - test/fuzz: add jwks, discovery_response and pem_key fuzz targets, and extend fuzz_jwt to verify
   and decrypt against a key set and fuzz_url to cover the OIDCRedirectURLsAllowed configuration
+- ci: drop the live per-push fuzzing run and keep only the deterministic seed-corpus replay; continuous
+  fuzzing is covered by OSS-Fuzz, and live-fuzzing the JWE targets against the older distro cjose made CI
+  fail nondeterministically
 
 08/19/2026
 - cache/shm: serialize shared-memory operations with one cross-process mutex and use an exact
