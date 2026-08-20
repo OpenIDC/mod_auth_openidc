@@ -1,3 +1,8 @@
+08/20/2026
+- util/jose: fix a NULL-pointer crash in oidc_util_url_parameter_get() when the query string is only
+  separators (e.g. "&"), reachable from any handler that reads a query parameter; also release the
+  partially built key list in oidc_jwks_parse_json() when a later JWKs element fails to parse
+
 08/19/2026
 - cache/shm: serialize shared-memory operations with one cross-process mutex and use an exact
   expired-or-LRU scan only when the cache is full

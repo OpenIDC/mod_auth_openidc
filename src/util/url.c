@@ -328,14 +328,17 @@ apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value)
 	/* not sure why we do this, but better be safe than sorry */
 	args = apr_pstrmemdup(r->pool, r->args, _oidc_strlen(r->args));
 
+	/* a while() (not a do/while): when r->args is only separators, e.g. "&", the first apr_strtok
+	 * returns NULL without setting tokenizer_ctx, and a further apr_strtok(NULL, ...) would then
+	 * dereference a NULL context -- a crash reachable from any query-parameter read */
 	p = apr_strtok(args, OIDC_STR_AMP, &tokenizer_ctx);
-	do {
-		if (p && _oidc_strncmp(p, k_param, k_param_sz) == 0) {
+	while (p != NULL) {
+		if (_oidc_strncmp(p, k_param, k_param_sz) == 0) {
 			*value = apr_pstrdup(r->pool, p + k_param_sz);
 			*value = oidc_http_url_decode(r, *value);
 		}
 		p = apr_strtok(NULL, OIDC_STR_AMP, &tokenizer_ctx);
-	} while (p);
+	}
 
 	return (*value != NULL ? TRUE : FALSE);
 }

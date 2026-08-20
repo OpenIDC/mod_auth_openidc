@@ -1625,6 +1625,17 @@ START_TEST(test_util_url_parameter_helpers) {
 	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == FALSE,
 		      "empty args should make url_parameter_get return FALSE");
 
+	/* an all-separator query string used to crash the tokenizer loop (NULL apr_strtok
+	 * context on the second call); it must simply find nothing now */
+	r->args = "&";
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == FALSE,
+		      "all-separator args must not match and must not crash");
+	r->args = "&&";
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == FALSE,
+		      "repeated-separator args must not match and must not crash");
+	ck_assert_msg(oidc_util_url_has_parameter(r, "foo") == FALSE,
+		      "all-separator args must not match has_parameter");
+
 	/* request scheme is "https" by default in oidc_test_request_init */
 	ck_assert_msg(oidc_util_url_cur_is_secure(r, c) == TRUE, "default scheme should be secure (https)");
 

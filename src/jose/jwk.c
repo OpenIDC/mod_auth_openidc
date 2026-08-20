@@ -343,6 +343,10 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const json_t *json, apr_array_
 			continue;
 		oidc_jwk_t *jwk;
 		if (oidc_jwk_parse_json(pool, elem, &jwk, err) != TRUE) {
+			/* the keys parsed so far wrap non-pooled cjose/OpenSSL objects: release them rather
+			 * than hand the caller a half-built list it has no reason to clean up after a failure */
+			oidc_jwk_list_destroy(*jwk_list);
+			*jwk_list = NULL;
 			return FALSE;
 		}
 		APR_ARRAY_PUSH(*jwk_list, const oidc_jwk_t *) = jwk;
