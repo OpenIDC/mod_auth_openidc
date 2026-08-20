@@ -227,7 +227,7 @@ jobs:
     - name: Replay seed corpora under sanitizers
       run: |
         cd test/fuzz
-        for t in base64 url jwt json; do
+        for t in base64 url jwt json cookie response_header form_params metadata state_cookie jwks discovery_response pem_key; do
           echo "== replay fuzz_$t =="
           ./build/fuzz_$t corpus/$t/*
         done
@@ -239,9 +239,10 @@ jobs:
     - name: Short fuzzing run
       run: |
         cd test/fuzz
-        for t in base64 url jwt json; do
+        for t in base64 url jwt json cookie response_header form_params metadata state_cookie jwks discovery_response pem_key; do
           echo "== fuzz_$t =="
-          ./build/fuzz_$t -max_total_time=30 -print_final_stats=1 corpus/$t
+          dict=""; [ -f dict/$t.dict ] && dict="-dict=dict/$t.dict"
+          ./build/fuzz_$t -max_total_time=20 -print_final_stats=1 $dict corpus/$t
         done
     - name: Upload crashes
       if: failure()

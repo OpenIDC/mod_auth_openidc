@@ -102,6 +102,9 @@ lib="$root/src/.libs/libauth_openidc.a"
 # -- with $LIB_FUZZING_ENGINE in place of -fsanitize=fuzzer so OSS-Fuzz can
 # select the engine.
 # ---------------------------------------------------------------------------
+# one entry per test/fuzz/fuzz_<name>.c; keep in sync with build.sh, run-fuzzers.sh and ../Makefile.am
+targets="base64 url jwt json cookie response_header form_params metadata state_cookie jwks discovery_response pem_key"
+
 apache_inc=$(apxs -q INCLUDEDIR 2>/dev/null || echo /usr/include/apache2)
 inc="-I$root/src -I$root/test -I$apache_inc -I$prefix/include \
      $(pkg-config --cflags apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8)"
@@ -109,7 +112,7 @@ libs="$prefix/lib/libcjose.a $prefix/lib/libjansson.a \
       $(pkg-config --libs apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8) \
       -lz -lm -lrt -lpthread"
 
-for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
+for t in $targets; do
 	src="$root/test/fuzz/fuzz_$t.c"
 	[[ -f "$src" ]] || continue
 	echo "=== building fuzz_$t"
@@ -133,7 +136,7 @@ done
 # this is worth doing first is that it is what makes check_build pass at all.
 # ---------------------------------------------------------------------------
 mkdir -p "$OUT/lib"
-for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
+for t in $targets; do
 	[[ -f "$OUT/fuzz_$t" ]] || continue
 	ldd "$OUT/fuzz_$t" | awk '/=> \//{print $3}'
 done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc_s|ld-linux)[.-]' \
@@ -145,7 +148,7 @@ done | sort -u | grep -vE '/(libc|libm|libdl|librt|libpthread|libstdc\+\+|libgcc
 # fuzz_url additionally gets the curated open-redirect payload list, one input
 # per file -- the same 834 payloads test_handle.c asserts are all rejected.
 # ---------------------------------------------------------------------------
-for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
+for t in $targets; do
 	seed="$WORK/seed_$t"
 	rm -rf "$seed" && mkdir -p "$seed"
 	cp "$root"/test/fuzz/corpus/"$t"/* "$seed"/ 2>/dev/null || true

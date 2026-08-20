@@ -2,6 +2,8 @@
 - util/jose: fix a NULL-pointer crash in oidc_util_url_parameter_get() when the query string is only
   separators (e.g. "&"), reachable from any handler that reads a query parameter; also release the
   partially built key list in oidc_jwks_parse_json() when a later JWKs element fails to parse
+- test/fuzz: add jwks, discovery_response and pem_key fuzz targets, and extend fuzz_jwt to verify
+  and decrypt against a key set and fuzz_url to cover the OIDCRedirectURLsAllowed configuration
 
 08/19/2026
 - cache/shm: serialize shared-memory operations with one cross-process mutex and use an exact

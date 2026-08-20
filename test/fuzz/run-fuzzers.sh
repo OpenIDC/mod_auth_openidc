@@ -61,6 +61,9 @@ replay fuzz_response_header "$dir"/fuzz/corpus/response_header/*
 replay fuzz_form_params "$dir"/fuzz/corpus/form_params/*
 replay fuzz_metadata "$dir"/fuzz/corpus/metadata/*
 replay fuzz_state_cookie "$dir"/fuzz/corpus/state_cookie/*
+replay fuzz_jwks "$dir"/fuzz/corpus/jwks/*
+replay fuzz_discovery_response "$dir"/fuzz/corpus/discovery_response/*
+replay fuzz_pem_key "$dir"/fuzz/corpus/pem_key/*
 
 # a run in which every target was skipped proves nothing: report it as a failure
 # rather than as a pass, so a build-condition or rename that stops producing the

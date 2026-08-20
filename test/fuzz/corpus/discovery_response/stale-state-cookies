@@ -1,0 +1,2 @@
+iss=https%3A%2F%2Fidp.example.com&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2F
+mod_auth_openidc_state_abc=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..AAAAAAAAAAAAAAAA.AAAA.AAAAAAAAAAAAAAAAAAAAAA; mod_auth_openidc_state_def=garbage

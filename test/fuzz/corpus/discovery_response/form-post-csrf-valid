@@ -1,0 +1,2 @@
+iss=https%3A%2F%2Fidp.example.com&target_link_uri=https%3A%2F%2Fwww.example.com%2Fprotected%2Fwhatever&login_hint=joe&scopes=openid%20profile&auth_request_params=acr_values%3Durn%3Amace%3Aincommon%3Aiap%3Asilver&x_csrf=abcdef0123456789
+x_csrf=abcdef0123456789; mod_auth_openidc_session=0123456789abcdef

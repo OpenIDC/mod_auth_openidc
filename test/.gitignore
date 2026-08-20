@@ -45,6 +45,9 @@
 /fuzz_form_params
 /fuzz_metadata
 /fuzz_state_cookie
+/fuzz_jwks
+/fuzz_discovery_response
+/fuzz_pem_key
 /fuzz/*.o
 /fuzz/.deps/
 /fuzz/.dirstamp

@@ -53,7 +53,10 @@ libs="$(pkg-config --libs $pkgs) -lcjose -lhiredis -ljq -lz -lldap -llber \
 	-lm -lrt -lpthread $FUZZ_LIBS"
 
 mkdir -p "$OUT"
-for t in base64 url jwt json cookie response_header form_params metadata state_cookie; do
+# one entry per test/fuzz/fuzz_<name>.c; keep in sync with oss-fuzz-build.sh, run-fuzzers.sh and ../Makefile.am
+targets="base64 url jwt json cookie response_header form_params metadata state_cookie jwks discovery_response pem_key"
+
+for t in $targets; do
 	src="$here/fuzz_$t.c"
 	[ -f "$src" ] || continue
 	echo "building $OUT/fuzz_$t"
@@ -69,6 +72,7 @@ run one, e.g.:
   $OUT/fuzz_url  -max_len=1024 $here/corpus/url
   $OUT/fuzz_jwt  -max_len=4096 $here/corpus/jwt
   $OUT/fuzz_json -max_len=8192 $here/corpus/json
+  $OUT/fuzz_jwks -max_len=8192 -dict=$here/dict/jwks.dict $here/corpus/jwks
 
 seed the url corpus with the curated open-redirect payloads:
   i=0; while IFS= read -r line; do

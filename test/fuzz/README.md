@@ -9,14 +9,17 @@ parser, reusing the libcheck test fixture (`test/util.c`) for a ready
 | target        | function under test                | what it stresses                                  |
 |---------------|------------------------------------|---------------------------------------------------|
 | `fuzz_base64` | `oidc_util_base64url_decode`       | base64url decoding (cookies, state, JWT segments) |
-| `fuzz_url`    | `oidc_validate_redirect_url`       | the open-redirect guard (return-to / logout URLs) |
-| `fuzz_jwt`    | `oidc_jwt_parse`                   | compact JWT/JWS/JWE structural parse              |
+| `fuzz_url`    | `oidc_validate_redirect_url`       | the open-redirect guard (return-to / logout URLs), in same-host, any-host and `OIDCRedirectURLsAllowed` configurations |
+| `fuzz_jwt`    | `oidc_jwt_parse` + `oidc_jwt_verify` | compact JWT/JWS/JWE parse, JWE decryption and signature verification against a fixed key set (the unit tests' RFC vectors) |
 | `fuzz_json`   | `oidc_json_decode_object`          | JSON decode (token / userinfo / metadata)         |
 | `fuzz_cookie` | `oidc_http_get_cookie`             | raw `Cookie` request header tokenizing            |
 | `fuzz_response_header` | `oidc_http_response_header` | raw OP response header line parsing (curl callback) |
 | `fuzz_form_params` | `oidc_util_read_form_encoded_params` | authz response / back-channel logout param parsing |
 | `fuzz_metadata` | `oidc_metadata_{provider_is_valid,provider_parse,conf_parse,client_parse}` | provider/conf/client metadata field extraction (discovery responses) |
 | `fuzz_state_cookie` | `oidc_proto_state_from_cookie` | state cookie JWE decrypt + decompress + JSON decode |
+| `fuzz_jwks` | `oidc_jwks_parse_json`, `oidc_jwk_parse_json` | JWK Set / JWK parsing (jwks_uri documents): RSA/EC/oct material, x5c chains, round-trip serialization |
+| `fuzz_discovery_response` | `oidc_discovery_response` | the discovery-form / 3rd-party-initiated-SSO handler: query + Cookie header in, CSRF check, target_link_uri validation, authorization request + state cookie out (static-provider path only) |
+| `fuzz_pem_key` | `oidc_cfg_parse_key_record`, `oidc_jwk_pem_bio_to_jwk` | key-file directive record syntax and PEM/X.509 → JWK conversion (via a memory BIO) |
 
 ## Three build modes
 
@@ -76,8 +79,13 @@ cd test && ./fuzz_url crash-file          # one input per file
    non-pooled results — `json_decref`, `oidc_jwt_destroy`, ...).
 2. Add `fuzz_<name>` to `oidc_fuzz_targets` and a `fuzz_<name>_SOURCES` line in
    `test/Makefile.am`, and a `replay` line in `run-fuzzers.sh`.
-3. Add `<name>` to the target list in `oss-fuzz-build.sh` and `build.sh`.
-4. Drop a few seed inputs in `corpus/<name>/`.
+3. Add `<name>` to the `targets=` list in `oss-fuzz-build.sh` and `build.sh`, and
+   to the replay/fuzz loops in `.github/workflows/build.yml`.
+4. Drop a few seed inputs in `corpus/<name>/` -- include at least one input that
+   takes the success path (a token that verifies, a document that parses), not
+   only rejects -- and, when the parser has a vocabulary, a `dict/<name>.dict`
+   (libFuzzer/AFL++ dictionary syntax: one quoted token per line). OSS-Fuzz picks
+   both up from `oss-fuzz-build.sh` by name.
 5. Add `/fuzz_<name>` to `test/.gitignore` (it lists each built binary
    individually rather than by a glob) so the standalone binary `make check`
    produces does not show up as untracked.
