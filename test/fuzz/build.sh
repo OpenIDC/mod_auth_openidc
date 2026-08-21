@@ -46,7 +46,14 @@ fi
 pkgs="apr-1 apr-util-1 jansson libcurl libcrypto libssl libpcre2-8"
 apache_inc=$($APXS -q INCLUDEDIR 2>/dev/null || echo /usr/include/apache2)
 
-cflags="-g -O1 -fsanitize=$SANITIZE -DFUZZING \
+# the optional-feature macros (USE_MEMCACHE, USE_LIBHIREDIS, ...) change the
+# layout of oidc_cfg_t and exist only in automake's AM_CFLAGS, so ask make for
+# the set the library was actually built with (not grep: the generated Makefile
+# keeps disabled branches as comments); see the same step in oss-fuzz-build.sh
+feature_cflags=$(make -s -C "$root/src" --eval='oidc-print-am-cflags: ; @echo $(AM_CFLAGS)' oidc-print-am-cflags |
+	tr ' ' '\n' | grep -E '^-D(USE_[A-Z0-9_]+|SSL_SUPPORT)$' | sort -u | tr '\n' ' ')
+
+cflags="-g -O1 -fsanitize=$SANITIZE -DFUZZING $feature_cflags \
 	-I$root/src -I$root/test -I$apache_inc \
 	$(pkg-config --cflags $pkgs) $FUZZ_CFLAGS"
 libs="$(pkg-config --libs $pkgs) -lcjose -lhiredis -ljq -lz -lldap -llber \

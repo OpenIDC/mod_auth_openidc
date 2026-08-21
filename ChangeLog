@@ -1,3 +1,7 @@
+08/21/2026
+- test/fuzz: build the fuzz targets with the library's USE_* feature macros so oidc_cfg_t has the same
+  layout on both sides; fixes fuzz_url crashing on every input in the OSS-Fuzz build
+
 08/20/2026
 - util/jose: fix a NULL-pointer crash in oidc_util_url_parameter_get() when the query string is only
   separators (e.g. "&"), reachable from any handler that reads a query parameter; also release the

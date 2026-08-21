@@ -94,6 +94,21 @@ make -C src libauth_openidc.la -j"$(nproc)"
 lib="$root/src/.libs/libauth_openidc.a"
 [[ -f "$lib" ]] || { echo "error: $lib was not built" >&2; exit 1; }
 
+# The optional-feature macros (USE_MEMCACHE, USE_LIBHIREDIS, ...) live only in
+# automake's AM_CFLAGS -- configure never puts them in config.h -- and they
+# change the layout of oidc_cfg_t (cfg/cache.h embeds per-backend members by
+# value). The harness TUs below, test/util.c included, compile against the same
+# headers by hand, so they must see exactly the set the library was built with
+# or a by-value oidc_cfg_t in a target is sized for a different struct than the
+# one the library reads (fuzz_url, 2026-08-21: global-buffer-overflow on every
+# input, hidden by the <10% broken-target tolerance). Ask make for the
+# AM_CFLAGS the library compile used rather than re-deriving them here -- and
+# ask make, not grep: automake keeps the disabled conditional branches in the
+# generated Makefile as commented-out lines, which a grep would pick up too.
+feature_cflags=$(make -s -C "$root/src" --eval='oidc-print-am-cflags: ; @echo $(AM_CFLAGS)' oidc-print-am-cflags |
+	tr ' ' '\n' | grep -E '^-D(USE_[A-Z0-9_]+|SSL_SUPPORT)$' | sort -u | tr '\n' ' ')
+echo "feature flags: ${feature_cflags:-(none)}"
+
 # ---------------------------------------------------------------------------
 # targets
 #
@@ -117,7 +132,7 @@ for t in $targets; do
 	[[ -f "$src" ]] || continue
 	echo "=== building fuzz_$t"
 	# shellcheck disable=SC2086
-	$CC $CFLAGS $inc -DFUZZING \
+	$CC $CFLAGS $inc -DFUZZING $feature_cflags \
 		"$src" "$root/test/util.c" "$root/test/stub.c" \
 		"$lib" $libs $LIB_FUZZING_ENGINE \
 		-Wl,-rpath,'$ORIGIN/lib' \

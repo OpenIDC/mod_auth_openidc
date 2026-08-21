@@ -76,7 +76,13 @@ cd test && ./fuzz_url crash-file          # one input per file
    existing target — the fixture init must run there, pre-forkserver, not
    lazily in the first input call; see the note in `fuzz.h`); create a
    per-input subpool from `oidc_test_pool_get()` and free it each call (free any
-   non-pooled results — `json_decref`, `oidc_jwt_destroy`, ...).
+   non-pooled results — `json_decref`, `oidc_jwt_destroy`, ...). Never declare
+   or copy an `oidc_cfg_t` by value in a target: its size depends on the
+   `USE_*` feature macros (`cfg/cache.h` embeds per-backend members), and the
+   fuzzing builds compile the target by hand rather than through automake.
+   `build.sh` and `oss-fuzz-build.sh` ask make for the library's `AM_CFLAGS`
+   and pass the `USE_*` macros on, but a config the library allocates
+   (`oidc_cfg_server_create`) is sized right under any flags.
 2. Add `fuzz_<name>` to `oidc_fuzz_targets` and a `fuzz_<name>_SOURCES` line in
    `test/Makefile.am`, and a `replay` line in `run-fuzzers.sh`.
 3. Add `<name>` to the `targets=` list in `oss-fuzz-build.sh` and `build.sh`, and
