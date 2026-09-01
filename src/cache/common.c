@@ -394,12 +394,15 @@ end:
 			   encrypted ? "encrypted " : "", oidc_util_mask_value(r, key));
 
 	if (rc == TRUE) {
-		if (*value != NULL)
+		if (*value != NULL) {
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_HIT);
 			oidc_debug(r, "cache hit: return %d bytes %s", *value ? (int)_oidc_strlen(*value) : 0, msg);
-		else
+		} else {
+			OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_MISS);
 			oidc_debug(r, "cache miss %s", msg);
+		}
 	} else {
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_ERROR);
+		OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, OM_CACHE_ERROR, cfg->cache.impl->name);
 		oidc_warn(r, "error retrieving value %s", msg);
 	}
 
@@ -449,7 +452,7 @@ end:
 	if (rc == TRUE) {
 		oidc_debug(r, "successfully stored %s", msg);
 	} else {
-		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_ERROR);
+		OIDC_METRICS_COUNTER_INC_VALUE(r, cfg, OM_CACHE_ERROR, cfg->cache.impl->name);
 		oidc_warn(r, "could NOT store %s", msg);
 	}
 

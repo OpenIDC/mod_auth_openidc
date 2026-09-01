@@ -163,8 +163,11 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	X(OM_SESSION_ERROR_REFRESH_USERINFO,       OM_CLASS_SESSION,       "error.refresh-user-info",       "errors refreshing claims from the userinfo endpoint in existing sessions") \
 	X(OM_SESSION_ERROR_GENERAL,                OM_CLASS_SESSION,       "error.general",                 "existing sessions that failed validation") \
 	X(OM_SESSION_FALLBACK_COOKIE,              OM_CLASS_SESSION,       "fallback-cookie",               "sessions stored in a browser cookie after a session cache write failure") \
-	X(OM_CACHE_ERROR,                          OM_CLASS_CACHE,         "cache.error",                   "cache read/write errors") \
+	X(OM_CACHE_ERROR,                          OM_CLASS_CACHE,         "cache.error",                   "cache read/write errors, per cache backend") \
 	X(OM_CACHE_RETRY,                          OM_CLASS_CACHE,         "cache.retry",                   "cache operations retried after a backend failure") \
+	X(OM_CACHE_HIT,                            OM_CLASS_CACHE,         "cache.hit",                     "cache reads that found the requested key") \
+	X(OM_CACHE_MISS,                           OM_CLASS_CACHE,         "cache.miss",                    "cache reads that did not find the requested key") \
+	X(OM_CACHE_EVICTION,                       OM_CLASS_CACHE,         "cache.eviction",                "live entries evicted from the shm cache before expiry to make room") \
 	X(OM_LOGOUT_BACKCHANNEL,                   OM_CLASS_LOGOUT,        "backchannel",                   "back-channel logout requests processed successfully") \
 	X(OM_LOGOUT_BACKCHANNEL_ERROR,             OM_CLASS_LOGOUT,        "backchannel.error",             "back-channel logout requests rejected") \
 	X(OM_REDIRECT_URI_AUTHN_RESPONSE_REDIRECT, OM_CLASS_REDIRECT_URI,  "authn.response.redirect",       "authentication responses received in a redirect") \

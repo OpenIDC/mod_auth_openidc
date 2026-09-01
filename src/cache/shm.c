@@ -47,6 +47,7 @@
 #include "cache/cache.h"
 #include "cfg/cache.h"
 #include "cfg/cfg_int.h"
+#include "metrics.h"
 #include <apr_general.h>
 #include <apr_shm.h>
 #include <stdint.h>
@@ -471,11 +472,12 @@ static apr_byte_t oidc_cache_shm_unlink(oidc_cache_shm_header_t *hdr, apr_uint32
 
 /* The cache mutex is held: reclaim an expired entry, otherwise use exact LRU. */
 static apr_uint32_t oidc_cache_shm_evict(oidc_cache_shm_header_t *hdr, apr_time_t current_time,
-					 apr_time_t *pressure_age) {
+					 apr_time_t *pressure_age, apr_byte_t *evicted_live) {
 	apr_uint32_t expired_victim = 0;
 	apr_uint32_t lru_victim = 0;
 	apr_time_t oldest = 0;
 	*pressure_age = -1;
+	*evicted_live = FALSE;
 	for (apr_uint32_t idx = 1; idx <= hdr->nslots; idx++) {
 		const oidc_cache_shm_entry_t *t = oidc_cache_shm_slot(hdr, idx);
 		if (t->section_key[0] == '\0')
@@ -493,6 +495,7 @@ static apr_uint32_t oidc_cache_shm_evict(oidc_cache_shm_header_t *hdr, apr_time_
 		return 0;
 
 	if (expired_victim == 0) {
+		*evicted_live = TRUE;
 		const apr_time_t access = oidc_cache_shm_slot(hdr, victim)->access;
 		const apr_time_t age = current_time >= access ? (current_time - access) / 1000000 : 0;
 		if ((age < 3600) &&
@@ -589,6 +592,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 
 	const apr_time_t current_time = apr_time_now();
 	apr_time_t pressure_age = -1;
+	apr_byte_t evicted_live = FALSE;
 	if (idx != 0) {
 		oidc_cache_shm_entry_update(hdr, idx, value, expiry, current_time);
 	} else {
@@ -596,7 +600,7 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 			idx = hdr->free_head;
 			hdr->free_head = oidc_cache_shm_slot(hdr, idx)->next;
 		} else {
-			idx = oidc_cache_shm_evict(hdr, current_time, &pressure_age);
+			idx = oidc_cache_shm_evict(hdr, current_time, &pressure_age, &evicted_live);
 		}
 		if (idx != 0)
 			oidc_cache_shm_entry_insert(hdr, bucket, idx, section_key, value, expiry, current_time);
@@ -609,6 +613,8 @@ static apr_byte_t oidc_cache_shm_set(request_rec *r, const char *section, const 
 	}
 	if (unlocked == FALSE)
 		return FALSE;
+	if (evicted_live == TRUE)
+		OIDC_METRICS_COUNTER_INC(r, cfg, OM_CACHE_EVICTION);
 	oidc_cache_shm_warn_pressure(r, cfg, pressure_age);
 	return TRUE;
 }

@@ -493,6 +493,10 @@ START_TEST(test_metrics_flushed_gap_counters) {
 	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_DPOP_RETRY);
 	OIDC_METRICS_COUNTER_INC(r, c, OM_SESSION_FALLBACK_COOKIE);
 	OIDC_METRICS_COUNTER_INC(r, c, OM_CACHE_RETRY);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_CACHE_HIT);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_CACHE_MISS);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_CACHE_EVICTION);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_CACHE_ERROR, "shm");
 	OIDC_METRICS_COUNTER_INC(r, c, OM_LOGOUT_BACKCHANNEL);
 	OIDC_METRICS_COUNTER_INC(r, c, OM_LOGOUT_BACKCHANNEL_ERROR);
 	oidc_metrics_timing_add(r, OM_PROVIDER_JWKS, apr_time_from_msec(2));
@@ -512,6 +516,12 @@ START_TEST(test_metrics_flushed_gap_counters) {
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_dpop_retry") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_session_fallback_cookie") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_retry") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_hit") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_miss") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_eviction") != NULL, "BODY=[%s]", body);
+	/* the cache.error counter is labeled with the backend name */
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_error") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"shm\"} 1") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_logout_backchannel") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_bucket") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_bucket") != NULL, "BODY=[%s]", body);
