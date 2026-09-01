@@ -464,6 +464,21 @@ out:
 	return rc;
 }
 
+#define OIDC_SESSION_ID_LOG_VAR "OIDC_SESSION_ID"
+
+/*
+ * export the session identifier into the request notes and environment so log lines can be
+ * correlated per session with ErrorLogFormat %{OIDC_SESSION_ID}n and LogFormat %{OIDC_SESSION_ID}e
+ */
+static void oidc_session_id_export(request_rec *r, const oidc_session_t *z) {
+	if (z->uuid == NULL)
+		return;
+	if (r->notes != NULL)
+		apr_table_set(r->notes, OIDC_SESSION_ID_LOG_VAR, z->uuid);
+	if (r->subprocess_env != NULL)
+		apr_table_set(r->subprocess_env, OIDC_SESSION_ID_LOG_VAR, z->uuid);
+}
+
 /*
  * load a session from the cache/cookie
  */
@@ -489,8 +504,11 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 		/* load the session from a self-contained cookie */
 		rc = oidc_session_load_cookie(r, c, z);
 
-	if (rc == TRUE)
+	if (rc == TRUE) {
 		rc = oidc_session_extract(r, z);
+		if (rc == TRUE)
+			oidc_session_id_export(r, z);
+	}
 
 	oidc_util_set_trace_parent(r, c, z->uuid);
 
@@ -546,6 +564,9 @@ apr_byte_t oidc_session_save(request_rec *r, oidc_session_t *z, oidc_session_sav
 		/* store the session in a self-contained cookie */
 		rc = oidc_session_save_cookie(r, z, first_time);
 	}
+
+	if (rc == TRUE)
+		oidc_session_id_export(r, z);
 
 	return rc;
 }

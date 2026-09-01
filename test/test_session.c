@@ -110,6 +110,49 @@ START_TEST(test_session_cache_roundtrip) {
 }
 END_TEST
 
+/* a successful save and load export the session identifier into the request
+ * notes and environment for log correlation */
+START_TEST(test_session_id_exported_for_log_correlation) {
+	request_rec *r = oidc_test_request_get();
+
+	oidc_session_t *z = NULL;
+	oidc_session_load(r, &z);
+	/* no session was loaded: nothing may be exported yet */
+	ck_assert_ptr_null(apr_table_get(r->notes, "OIDC_SESSION_ID"));
+
+	const char *uuid = "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface";
+	z->uuid = apr_pstrdup(r->pool, uuid);
+	z->remote_user = apr_pstrdup(r->pool, "alice@idp.example.com");
+	z->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, z, "https://idp.example.com");
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
+
+	/* the save exported the (new) session's identifier */
+	const char *s_notes = apr_table_get(r->notes, "OIDC_SESSION_ID");
+	ck_assert_ptr_nonnull(s_notes);
+	ck_assert_str_eq(s_notes, uuid);
+	const char *s_env = apr_table_get(r->subprocess_env, "OIDC_SESSION_ID");
+	ck_assert_ptr_nonnull(s_env);
+	ck_assert_str_eq(s_env, uuid);
+
+	/* clear and reload: the load exports it again */
+	apr_table_unset(r->notes, "OIDC_SESSION_ID");
+	apr_table_unset(r->subprocess_env, "OIDC_SESSION_ID");
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), uuid));
+	oidc_session_t *z2 = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z2), TRUE);
+	s_notes = apr_table_get(r->notes, "OIDC_SESSION_ID");
+	ck_assert_ptr_nonnull(s_notes);
+	ck_assert_str_eq(s_notes, uuid);
+	s_env = apr_table_get(r->subprocess_env, "OIDC_SESSION_ID");
+	ck_assert_ptr_nonnull(s_env);
+	ck_assert_str_eq(s_env, uuid);
+
+	oidc_session_free(r, z);
+	oidc_session_free(r, z2);
+}
+END_TEST
+
 START_TEST(test_session_reset_starts_a_new_session) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -704,6 +747,7 @@ int main(void) {
 	TCase *c = tcase_create("session");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_session_cache_roundtrip);
+	tcase_add_test(c, test_session_id_exported_for_log_correlation);
 	tcase_add_test(c, test_session_reset_starts_a_new_session);
 	tcase_add_test(c, test_session_cookie_roundtrip);
 	tcase_add_test(c, test_session_cookie_not_shared_across_vhosts);

@@ -564,6 +564,8 @@ apr_byte_t oidc_util_cookie_domain_valid(const char *hostname, const char *cooki
 #define OIDC_TP_TRACE_ID_LEN 16
 #define OIDC_TP_PARENT_ID_LEN 8
 
+#define OIDC_TRACE_ID_LOG_VAR "OIDC_TRACE_ID"
+
 /*
 The following version-format definition is used for version 00.
 version-format   = trace-id "-" parent-id "-" trace-flags
@@ -622,6 +624,13 @@ void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char 
 	} else {
 		s_trace_id = apr_pstrdup(r->pool, v);
 	}
+
+	/* export the generated trace-id into the request notes and environment so log lines can be
+	 * correlated per request with ErrorLogFormat %{OIDC_TRACE_ID}n and LogFormat %{OIDC_TRACE_ID}e */
+	if (r->notes != NULL)
+		apr_table_set(r->notes, OIDC_TRACE_ID_LOG_VAR, s_trace_id);
+	if (r->subprocess_env != NULL)
+		apr_table_set(r->subprocess_env, OIDC_TRACE_ID_LOG_VAR, s_trace_id);
 
 	if (oidc_cfg_metrics_hook_data_get(c) != NULL)
 		trace_flags = trace_flags | 0x01;

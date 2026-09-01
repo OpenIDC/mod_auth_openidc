@@ -1850,6 +1850,16 @@ START_TEST(test_util_set_trace_parent_flags) {
 	ck_assert_msg(len >= 2, "traceparent header too short");
 	ck_assert_msg(_oidc_strncmp(&tp[len - 2], "01", 2) == 0,
 		      "traceparent flags byte is not 01 when metrics hook is set");
+
+	/* the generated trace-id is exported into the notes and environment for log correlation
+	 * and matches the trace-id field of the traceparent header ("00-<32 hex>-...") */
+	const char *tid = apr_table_get(r->notes, "OIDC_TRACE_ID");
+	ck_assert_ptr_nonnull(tid);
+	ck_assert_int_eq((int)_oidc_strlen(tid), 32);
+	ck_assert_msg(_oidc_strncmp(&tp[3], tid, 32) == 0, "OIDC_TRACE_ID does not match the traceparent trace-id");
+	tid = apr_table_get(r->subprocess_env, "OIDC_TRACE_ID");
+	ck_assert_ptr_nonnull(tid);
+	ck_assert_msg(_oidc_strncmp(&tp[3], tid, 32) == 0, "OIDC_TRACE_ID (env) does not match the trace-id");
 }
 END_TEST
 

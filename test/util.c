@@ -110,6 +110,7 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 	apr_pool_create(&request->pool, pool);
 
 	request->subprocess_env = apr_table_make(request->pool, 0);
+	request->notes = apr_table_make(request->pool, 0);
 
 	request->headers_in = apr_table_make(request->pool, 0);
 	request->headers_out = apr_table_make(request->pool, 0);

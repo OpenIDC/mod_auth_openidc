@@ -1,6 +1,9 @@
 09/01/2026
 - metrics: add cache.hit, cache.miss and cache.eviction counters to the "cache" class and label the
   cache.error counter with the cache backend name
+- session/util: export the session identifier (OIDC_SESSION_ID) and the generated trace-id
+  (OIDC_TRACE_ID) into the request notes and environment so access and error log lines can be
+  correlated per session/request; a recommended ErrorLogFormat is documented in auth_openidc.conf
 - release 2.4.20.3
 
 08/30/2026
