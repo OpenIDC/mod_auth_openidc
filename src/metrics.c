@@ -49,7 +49,7 @@
 #include "util/util.h"
 #include "http.h"
 #include "cache/cache.h"
-#include "cfg/cfg.h"
+#include "cfg/cfg_int.h"
 #include "metrics.h"
 #include <limits.h>
 #include <apr_atomic.h>
@@ -1246,6 +1246,40 @@ static oidc_json_t *oidc_metrics_status_select_value(oidc_json_t *j_counter, con
 	return oidc_json_object_get(j_values, s_value_param);
 }
 
+#define OIDC_METRICS_STATUS_PING_KEY "status-ping"
+
+/*
+ * readiness variant of format=status (no counter selector): verify that the configured cache
+ * backend completes a write/read round-trip and report how provider metadata is configured;
+ * returns a 503 with an "ERROR" body when the cache backend is not usable
+ */
+static int oidc_metrics_status_readiness(request_rec *r) {
+	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	char *value = NULL;
+	char *msg = NULL;
+	const char *s_provider = NULL;
+	apr_byte_t ok = FALSE;
+
+	/* write/read round-trip through the configured cache backend */
+	if (oidc_cache_set(r, OIDC_CACHE_SECTION_HEALTH, OIDC_METRICS_STATUS_PING_KEY, "OK",
+			   apr_time_now() + apr_time_from_sec(60)) == TRUE)
+		if ((oidc_cache_get(r, OIDC_CACHE_SECTION_HEALTH, OIDC_METRICS_STATUS_PING_KEY, &value) == TRUE) &&
+		    (value != NULL) && (_oidc_strcmp(value, "OK") == 0))
+			ok = TRUE;
+
+	if (oidc_cfg_metadata_dir_get(cfg) != NULL)
+		s_provider = "metadata_dir";
+	else if (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get((oidc_cfg_t *)cfg)) != NULL)
+		s_provider = "static";
+	else
+		s_provider = "none";
+
+	msg = apr_psprintf(r->pool, "%s\ncache: %s: %s\nprovider: metadata: %s\n", ok ? "OK" : "ERROR",
+			   cfg->cache.impl->name, ok ? "ok" : "fail", s_provider);
+
+	return oidc_util_http_send(r, msg, _oidc_strlen(msg), "text/plain", ok ? OK : HTTP_SERVICE_UNAVAILABLE);
+}
+
 /*
  * return status updates
  */
@@ -1269,8 +1303,9 @@ static int oidc_metrics_handle_status(request_rec *r, const char *s_json) {
 	if (s_server_param == NULL)
 		s_server_param = "localhost";
 
+	/* without a counter selector this is a readiness probe rather than a counter query */
 	if (s_metric_param == NULL)
-		goto end;
+		return oidc_metrics_status_readiness(r);
 
 	json = oidc_metrics_json_parse_r(r, s_json);
 	if (json == NULL)

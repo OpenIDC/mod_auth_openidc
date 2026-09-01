@@ -108,6 +108,7 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 #define OIDC_CACHE_SECTION_SID "d"
 #define OIDC_CACHE_SECTION_USERINFO_SJWT "u"
 #define OIDC_CACHE_SECTION_JQ_FILTER "q"
+#define OIDC_CACHE_SECTION_HEALTH "h"
 
 // NB: every cache section occupies the same space; sizing is not differentiated per section
 //     (would be relevant mainly for the shm backend)

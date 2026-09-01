@@ -171,9 +171,16 @@ START_TEST(test_metrics_handle_request_format_status) {
 	request_rec *r = oidc_test_request_get();
 	metrics_subsystem_setup(r);
 
+	/* without a counter selector format=status is a readiness probe: it round-trips the cache
+	 * backend and reports the provider metadata configuration */
 	r->args = "format=status";
 	int rc = oidc_metrics_handle_request(r);
 	ck_assert_int_eq(rc, OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strncmp(body, "OK\n", 3) == 0, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "cache: shm: ok") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "provider: metadata: ") != NULL, "BODY=[%s]", body);
 
 	metrics_subsystem_teardown(r);
 }

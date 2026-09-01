@@ -11,6 +11,9 @@
   OIDCMetricsCacheJsonMax directives that take precedence over the corresponding environment variables
 - metrics: NB behaviour change: format=json no longer resets the collected metrics by default; pass
   reset=true explicitly to clear them after serving (any format supports it, now documented)
+- metrics: turn format=status without a counter selector into a real readiness probe that performs a
+  write/read round-trip through the configured cache backend (503 "ERROR" when that fails, where it
+  previously always answered "OK") and reports how provider metadata is configured
 - release 2.4.20.3
 
 08/30/2026
