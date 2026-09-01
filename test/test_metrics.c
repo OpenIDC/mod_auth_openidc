@@ -333,6 +333,31 @@ START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
 }
 END_TEST
 
+/* format=json no longer resets the collected metrics by default (pre-2.4.21 behavior);
+ * an explicit reset=true is required */
+START_TEST(test_metrics_handle_request_flushed_json_default_no_reset) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	e2e_metrics_setup_flushed(r);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+	ck_assert_ptr_nonnull(_oidc_strstr(metrics_json_wait_for(r, "\"200\"", 5000), "\"200\""));
+
+	/* serve the json format without a reset parameter */
+	r->args = "format=json";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+
+	/* the counter must still be there afterwards */
+	r->args = "format=status&server_name=www.example.com&counter=provider.http.response.code&value=200";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "OK: 1") != NULL,
+		      "expected the counter to survive a default format=json request, got: %s", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 /* Reset a flushed value-indexed counter to exercise recursive cleanup of nested metric objects. */
 START_TEST(test_metrics_handle_request_flushed_reset_nested_counter) {
 	request_rec *r = oidc_test_request_get();
@@ -713,6 +738,7 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_selector);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_with_value);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_json_default_no_reset);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_reset_nested_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_counter_inc_twice_before_flush);
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);

@@ -1558,10 +1558,12 @@ typedef struct oidc_metrics_handler_t {
 } oidc_metrics_content_handler_t;
 
 // output handlers
+// NB: no format resets the collected metrics by default (json did before 2.4.21);
+// a caller that wants the pre-2.4.21 behavior passes reset=true explicitly
 const oidc_metrics_content_handler_t _oidc_metrics_handlers[] = {
     // first is default
     {"prometheus", oidc_metrics_handle_prometheus, 0},
-    {"json", oidc_metrics_handle_json, 1},
+    {"json", oidc_metrics_handle_json, 0},
     {"internal", oidc_metrics_handle_internal, 0},
     {"status", oidc_metrics_handle_status, 0},
 };

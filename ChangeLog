@@ -9,6 +9,8 @@
   JSON data outgrew the shared memory segment (previously only an error log line) and an
   oidc_metrics_last_flush_timestamp_seconds gauge -- and add the OIDCMetricsCacheStorageInterval and
   OIDCMetricsCacheJsonMax directives that take precedence over the corresponding environment variables
+- metrics: NB behaviour change: format=json no longer resets the collected metrics by default; pass
+  reset=true explicitly to clear them after serving (any format supports it, now documented)
 - release 2.4.20.3
 
 08/30/2026
