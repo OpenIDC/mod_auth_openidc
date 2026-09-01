@@ -19,6 +19,12 @@
   all failure modes together; also propagate an incoming tracestate header alongside traceparent and
   always set the "sampled" flag on generated traceparent headers now that the trace-id is recorded in
   the request notes/environment
+- metrics: emit Prometheus-idiomatic _seconds histogram families (le= and sum in seconds) alongside
+  the legacy millisecond families, which are hereby deprecated and will be removed in a future
+  release: migrate queries like oidc_provider_token_bucket{le="100"} to
+  oidc_provider_token_seconds_bucket{le="0.1"}; add 10s/30s buckets to both families and keep the
+  timing sums in microseconds internally so the seconds sums are exact (the json format still
+  reports milliseconds)
 - release 2.4.20.3
 
 08/30/2026

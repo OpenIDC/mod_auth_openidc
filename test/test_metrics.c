@@ -558,6 +558,15 @@ START_TEST(test_metrics_flushed_gap_counters) {
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_bucket") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_bucket") != NULL, "BODY=[%s]", body);
 
+	/* the timing histograms are dual-emitted: the legacy millisecond family (above) and the
+	 * Prometheus-idiomatic _seconds family with seconds le= labels and 10s/30s buckets */
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_bucket") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "le=\"0.0001\"") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "le=\"30\"") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "le=\"30000\"") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_sum") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_count") != NULL, "BODY=[%s]", body);
+
 	/* the prometheus output opens with the build info and the metrics self-health gauges */
 	ck_assert_msg(_oidc_strstr(body, "oidc_build_info{version=\"") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 0") != NULL, "BODY=[%s]", body);

@@ -146,26 +146,31 @@ static oidc_cache_mutex_t *_oidc_metrics_process_mutex = NULL;
 //     4 number of vhosts supported
 #define OIDC_METRICS_CACHE_JSON_MAX_DEFAULT (1024 * 256 * 4)
 
+// NB: "label" is the millisecond le= label of the legacy (deprecated) Prometheus families,
+//     "label_seconds" the seconds le= label of the idiomatic _seconds families
 typedef struct oidc_metrics_bucket_t {
 	const char *name;
 	const char *label;
+	const char *label_seconds;
 	apr_time_t threshold;
 } oidc_metrics_bucket_t;
 
 // clang-format off
 
 static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
-	{ "le01", "le=\"0.1\"", 100 },
-	{ "le05", "le=\"0.5\"", 500 },
-	{ "le1", "le=\"1\"", apr_time_from_msec(1) },
-	{ "le5", "le=\"5\"", apr_time_from_msec(5) },
-	{ "le10", "le=\"10\"", apr_time_from_msec(10) },
-	{ "le50", "le=\"50\"", apr_time_from_msec(50) },
-	{ "le100", "le=\"100\"",  apr_time_from_msec(100) },
-	{ "le500", "le=\"500\"",  apr_time_from_msec(500) },
-	{ "le1000", "le=\"1000\"", apr_time_from_msec(1000) },
-    { "le5000", "le=\"5000\"", apr_time_from_msec(5000) },
-    { "inf", "le=\"+Inf\"", 0 }
+	{ "le01", "le=\"0.1\"", "le=\"0.0001\"", 100 },
+	{ "le05", "le=\"0.5\"", "le=\"0.0005\"", 500 },
+	{ "le1", "le=\"1\"", "le=\"0.001\"", apr_time_from_msec(1) },
+	{ "le5", "le=\"5\"", "le=\"0.005\"", apr_time_from_msec(5) },
+	{ "le10", "le=\"10\"", "le=\"0.01\"", apr_time_from_msec(10) },
+	{ "le50", "le=\"50\"", "le=\"0.05\"", apr_time_from_msec(50) },
+	{ "le100", "le=\"100\"", "le=\"0.1\"", apr_time_from_msec(100) },
+	{ "le500", "le=\"500\"", "le=\"0.5\"", apr_time_from_msec(500) },
+	{ "le1000", "le=\"1000\"", "le=\"1\"", apr_time_from_msec(1000) },
+    { "le5000", "le=\"5000\"", "le=\"5\"", apr_time_from_msec(5000) },
+    { "le10000", "le=\"10000\"", "le=\"10\"", apr_time_from_msec(10000) },
+    { "le30000", "le=\"30000\"", "le=\"30\"", apr_time_from_msec(30000) },
+    { "inf", "le=\"+Inf\"", "le=\"+Inf\"", 0 }
 };
 
 // clang-format on
@@ -460,7 +465,9 @@ static oidc_json_t *oidc_metrics_timings_new(const oidc_metrics_timing_t *timing
 	oidc_json_t *entry = oidc_json_object();
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
 		oidc_json_object_set_new(entry, _oidc_metric_buckets[i].name, oidc_json_integer(timing->buckets[i]));
-	oidc_json_object_set_new(entry, OIDC_METRICS_SUM, oidc_json_integer(apr_time_as_msec(timing->sum)));
+	/* the sum is kept in microseconds so the _seconds Prometheus family is exact; the
+	 * (documented) json format converts to milliseconds at presentation time */
+	oidc_json_object_set_new(entry, OIDC_METRICS_SUM, oidc_json_integer(timing->sum));
 	oidc_json_object_set_new(entry, OIDC_METRICS_COUNT, oidc_json_integer(timing->count));
 	return entry;
 }
@@ -481,7 +488,8 @@ static void oidc_metrics_timings_update(server_rec *s, const oidc_json_t *entry,
 	j_member = oidc_json_object_get(entry, OIDC_METRICS_SUM);
 	n = oidc_json_integer_value(j_member);
 
-	v = apr_time_as_msec(timing->sum);
+	/* microseconds, matching oidc_metrics_timings_new */
+	v = timing->sum;
 	if (_is_overflow(s, n, v))
 		n = 0;
 
@@ -1171,6 +1179,11 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 			j_timing = oidc_json_object_iter_value(i2);
 
 			o_timing = oidc_json_deep_copy(j_timing);
+			/* the shm sum is kept in microseconds; this format documents milliseconds */
+			oidc_json_object_set_new(
+			    o_timing, OIDC_METRICS_SUM,
+			    oidc_json_integer(
+				oidc_json_integer_value(oidc_json_object_get(j_timing, OIDC_METRICS_SUM)) / 1000));
 			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_CLASS_NAME,
 						 oidc_json_string(_oidc_metrics_timings_info[type].class_name));
 			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_METRIC_NAME,
@@ -1336,17 +1349,13 @@ end:
 }
 
 /*
- * return the Prometheus label name for a bucket
+ * return the bucket table entry for a JSON bucket key
  */
-static const char *oidc_metrics_prometheus_bucket_label(const char *json_name) {
-	const char *name = NULL;
-	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
-		if (_oidc_strcmp(_oidc_metric_buckets[i].name, json_name) == 0) {
-			name = _oidc_metric_buckets[i].label;
-			break;
-		}
-	}
-	return name;
+static const oidc_metrics_bucket_t *oidc_metrics_prometheus_bucket_get(const char *json_name) {
+	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++)
+		if (_oidc_strcmp(_oidc_metric_buckets[i].name, json_name) == 0)
+			return &_oidc_metric_buckets[i];
+	return NULL;
 }
 
 #define OIDC_METRICS_PROMETHEUS_PREFIX "oidc"
@@ -1451,16 +1460,23 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 					   oidc_json_t *value) {
 	const char *s_server = NULL;
 	const char *s_key = NULL;
-	const char *s_bucket = NULL;
+	const oidc_metrics_bucket_t *bucket = NULL;
 	oidc_json_t *j_timing = NULL;
 	const oidc_json_t *j_member = NULL;
 	oidc_json_t *o_timer = value;
+	oidc_json_int_t v = 0;
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_timing_type2s(ctx->pool, type));
+	/* the unsuffixed millisecond family is deprecated as of 2.4.21 in favor of the
+	 * Prometheus-idiomatic _seconds family emitted alongside it below, and will be
+	 * removed in a future release */
 	char *s_text =
 	    apr_psprintf(ctx->pool, "# HELP %s A histogram of %s.\n", s_label, _oidc_metrics_timings_info[type].desc);
 	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s histogram\n", s_text, s_label);
+	char *s_secs = apr_psprintf(ctx->pool, "# HELP %s_seconds A histogram of %s in seconds.\n", s_label,
+				    _oidc_metrics_timings_info[type].desc);
+	s_secs = apr_psprintf(ctx->pool, "%s# TYPE %s_seconds histogram\n", s_secs, s_label);
 
 	void *iter1 = oidc_json_object_iter(o_timer);
 	while (iter1) {
@@ -1470,20 +1486,39 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 		while (iter3) {
 			s_key = oidc_json_object_iter_key(iter3);
 			j_member = oidc_json_object_iter_value(iter3);
-			s_bucket = oidc_metrics_prometheus_bucket_label(s_key);
-			if (s_bucket)
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s,", s_text, s_label,
-						      OIDC_METRICS_PROMETHEUS_BUCKET, s_bucket);
-			else
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{", s_text, s_label, s_key);
-
-			s_text = apr_psprintf(ctx->pool, "%s%s=\"%s\"} %s\n", s_text, OIDC_METRICS_PROMETHEUS_SERVER,
-					      s_server, _json_int2str(ctx->pool, oidc_json_integer_value(j_member)));
+			v = oidc_json_integer_value(j_member);
+			bucket = oidc_metrics_prometheus_bucket_get(s_key);
+			if (bucket != NULL) {
+				s_text =
+				    apr_psprintf(ctx->pool, "%s%s_%s{%s,%s=\"%s\"} %s\n", s_text, s_label,
+						 OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label,
+						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
+				s_secs =
+				    apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s,%s=\"%s\"} %s\n", s_secs, s_label,
+						 OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label_seconds,
+						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
+			} else if (_oidc_strcmp(s_key, OIDC_METRICS_SUM) == 0) {
+				/* the sum is kept in microseconds in shared memory: truncate to
+				 * milliseconds for the legacy family, exact seconds for _seconds */
+				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
+						      OIDC_METRICS_PROMETHEUS_SERVER, s_server,
+						      _json_int2str(ctx->pool, v / 1000));
+				s_secs =
+				    apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %.6f\n", s_secs, s_label, s_key,
+						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, (double)v / 1000000.0);
+			} else {
+				s_text =
+				    apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
+						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
+				s_secs =
+				    apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %s\n", s_secs, s_label, s_key,
+						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
+			}
 			iter3 = oidc_json_object_iter_next(j_timing, iter3);
 		}
 		iter1 = oidc_json_object_iter_next(o_timer, iter1);
 	}
-	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", NULL);
+	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", s_secs, "\n", NULL);
 	oidc_json_decref(o_timer);
 	return 1;
 }
