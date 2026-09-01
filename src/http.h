@@ -87,6 +87,7 @@
 #define OIDC_HTTP_HDR_X_FRAME_OPTIONS "X-Frame-Options"
 #define OIDC_HTTP_HDR_WWW_AUTHENTICATE "WWW-Authenticate"
 #define OIDC_HTTP_HDR_TRACE_PARENT "traceparent"
+#define OIDC_HTTP_HDR_TRACE_STATE "tracestate"
 #define OIDC_HTTP_HDR_DPOP "DPoP"
 #define OIDC_HTTP_HDR_DPOP_NONCE "DPoP-Nonce"
 

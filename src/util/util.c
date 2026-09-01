@@ -632,8 +632,10 @@ void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char 
 	if (r->subprocess_env != NULL)
 		apr_table_set(r->subprocess_env, OIDC_TRACE_ID_LOG_VAR, s_trace_id);
 
-	if (oidc_cfg_metrics_hook_data_get(c) != NULL)
-		trace_flags = trace_flags | 0x01;
+	/* the generated trace is always recorded by this module (the trace-id is exported into the
+	 * request notes/environment for log correlation above), so the W3C "sampled" flag is set
+	 * unconditionally; before 2.4.21 it was set only when metrics collection was enabled */
+	trace_flags = trace_flags | 0x01;
 
 	oidc_http_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,
 			     apr_psprintf(r->pool, "00-%s-%s-%02x", s_trace_id, s_parent_id, trace_flags));

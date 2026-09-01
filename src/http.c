@@ -969,6 +969,13 @@ struct curl_slist *oidc_http_request_build_header_list(request_rec *r, const oid
 		oidc_debug(r, "propagating traceparent header: %s", traceparent);
 		h_list =
 		    curl_slist_append(h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_PARENT, traceparent));
+		/* tracestate accompanies traceparent (W3C Trace Context section 3.3) so propagate it alongside */
+		const char *tracestate = oidc_http_hdr_in_get(r, OIDC_HTTP_HDR_TRACE_STATE);
+		if (tracestate != NULL) {
+			oidc_debug(r, "propagating tracestate header: %s", tracestate);
+			h_list = curl_slist_append(
+			    h_list, apr_psprintf(r->pool, "%s: %s", OIDC_HTTP_HDR_TRACE_STATE, tracestate));
+		}
 	}
 
 	if (dpop != NULL) {

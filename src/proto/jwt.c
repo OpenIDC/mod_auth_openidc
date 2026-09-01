@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -140,6 +141,7 @@ apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *
 		if (jwt->payload.iss == NULL) {
 			oidc_error(r, "JWT did not contain an \"%s\" string (requested value: %s)", OIDC_CLAIM_ISS,
 				   iss);
+			OIDC_METRICS_ERROR_REASON(r, "iss");
 			return FALSE;
 		}
 
@@ -147,17 +149,22 @@ apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *
 		if (oidc_util_issuer_match(iss, jwt->payload.iss) == FALSE) {
 			oidc_error(r, "requested issuer (%s) does not match received \"%s\" value in id_token (%s)",
 				   iss, OIDC_CLAIM_ISS, jwt->payload.iss);
+			OIDC_METRICS_ERROR_REASON(r, "iss");
 			return FALSE;
 		}
 	}
 
 	/* check exp */
-	if (oidc_proto_validate_exp(r, jwt, exp_is_mandatory) == FALSE)
+	if (oidc_proto_validate_exp(r, jwt, exp_is_mandatory) == FALSE) {
+		OIDC_METRICS_ERROR_REASON(r, "exp");
 		return FALSE;
+	}
 
 	/* check iat */
-	if (oidc_proto_validate_iat(r, jwt, iat_is_mandatory, iat_slack) == FALSE)
+	if (oidc_proto_validate_iat(r, jwt, iat_is_mandatory, iat_slack) == FALSE) {
+		OIDC_METRICS_ERROR_REASON(r, "iat");
 		return FALSE;
+	}
 
 	return TRUE;
 }

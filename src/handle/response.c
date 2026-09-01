@@ -630,7 +630,10 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 
 	/* handle the code, implicit or hybrid flow */
 	if (oidc_response_flows(r, c, proto_state, provider, params, response_mode, &id_token) == FALSE) {
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHN_RESPONSE_ERROR_PROTOCOL);
+		/* labeled with the specific validation failure ("signature", "nonce", "exp", ...) when
+		 * the failing check recorded one */
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_AUTHN_RESPONSE_ERROR_PROTOCOL,
+					       oidc_metrics_error_reason_consume(r));
 		rc = oidc_response_authorization_error(r, c, proto_state, "Error in handling response type.", NULL);
 		goto end;
 	}

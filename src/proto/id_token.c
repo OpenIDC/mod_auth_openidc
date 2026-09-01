@@ -40,6 +40,7 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
@@ -328,6 +329,7 @@ apr_byte_t oidc_proto_idtoken_validate_access_token(request_rec *r, oidc_provide
 	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type, access_token, OIDC_CLAIM_AT_HASH,
 					   required_for_flows) == FALSE) {
 		oidc_error(r, "could not validate access token against \"%s\" claim value", OIDC_CLAIM_AT_HASH);
+		OIDC_METRICS_ERROR_REASON(r, "at_hash");
 		return FALSE;
 	}
 	return TRUE;
@@ -344,6 +346,7 @@ apr_byte_t oidc_proto_idtoken_validate_code(request_rec *r, oidc_provider_t *pro
 	if (oidc_proto_validate_hash_value(r, provider, jwt, response_type, code, OIDC_CLAIM_C_HASH,
 					   required_for_flows) == FALSE) {
 		oidc_error(r, "could not validate code against \"%s\" claim value", OIDC_CLAIM_C_HASH);
+		OIDC_METRICS_ERROR_REASON(r, "c_hash");
 		return FALSE;
 	}
 	return TRUE;
@@ -359,10 +362,13 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, oidc_cfg_t *cfg, c
 		   jwt->payload.value.str, nonce);
 
 	/* if a nonce is passed, verify it; otherwise we're doing a ("code") flow where the nonce is optional */
-	if ((nonce != NULL) && (oidc_proto_idtoken_validate_nonce(r, cfg, provider, nonce, jwt) == FALSE))
+	if ((nonce != NULL) && (oidc_proto_idtoken_validate_nonce(r, cfg, provider, nonce, jwt) == FALSE)) {
+		OIDC_METRICS_ERROR_REASON(r, "nonce");
 		return FALSE;
+	}
 
-	/* validate the ID Token JWT, requiring iss match, and valid exp + iat */
+	/* validate the ID Token JWT, requiring iss match, and valid exp + iat;
+	 * NB: on failure oidc_proto_jwt_validate records the specific iss/exp/iat error reason */
 	if (oidc_proto_jwt_validate(
 		r, jwt, oidc_cfg_provider_validate_issuer_get(provider) ? oidc_cfg_provider_issuer_get(provider) : NULL,
 		TRUE, TRUE, oidc_cfg_provider_idtoken_iat_slack_get(provider)) == FALSE)
@@ -372,12 +378,15 @@ static apr_byte_t oidc_proto_validate_idtoken(request_rec *r, oidc_cfg_t *cfg, c
 	if (jwt->payload.sub == NULL) {
 		oidc_error(r, "id_token JSON payload did not contain the required-by-spec \"%s\" string value",
 			   OIDC_CLAIM_SUB);
+		OIDC_METRICS_ERROR_REASON(r, "sub");
 		return FALSE;
 	}
 
 	/* verify the "aud" and "azp" values */
-	if (oidc_proto_idtoken_validate_aud_and_azp(r, cfg, provider, &jwt->payload) == FALSE)
+	if (oidc_proto_idtoken_validate_aud_and_azp(r, cfg, provider, &jwt->payload) == FALSE) {
+		OIDC_METRICS_ERROR_REASON(r, "aud");
 		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -407,6 +416,7 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 
 	if (oidc_jwt_parse(r->pool, id_token, jwt, decryption_keys, FALSE, &err) == FALSE) {
 		oidc_error(r, "oidc_jwt_parse failed: %s", oidc_jose_e2s(r->pool, err));
+		OIDC_METRICS_ERROR_REASON(r, "parse");
 		oidc_jwt_destroy(*jwt);
 		*jwt = NULL;
 		oidc_jwk_destroy(jwk);
@@ -443,6 +453,7 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 			oidc_cfg_provider_id_token_signed_response_alg_get(provider)) == FALSE) {
 
 			oidc_error(r, "id_token signature could not be validated, aborting");
+			OIDC_METRICS_ERROR_REASON(r, "signature");
 			oidc_jwt_destroy(*jwt);
 			*jwt = NULL;
 			oidc_jwk_destroy(jwk);

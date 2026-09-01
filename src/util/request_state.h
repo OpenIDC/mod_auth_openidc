@@ -67,6 +67,7 @@
 #define OIDC_REQUEST_STATE_KEY_AUTHN_PRESERVE "p"
 #define OIDC_REQUEST_STATE_KEY_SAVE "s"
 #define OIDC_REQUEST_STATE_TRACE_ID "t"
+#define OIDC_REQUEST_STATE_KEY_ERROR_REASON "er"
 
 /* the pool userdata key under which the preserved POST parameters are stored */
 #define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"

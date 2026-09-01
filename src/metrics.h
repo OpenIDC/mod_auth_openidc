@@ -235,4 +235,19 @@ static inline const char *_oidc_metrics_type_name2s(apr_pool_t *pool, unsigned i
 
 #define OIDC_METRICS_COUNTER_INC(r, cfg, type) OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, cfg, type, NULL, NULL)
 
+/*
+ * record a short, low-cardinality reason ("signature", "nonce", "exp", ...) at the point where a
+ * validation fails so a subsequent OIDC_METRICS_COUNTER_INC_VALUE of the covering error counter
+ * can label the sample with it instead of lumping all failure modes together
+ */
+#define OIDC_METRICS_ERROR_REASON(r, reason) oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_ERROR_REASON, reason)
+
+/* read the recorded error reason (may be NULL) and clear it so it cannot leak into a later sample */
+static inline const char *oidc_metrics_error_reason_consume(request_rec *r) {
+	const char *reason = oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_ERROR_REASON);
+	if (reason != NULL)
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_ERROR_REASON, NULL);
+	return reason;
+}
+
 #endif /* _MOD_AUTH_OPENIDC_METRICS_H_ */

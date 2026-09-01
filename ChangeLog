@@ -14,6 +14,11 @@
 - metrics: turn format=status without a counter selector into a real readiness probe that performs a
   write/read round-trip through the configured cache backend (503 "ERROR" when that fails, where it
   previously always answered "OK") and reports how provider metadata is configured
+- metrics: label the authn.response.error.protocol and authz.error.oauth20 counters with the specific
+  validation failure ("signature", "nonce", "exp", "iss", "aud", "inactive", ...) instead of lumping
+  all failure modes together; also propagate an incoming tracestate header alongside traceparent and
+  always set the "sampled" flag on generated traceparent headers now that the trace-id is recorded in
+  the request notes/environment
 - release 2.4.20.3
 
 08/30/2026

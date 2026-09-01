@@ -513,7 +513,8 @@ static authz_status oidc_authz_24_unauthorized_user(request_rec *r) {
 	oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	if (_oidc_strnatcasecmp(ap_auth_type(r), OIDC_AUTH_TYPE_OPENID_OAUTH20) == 0) {
-		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHZ_ERROR_OAUTH20);
+		/* labeled with the token validation failure ("inactive", "exp", ...) when one was recorded */
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_AUTHZ_ERROR_OAUTH20, oidc_metrics_error_reason_consume(r));
 		oidc_debug(r, "setting environment variable %s to \"%s\" for usage in mod_headers",
 			   OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);
 		apr_table_set(r->subprocess_env, OIDC_OAUTH_BEARER_SCOPE_ERROR, OIDC_OAUTH_BEARER_SCOPE_ERROR_VALUE);

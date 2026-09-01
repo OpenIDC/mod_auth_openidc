@@ -485,11 +485,15 @@ static apr_byte_t oidc_oauth_introspection_validate_and_cache(request_rec *r, oi
 	apr_time_t cache_until = apr_time_now() + apr_time_from_sec(OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 
 	if (active != NULL) {
-		if (oidc_oauth_introspection_active_is_valid(r, active) == FALSE)
+		if (oidc_oauth_introspection_active_is_valid(r, active) == FALSE) {
+			OIDC_METRICS_ERROR_REASON(r, "inactive");
 			return FALSE;
+		}
 		if (oidc_oauth_parse_and_cache_token_expiry(r, c, result, OIDC_CLAIM_EXP, TRUE, FALSE, &cache_until) ==
-		    FALSE)
+		    FALSE) {
+			OIDC_METRICS_ERROR_REASON(r, "exp");
 			return FALSE;
+		}
 	} else {
 		/* the "active" member is REQUIRED by RFC 7662; warn when it is absent since validity is then
 		 * derived solely from the (possibly optional) configured expiry claim */
@@ -503,8 +507,10 @@ static apr_byte_t oidc_oauth_introspection_validate_and_cache(request_rec *r, oi
 			    OIDC_TOKEN_EXPIRY_CLAIM_FORMAT_ABSOLUTE,
 			oidc_cfg_oauth_introspection_token_expiry_claim_required_get(c) ==
 			    OIDC_TOKEN_EXPIRY_CLAIM_REQUIRED_MANDATORY,
-			&cache_until) == FALSE)
+			&cache_until) == FALSE) {
+			OIDC_METRICS_ERROR_REASON(r, "exp");
 			return FALSE;
+		}
 	}
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore
