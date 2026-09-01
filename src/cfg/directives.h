@@ -88,6 +88,8 @@
 #define OIDCInfoHook "OIDCInfoHook"
 #define OIDCMetricsData "OIDCMetricsData"
 #define OIDCMetricsPublish "OIDCMetricsPublish"
+#define OIDCMetricsCacheStorageInterval "OIDCMetricsCacheStorageInterval"
+#define OIDCMetricsCacheJsonMax "OIDCMetricsCacheJsonMax"
 #define OIDCWhiteListedClaims "OIDCWhiteListedClaims"
 #define OIDCCryptoPassphrase "OIDCCryptoPassphrase"
 

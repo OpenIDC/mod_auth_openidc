@@ -212,6 +212,16 @@ const command_rec oidc_cfg_cmds[] = {
 		"Define the URL where the metrics will be published (e.g.: /metrics)"),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
+		OIDCMetricsCacheStorageInterval,
+		metrics_cache_storage_interval,
+		"Interval in milliseconds at which each server process flushes its metrics into shared memory; takes precedence over the OIDC_METRICS_CACHE_STORAGE_INTERVAL environment variable."),
+	OIDC_CFG_CMD(
+		AP_INIT_TAKE1,
+		OIDCMetricsCacheJsonMax,
+		metrics_cache_json_max,
+		"Maximum size in bytes of the serialized JSON metrics data kept in shared memory; takes precedence over the OIDC_METRICS_CACHE_JSON_MAX environment variable."),
+	OIDC_CFG_CMD(
+		AP_INIT_TAKE1,
 		OIDCTraceParent,
 		trace_parent,
 		"Propagate or generate a traceparent header"),

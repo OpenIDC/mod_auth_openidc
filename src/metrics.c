@@ -49,6 +49,7 @@
 #include "util/util.h"
 #include "http.h"
 #include "cache/cache.h"
+#include "cfg/cfg.h"
 #include "metrics.h"
 #include <limits.h>
 #include <apr_atomic.h>
@@ -280,15 +281,39 @@ static inline int _oidc_metrics_get_env_int(const char *name, int dval) {
 
 #define OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR "OIDC_METRICS_CACHE_JSON_MAX"
 
+/*
+ * fixed self-health header kept in the shared memory segment in front of the JSON metrics data;
+ * 32-bit members only so the apr_atomic_*32 functions cover every supported APR version
+ */
+typedef struct oidc_metrics_shm_hdr_t {
+	// number of flushes/resets that could not be stored because the JSON data outgrew the segment
+	apr_uint32_t flush_errors;
+	// seconds-since-epoch timestamp of the last completed flush cycle of this process' flush thread
+	apr_uint32_t last_flush;
+} oidc_metrics_shm_hdr_t;
+
+#define OIDC_METRICS_SHM_HDR_SIZE (APR_ALIGN_DEFAULT(sizeof(oidc_metrics_shm_hdr_t)))
+
+static inline oidc_metrics_shm_hdr_t *_oidc_metrics_shm_hdr(void) {
+	return (oidc_metrics_shm_hdr_t *)apr_shm_baseaddr_get(_oidc_metrics_cache);
+}
+
+static inline char *_oidc_metrics_shm_json(void) {
+	return ((char *)apr_shm_baseaddr_get(_oidc_metrics_cache)) + OIDC_METRICS_SHM_HDR_SIZE;
+}
+
 static apr_size_t _g_oidc_metrics_shm_size = 0;
 
 /*
- * get the size of the to-be-allocated shared memory segment
+ * get the maximum size of the serialized JSON metrics data: directive, environment variable or default
  */
 static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
 	if (_g_oidc_metrics_shm_size == 0) {
-		int n =
-		    _oidc_metrics_get_env_int(OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR, OIDC_METRICS_CACHE_JSON_MAX_DEFAULT);
+		const oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+		int n = oidc_cfg_metrics_cache_json_max_get(cfg);
+		if (n == OIDC_CONFIG_POS_INT_UNSET)
+			n = _oidc_metrics_get_env_int(OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR,
+						      OIDC_METRICS_CACHE_JSON_MAX_DEFAULT);
 		if ((n < 1) || (n > 1024 * 256 * 4 * 100)) {
 			oidc_serror(s, "environment value %s out of bounds, fallback to default",
 				    OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR);
@@ -304,7 +329,7 @@ static inline apr_size_t _oidc_metrics_shm_size(server_rec *s) {
  * retrieve the (JSON) serialized (global) metrics data from shared memory
  */
 static inline char *_oidc_metrics_storage_get(server_rec *s, apr_pool_t *pool) {
-	const char *p = (char *)apr_shm_baseaddr_get(_oidc_metrics_cache);
+	const char *p = _oidc_metrics_shm_json();
 	return p && (*p != 0) ? apr_pstrndup(pool, p, _oidc_metrics_shm_size(s)) : NULL;
 }
 
@@ -312,16 +337,19 @@ static inline char *_oidc_metrics_storage_get(server_rec *s, apr_pool_t *pool) {
  * store the serialized (global) metrics data in shared memory
  */
 static inline void _oidc_metrics_storage_set(server_rec *s, const char *value) {
-	char *p = apr_shm_baseaddr_get(_oidc_metrics_cache);
+	char *p = _oidc_metrics_shm_json();
 	if (value) {
 		apr_size_t n = _oidc_strlen(value) + 1;
-		if (n > _oidc_metrics_shm_size(s))
+		if (n > _oidc_metrics_shm_size(s)) {
+			apr_atomic_inc32(&_oidc_metrics_shm_hdr()->flush_errors);
 			oidc_serror(s,
-				    "json value too large: set or increase system environment variable %s to a value "
+				    "json value too large: set or increase " OIDCMetricsCacheJsonMax
+				    " (or system environment variable %s) to a value "
 				    "larger than %" APR_SIZE_T_FMT,
 				    OIDC_METRICS_CACHE_JSON_MAX_ENV_VAR, _oidc_metrics_shm_size(s));
-		else
+		} else {
 			_oidc_memcpy(p, value, n);
+		}
 	} else {
 		*p = 0;
 	}
@@ -684,11 +712,15 @@ static void oidc_metrics_store(server_rec *s) {
 #define OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR "OIDC_METRICS_CACHE_STORAGE_INTERVAL"
 
 /*
- * obtain the metrics flush interval from the environment variables
+ * obtain the metrics flush interval: directive, environment variable or default
  */
-static inline apr_interval_time_t _oidc_metrics_interval(void) {
-	return apr_time_from_msec(_oidc_metrics_get_env_int(OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR,
-							    OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT));
+static inline apr_interval_time_t _oidc_metrics_interval(server_rec *s) {
+	const oidc_cfg_t *cfg = ap_get_module_config(s->module_config, &auth_openidc_module);
+	int n = oidc_cfg_metrics_cache_storage_interval_get(cfg);
+	if (n == OIDC_CONFIG_POS_INT_UNSET)
+		n = _oidc_metrics_get_env_int(OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR,
+					      OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT);
+	return apr_time_from_msec(n);
 }
 
 #define OIDC_METRICS_POLL_INTERVAL 250
@@ -705,7 +737,7 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 	/* split the flush interval into POLL_INTERVAL-sized ticks so shutdown is observed quickly; if the
 	 * configured interval is shorter than POLL_INTERVAL, use it as the tick directly so we still flush
 	 * on schedule rather than busy-looping with n=0 */
-	apr_interval_time_t interval = _oidc_metrics_interval();
+	apr_interval_time_t interval = _oidc_metrics_interval(s);
 	/* a misconfigured env var parses to 0 (or negative) — fall back to the default to avoid 0/0 below */
 	if (interval <= 0)
 		interval = apr_time_from_msec(OIDC_METRICS_CACHE_STORAGE_INTERVAL_DEFAULT);
@@ -733,6 +765,9 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		/* flush the locally cached metrics into the global shared memory */
 		oidc_metrics_store(s);
 
+		/* record that a flush cycle completed, for the metrics self-health output */
+		apr_atomic_set32(&_oidc_metrics_shm_hdr()->last_flush, (apr_uint32_t)apr_time_sec(apr_time_now()));
+
 		/* reset the local hashtables */
 		oidc_util_apr_hash_clear(_oidc_metrics.counters);
 		oidc_util_apr_hash_clear(_oidc_metrics.timings);
@@ -759,15 +794,17 @@ apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
 	if (_oidc_metrics_cache != NULL)
 		return TRUE;
 
-	/* create the shared memory segment that holds the stringified JSON formatted metrics data */
-	if (apr_shm_create(&_oidc_metrics_cache, _oidc_metrics_shm_size(s), NULL, s->process->pool) != APR_SUCCESS)
+	/* create the shared memory segment that holds the self-health header plus the
+	 * stringified JSON formatted metrics data */
+	if (apr_shm_create(&_oidc_metrics_cache, OIDC_METRICS_SHM_HDR_SIZE + _oidc_metrics_shm_size(s), NULL,
+			   s->process->pool) != APR_SUCCESS)
 		return FALSE;
 	if (_oidc_metrics_cache == NULL)
 		return FALSE;
 
 	/* initialize the shared memory segment to 0 */
 	char *p = apr_shm_baseaddr_get(_oidc_metrics_cache);
-	_oidc_memset(p, 0, _oidc_metrics_shm_size(s));
+	_oidc_memset(p, 0, OIDC_METRICS_SHM_HDR_SIZE + _oidc_metrics_shm_size(s));
 
 	/* flag this as the parent, for shared memory cleanup purposes and "multiple child-init calls" detection */
 	_oidc_metrics_is_parent = TRUE;
@@ -1452,7 +1489,27 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 	const char *name = NULL;
 	void *value = NULL;
 
-	oidc_metric_prometheus_callback_ctx_t ctx = {"", r->pool};
+	/* start the output with the build info and the metrics subsystem's own health */
+	char *s_self = apr_psprintf(
+	    r->pool,
+	    "# HELP %s_build_info A metric with a constant '1' value labeled by the module build version.\n"
+	    "# TYPE %s_build_info gauge\n"
+	    "%s_build_info{version=\"%s\"} 1\n\n"
+	    "# HELP %s_metrics_flush_errors The number of metrics flushes dropped because the JSON data outgrew the "
+	    "shared memory segment.\n"
+	    "# TYPE %s_metrics_flush_errors counter\n"
+	    "%s_metrics_flush_errors %u\n\n"
+	    "# HELP %s_metrics_last_flush_timestamp_seconds The Unix time of the last completed metrics flush cycle in "
+	    "this server process.\n"
+	    "# TYPE %s_metrics_last_flush_timestamp_seconds gauge\n"
+	    "%s_metrics_last_flush_timestamp_seconds %u\n\n",
+	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX, NAMEVERSION,
+	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX,
+	    apr_atomic_read32(&_oidc_metrics_shm_hdr()->flush_errors), OIDC_METRICS_PROMETHEUS_PREFIX,
+	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX,
+	    apr_atomic_read32(&_oidc_metrics_shm_hdr()->last_flush));
+
+	oidc_metric_prometheus_callback_ctx_t ctx = {s_self, r->pool};
 	void *iter = NULL;
 
 	/* parse the metrics string to JSON */

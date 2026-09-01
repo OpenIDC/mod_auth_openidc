@@ -4,6 +4,11 @@
 - session/util: export the session identifier (OIDC_SESSION_ID) and the generated trace-id
   (OIDC_TRACE_ID) into the request notes and environment so access and error log lines can be
   correlated per session/request; a recommended ErrorLogFormat is documented in auth_openidc.conf
+- metrics: report the metrics subsystem's own health in the Prometheus output -- an
+  oidc_build_info{version} gauge, an oidc_metrics_flush_errors counter for flushes dropped because the
+  JSON data outgrew the shared memory segment (previously only an error log line) and an
+  oidc_metrics_last_flush_timestamp_seconds gauge -- and add the OIDCMetricsCacheStorageInterval and
+  OIDCMetricsCacheJsonMax directives that take precedence over the corresponding environment variables
 - release 2.4.20.3
 
 08/30/2026

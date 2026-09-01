@@ -175,6 +175,8 @@ struct oidc_cfg_cache_t {
 	INT(action_on_userinfo_error)                                                                                  \
 	INT(trace_parent)                                                                                              \
 	PTR(char *, metrics_path)                                                                                      \
+	INT(metrics_cache_storage_interval)                                                                            \
+	INT(metrics_cache_json_max)                                                                                    \
 	INT(dpop_api_enabled)                                                                                          \
 	/* directory that holds the provider & client metadata files */                                                \
 	PTR(char *, metadata_dir)

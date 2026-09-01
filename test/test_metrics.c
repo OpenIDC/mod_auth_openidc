@@ -526,6 +526,78 @@ START_TEST(test_metrics_flushed_gap_counters) {
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_bucket") != NULL, "BODY=[%s]", body);
 	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_bucket") != NULL, "BODY=[%s]", body);
 
+	/* the prometheus output opens with the build info and the metrics self-health gauges */
+	ck_assert_msg(_oidc_strstr(body, "oidc_build_info{version=\"") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 0") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_last_flush_timestamp_seconds ") != NULL, "BODY=[%s]", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+/* the two metrics cache directives are bounds-checked and readable through their getters */
+START_TEST(test_metrics_cache_directive_bounds) {
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	ck_assert_int_eq(oidc_cfg_metrics_cache_storage_interval_get(c), OIDC_CONFIG_POS_INT_UNSET);
+	ck_assert_int_eq(oidc_cfg_metrics_cache_json_max_get(c), OIDC_CONFIG_POS_INT_UNSET);
+	ck_assert_ptr_nonnull(oidc_cmd_metrics_cache_storage_interval_set(
+	    oidc_test_cmd_get(OIDCMetricsCacheStorageInterval), NULL, "50"));
+	ck_assert_ptr_nonnull(
+	    oidc_cmd_metrics_cache_json_max_set(oidc_test_cmd_get(OIDCMetricsCacheJsonMax), NULL, "10"));
+	ck_assert_ptr_null(oidc_cmd_metrics_cache_storage_interval_set(
+	    oidc_test_cmd_get(OIDCMetricsCacheStorageInterval), NULL, "250"));
+	ck_assert_int_eq(oidc_cfg_metrics_cache_storage_interval_get(c), 250);
+	ck_assert_ptr_null(
+	    oidc_cmd_metrics_cache_json_max_set(oidc_test_cmd_get(OIDCMetricsCacheJsonMax), NULL, "2048"));
+	ck_assert_int_eq(oidc_cfg_metrics_cache_json_max_get(c), 2048);
+}
+END_TEST
+
+/* the OIDCMetricsCacheStorageInterval directive drives the flush thread (no env var set) */
+START_TEST(test_metrics_flush_interval_directive) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	ck_assert_ptr_null(oidc_cmd_metrics_cache_storage_interval_set(
+	    oidc_test_cmd_get(OIDCMetricsCacheStorageInterval), NULL, "100"));
+	metrics_subsystem_setup(r);
+	OIDC_METRICS_COUNTER_INC(r, c, OM_PROVIDER_CONNECT_ERROR);
+	/* well within the poll budget only because the directive shrank the 5s default interval */
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "connect", 3000));
+	metrics_subsystem_teardown(r);
+}
+END_TEST
+
+/* a flush that outgrows the shm JSON segment is dropped and counted in the self-health output */
+START_TEST(test_metrics_flush_errors_reported) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	int i = 0;
+	int waited = 0;
+	const char *body = NULL;
+
+	/* shrink the segment via the directive so the first flush cannot fit */
+	ck_assert_ptr_null(
+	    oidc_cmd_metrics_cache_json_max_set(oidc_test_cmd_get(OIDCMetricsCacheJsonMax), NULL, "1024"));
+	e2e_metrics_setup_flushed(r);
+
+	for (i = 0; i < 40; i++)
+		OIDC_METRICS_COUNTER_INC_VALUE(
+		    r, c, OM_PROVIDER_HTTP_RESPONSE_CODE,
+		    apr_psprintf(r->pool, "code-%02d-%s", i, "0123456789012345678901234567890123456789"));
+
+	/* poll the prometheus output until the dropped flush shows up */
+	while (waited <= 5000) {
+		r->args = "format=prometheus&reset=false";
+		ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+		body = oidc_request_state_get(r, "sent_body");
+		if ((body != NULL) && (_oidc_strstr(body, "oidc_metrics_flush_errors 1") != NULL))
+			break;
+		apr_sleep(apr_time_from_msec(100));
+		waited += 100;
+	}
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 1") != NULL, "BODY=[%s]", body);
+
 	e2e_metrics_teardown_flushed(r);
 }
 END_TEST
@@ -647,6 +719,9 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
 	tcase_add_test(flushed, test_metrics_flushed_gap_counters);
+	tcase_add_test(flushed, test_metrics_cache_directive_bounds);
+	tcase_add_test(flushed, test_metrics_flush_interval_directive);
+	tcase_add_test(flushed, test_metrics_flush_errors_reported);
 	tcase_add_test(flushed, test_metrics_shm_size_env_out_of_bounds);
 	tcase_add_test(flushed, test_metrics_timing_negative_and_overflow);
 	tcase_add_test(flushed, test_metrics_flushed_staggered_families);
