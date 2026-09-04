@@ -1,3 +1,6 @@
+09/04/2026
+- metrics: reclaim process-local counter/timing allocations after each successful flush
+
 09/01/2026
 - metrics: add cache.hit, cache.miss and cache.eviction counters to the "cache" class and label the
   cache.error counter with the cache backend name

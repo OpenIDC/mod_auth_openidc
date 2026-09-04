@@ -116,6 +116,7 @@ OIDC_STATIC_ASSERT(sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_cou
 		   counters_info_matches_enum);
 
 typedef struct oidc_metrics_t {
+	apr_pool_t *pool;
 	apr_hash_t *counters;
 	apr_hash_t *timings;
 } oidc_metrics_t;
@@ -133,7 +134,7 @@ static apr_thread_t *_oidc_metrics_thread = NULL;
 // pid that owns _oidc_metrics_thread; used to tell a post-fork stale handle from a same-process double-init
 static pid_t _oidc_metrics_thread_pid = 0;
 // local in-memory cached metrics
-static oidc_metrics_t _oidc_metrics = {NULL, NULL};
+static oidc_metrics_t _oidc_metrics = {NULL, NULL, NULL};
 // mutex to protect the local metrics hash table
 static oidc_cache_mutex_t *_oidc_metrics_process_mutex = NULL;
 
@@ -227,6 +228,26 @@ typedef struct oidc_metrics_timing_t {
 	apr_time_t sum;
 	oidc_json_int_t count;
 } oidc_metrics_timing_t;
+
+/*
+ * Reinitialize the per-process collection tables in a dedicated child pool.
+ * Clearing this pool after a flush reclaims all nested hashes, keys and values
+ * in one operation; the process mutex must be held once request threads exist.
+ */
+static apr_byte_t oidc_metrics_local_reset(server_rec *s) {
+	if (_oidc_metrics.pool == NULL) {
+		if (apr_pool_create(&_oidc_metrics.pool, s->process->pool) != APR_SUCCESS) {
+			oidc_serror(s, "apr_pool_create failed: cannot initialize local metrics");
+			return FALSE;
+		}
+	} else {
+		apr_pool_clear(_oidc_metrics.pool);
+	}
+
+	_oidc_metrics.counters = apr_hash_make(_oidc_metrics.pool);
+	_oidc_metrics.timings = apr_hash_make(_oidc_metrics.pool);
+	return TRUE;
+}
 
 // context holder for parsing valid classnames
 typedef struct oidc_metrics_add_classname_ctx_t {
@@ -776,9 +797,8 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		/* record that a flush cycle completed, for the metrics self-health output */
 		apr_atomic_set32(&_oidc_metrics_shm_hdr()->last_flush, (apr_uint32_t)apr_time_sec(apr_time_now()));
 
-		/* reset the local hashtables */
-		oidc_util_apr_hash_clear(_oidc_metrics.counters);
-		oidc_util_apr_hash_clear(_oidc_metrics.timings);
+		/* release all allocations made while gathering this flush interval */
+		oidc_metrics_local_reset(s);
 
 		/* unlock the mutex that protects the locally cached metrics */
 		oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex);
@@ -817,28 +837,28 @@ apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
 	/* flag this as the parent, for shared memory cleanup purposes and "multiple child-init calls" detection */
 	_oidc_metrics_is_parent = TRUE;
 
-	/* create the thread that will periodically flush the local metrics data to shared memory */
-	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
+	/* create the pool and hashtables that hold local metrics data */
+	if (oidc_metrics_local_reset(s) == FALSE)
 		return FALSE;
-	_oidc_metrics_thread_pid = getpid();
 
-	/* create the hashtable that holds local metrics data */
-	_oidc_metrics.counters = apr_hash_make(s->process->pool);
-	_oidc_metrics.timings = apr_hash_make(s->process->pool);
-
-	/* create and initialize the mutex that guards _oidc_metrics_hash */
+	/* create and initialize the mutex that guards the shared-memory data */
 	_oidc_metrics_global_mutex = oidc_cache_mutex_create(s->process->pool, TRUE);
 	if (_oidc_metrics_global_mutex == NULL)
 		return FALSE;
 	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_global_mutex, "metrics-global") == FALSE)
 		return FALSE;
 
-	/* create and initialize the mutex that guards the shared memory */
+	/* create and initialize the mutex that guards the local metrics tables */
 	_oidc_metrics_process_mutex = oidc_cache_mutex_create(s->process->pool, FALSE);
 	if (_oidc_metrics_process_mutex == NULL)
 		return FALSE;
 	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_process_mutex, "metrics-process") == FALSE)
 		return FALSE;
+
+	/* create the thread only after all state that it accesses has been initialized */
+	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
+		return FALSE;
+	_oidc_metrics_thread_pid = getpid();
 
 	return TRUE;
 }
@@ -866,6 +886,8 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
 		apr_atomic_set32(&_oidc_metrics_thread_exit, 0);
 	}
 	_oidc_metrics_thread = NULL;
+	if (oidc_metrics_local_reset(s) == FALSE)
+		return APR_EGENERAL;
 
 	/* the metrics flush thread is not inherited from the parent, so re-create it in the child */
 	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
@@ -913,6 +935,12 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 		return APR_EGENERAL;
 	_oidc_metrics_global_mutex = NULL;
 
+	if (_oidc_metrics.pool != NULL)
+		apr_pool_destroy(_oidc_metrics.pool);
+	_oidc_metrics.pool = NULL;
+	_oidc_metrics.counters = NULL;
+	_oidc_metrics.timings = NULL;
+
 	return APR_SUCCESS;
 }
 
@@ -934,8 +962,7 @@ static inline apr_hash_t *_oidc_metrics_server_hash(request_rec *r, apr_hash_t *
 	/* get the entry to the vhost record, or newly create it */
 	server_hash = apr_hash_get(table, name, APR_HASH_KEY_STRING);
 	if (server_hash == NULL) {
-		// NB: process pool!
-		server_hash = apr_hash_make(r->server->process->pool);
+		server_hash = apr_hash_make(_oidc_metrics.pool);
 		apr_hash_set(table, name, APR_HASH_KEY_STRING, server_hash);
 	}
 
@@ -954,9 +981,8 @@ static inline oidc_metrics_timing_t *_oidc_metrics_timing_get(request_rec *r, un
 	/* get the entry to the specified metric */
 	result = apr_hash_get(server_hash, key, APR_HASH_KEY_STRING);
 	if (result == NULL) {
-		/* allocate the timing structure in the process pool */
-		result = apr_pcalloc(r->server->process->pool, sizeof(oidc_metrics_timing_t));
-		apr_hash_set(server_hash, apr_pstrdup(r->server->process->pool, key), APR_HASH_KEY_STRING, result);
+		result = apr_pcalloc(_oidc_metrics.pool, sizeof(oidc_metrics_timing_t));
+		apr_hash_set(server_hash, apr_pstrdup(_oidc_metrics.pool, key), APR_HASH_KEY_STRING, result);
 	}
 	return result;
 }
@@ -969,8 +995,8 @@ static inline oidc_metrics_counter_t *_oidc_metrics_counter_value_get(request_re
 	/* get the entry to the specified metric */
 	oidc_metrics_counter_t *result = apr_hash_get(table, value, APR_HASH_KEY_STRING);
 	if (result == NULL) {
-		result = apr_pcalloc(r->server->process->pool, sizeof(oidc_metrics_counter_t));
-		apr_hash_set(table, apr_pstrdup(r->server->process->pool, value), APR_HASH_KEY_STRING, result);
+		result = apr_pcalloc(_oidc_metrics.pool, sizeof(oidc_metrics_counter_t));
+		apr_hash_set(table, apr_pstrdup(_oidc_metrics.pool, value), APR_HASH_KEY_STRING, result);
 	}
 	return result;
 }
@@ -987,9 +1013,8 @@ static inline apr_hash_t *_oidc_metrics_counter_get(request_rec *r, unsigned int
 	/* get the entry to the specified metric */
 	result = apr_hash_get(server_hash, key, APR_HASH_KEY_STRING);
 	if (result == NULL) {
-		/* allocate the values hashtable in the process pool */
-		result = apr_hash_make(r->server->process->pool);
-		apr_hash_set(server_hash, apr_pstrdup(r->server->process->pool, key), APR_HASH_KEY_STRING, result);
+		result = apr_hash_make(_oidc_metrics.pool);
+		apr_hash_set(server_hash, apr_pstrdup(_oidc_metrics.pool, key), APR_HASH_KEY_STRING, result);
 	}
 
 	return result;
