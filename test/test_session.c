@@ -110,8 +110,32 @@ START_TEST(test_session_cache_roundtrip) {
 }
 END_TEST
 
-/* a successful save and load export the session identifier into the request
- * notes and environment for log correlation */
+/* the exported/logged session identifier is a non-reversible fingerprint, never the identifier
+ * itself: with server-side caching the identifier is the session cookie value */
+START_TEST(test_session_id_fingerprint) {
+	request_rec *r = oidc_test_request_get();
+	const char *uuid = "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface";
+
+	ck_assert_ptr_null(oidc_session_id_fingerprint(r, NULL));
+
+	const char *fp = oidc_session_id_fingerprint(r, uuid);
+	ck_assert_ptr_nonnull(fp);
+	ck_assert_uint_eq(strlen(fp), 16);
+	/* neither the identifier nor any part of it */
+	ck_assert_str_ne(fp, uuid);
+	ck_assert_ptr_null(strstr(uuid, fp));
+	/* base64url alphabet only, so it is safe in any log format */
+	ck_assert_uint_eq(strspn(fp, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), 16);
+	/* deterministic, so the lines of one session correlate */
+	ck_assert_str_eq(fp, oidc_session_id_fingerprint(r, uuid));
+	/* and distinct for a different identifier */
+	ck_assert_str_ne(
+	    fp, oidc_session_id_fingerprint(r, "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacf"));
+}
+END_TEST
+
+/* a successful save and load export the fingerprint of the session identifier into the
+ * request notes and environment for log correlation */
 START_TEST(test_session_id_exported_for_log_correlation) {
 	request_rec *r = oidc_test_request_get();
 
@@ -121,19 +145,21 @@ START_TEST(test_session_id_exported_for_log_correlation) {
 	ck_assert_ptr_null(apr_table_get(r->notes, "OIDC_SESSION_ID"));
 
 	const char *uuid = "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface";
+	const char *fp = oidc_session_id_fingerprint(r, uuid);
 	z->uuid = apr_pstrdup(r->pool, uuid);
 	z->remote_user = apr_pstrdup(r->pool, "alice@idp.example.com");
 	z->expiry = apr_time_now() + apr_time_from_sec(3600);
 	oidc_session_set_issuer(r, z, "https://idp.example.com");
 	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
 
-	/* the save exported the (new) session's identifier */
+	/* the save exported the (new) session's fingerprint, not its identifier */
 	const char *s_notes = apr_table_get(r->notes, "OIDC_SESSION_ID");
 	ck_assert_ptr_nonnull(s_notes);
-	ck_assert_str_eq(s_notes, uuid);
+	ck_assert_str_eq(s_notes, fp);
+	ck_assert_str_ne(s_notes, uuid);
 	const char *s_env = apr_table_get(r->subprocess_env, "OIDC_SESSION_ID");
 	ck_assert_ptr_nonnull(s_env);
-	ck_assert_str_eq(s_env, uuid);
+	ck_assert_str_eq(s_env, fp);
 
 	/* clear and reload: the load exports it again */
 	apr_table_unset(r->notes, "OIDC_SESSION_ID");
@@ -143,10 +169,10 @@ START_TEST(test_session_id_exported_for_log_correlation) {
 	ck_assert_int_eq(oidc_session_load(r, &z2), TRUE);
 	s_notes = apr_table_get(r->notes, "OIDC_SESSION_ID");
 	ck_assert_ptr_nonnull(s_notes);
-	ck_assert_str_eq(s_notes, uuid);
+	ck_assert_str_eq(s_notes, fp);
 	s_env = apr_table_get(r->subprocess_env, "OIDC_SESSION_ID");
 	ck_assert_ptr_nonnull(s_env);
-	ck_assert_str_eq(s_env, uuid);
+	ck_assert_str_eq(s_env, fp);
 
 	oidc_session_free(r, z);
 	oidc_session_free(r, z2);
@@ -747,6 +773,7 @@ int main(void) {
 	TCase *c = tcase_create("session");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_session_cache_roundtrip);
+	tcase_add_test(c, test_session_id_fingerprint);
 	tcase_add_test(c, test_session_id_exported_for_log_correlation);
 	tcase_add_test(c, test_session_reset_starts_a_new_session);
 	tcase_add_test(c, test_session_cookie_roundtrip);

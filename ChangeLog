@@ -1,4 +1,8 @@
 09/04/2026
+- session: export a non-reversible fingerprint of the session identifier (the first 16 characters of
+  the base64url-encoded SHA-256 hash) as OIDC_SESSION_ID and log that fingerprint in place of the
+  identifier itself: for server-cache sessions the identifier is the session cookie value, so a log
+  line carrying it could be replayed as the session cookie
 - metrics: reclaim process-local counter/timing allocations after each successful flush
 - metrics: abort metrics operations when their mutex cannot be acquired, escape Prometheus label values and treat
   histogram le boundaries as inclusive

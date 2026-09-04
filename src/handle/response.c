@@ -672,7 +672,8 @@ static int oidc_response_process(request_rec *r, oidc_cfg_t *c, oidc_session_t *
 		goto end;
 	}
 
-	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user, session->uuid);
+	oidc_debug(r, "set remote_user to \"%s\" in new session \"%s\"", r->user,
+		   oidc_session_id_fingerprint(r, session->uuid));
 
 	/* For prompt=none, reject a different existing remote user. With no prior user, establish a new session. */
 	if ((prompt != NULL) && (_oidc_strcmp(prompt, OIDC_PROTO_PROMPT_NONE) == 0) && (session->remote_user != NULL) &&

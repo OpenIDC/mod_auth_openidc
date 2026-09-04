@@ -653,7 +653,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 
 	/* set the user in the main request for further (incl. sub-request) processing */
 	r->user = apr_pstrdup(r->pool, session->remote_user);
-	oidc_debug(r, "set remote_user to \"%s\" in existing session \"%s\"", r->user, session->uuid);
+	oidc_debug(r, "set remote_user to \"%s\" in existing session \"%s\"", r->user,
+		   oidc_session_id_fingerprint(r, session->uuid));
 
 	/* get the header name in which the remote user name needs to be passed */
 	const char *authn_header = oidc_cfg_dir_authn_header_get(r);

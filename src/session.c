@@ -43,6 +43,7 @@
 
 #include "session.h"
 #include "cfg/dir.h"
+#include "jose.h"
 #include "metrics.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
@@ -239,7 +240,8 @@ apr_byte_t oidc_session_load_cache_by_uuid(request_rec *r, const oidc_cfg_t *c, 
 				oidc_error(r,
 					   "cache corruption detected: stored session id (%s) is not equal to "
 					   "requested session id (%s)",
-					   stored_uuid, uuid);
+					   oidc_session_id_fingerprint(r, stored_uuid),
+					   oidc_session_id_fingerprint(r, uuid));
 
 				/* delete the cache entry */
 				oidc_cache_set_session(r, z->uuid, NULL, 0);
@@ -273,7 +275,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 
 		/* cache backend experienced an error while attempting lookup */
 		if (rc == FALSE) {
-			oidc_error(r, "cache backend failure for key %s", uuid);
+			oidc_error(r, "cache backend failure for key %s", oidc_session_id_fingerprint(r, uuid));
 			return FALSE;
 		}
 
@@ -465,18 +467,38 @@ out:
 }
 
 #define OIDC_SESSION_ID_LOG_VAR "OIDC_SESSION_ID"
+#define OIDC_SESSION_ID_FINGERPRINT_LEN 16
 
 /*
- * export the session identifier into the request notes and environment so log lines can be
- * correlated per session with ErrorLogFormat %{OIDC_SESSION_ID}n and LogFormat %{OIDC_SESSION_ID}e
+ * non-reversible fingerprint of a session identifier, for the OIDC_SESSION_ID export and for log
+ * lines: with server-side caching the identifier is the session cookie value itself, so the raw
+ * value must never reach a log where it could be replayed as that cookie; the first 16 characters
+ * (96 bits) of the base64url-encoded SHA-256 hash correlate just as well
+ */
+const char *oidc_session_id_fingerprint(request_rec *r, const char *uuid) {
+	char *hash = NULL;
+	if (uuid == NULL)
+		return NULL;
+	if ((oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, uuid, &hash) == FALSE) ||
+	    (hash == NULL))
+		/* never fall back to the identifier itself */
+		return "***";
+	return apr_pstrndup(r->pool, hash, OIDC_SESSION_ID_FINGERPRINT_LEN);
+}
+
+/*
+ * export a fingerprint of the session identifier into the request notes and environment so log
+ * lines can be correlated per session with ErrorLogFormat %{OIDC_SESSION_ID}n and LogFormat
+ * %{OIDC_SESSION_ID}e
  */
 static void oidc_session_id_export(request_rec *r, const oidc_session_t *z) {
-	if (z->uuid == NULL)
+	const char *fingerprint = oidc_session_id_fingerprint(r, z->uuid);
+	if (fingerprint == NULL)
 		return;
 	if (r->notes != NULL)
-		apr_table_set(r->notes, OIDC_SESSION_ID_LOG_VAR, z->uuid);
+		apr_table_set(r->notes, OIDC_SESSION_ID_LOG_VAR, fingerprint);
 	if (r->subprocess_env != NULL)
-		apr_table_set(r->subprocess_env, OIDC_SESSION_ID_LOG_VAR, z->uuid);
+		apr_table_set(r->subprocess_env, OIDC_SESSION_ID_LOG_VAR, fingerprint);
 }
 
 /*
