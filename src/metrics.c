@@ -693,24 +693,27 @@ static void oidc_metrics_store_timings(server_rec *s, oidc_json_t *json) {
 /*
  * flush the locally gathered metrics data into the global data kept in shared memory
  */
-static void oidc_metrics_store(server_rec *s) {
+static apr_byte_t oidc_metrics_store(server_rec *s) {
 	const char *s_json = NULL;
 	oidc_json_t *json = NULL;
 	apr_pool_t *pool = NULL;
 
 	if ((apr_hash_count(_oidc_metrics.counters) == 0) && (apr_hash_count(_oidc_metrics.timings) == 0))
-		return;
+		return TRUE;
 
 	/* everything below is scratch: the whole document is read, re-serialized and copied
 	 * into shared memory on every flush, so it must not come from the process pool,
 	 * which is never cleared for the lifetime of the server */
 	if (apr_pool_create(&pool, s->process->pool) != APR_SUCCESS) {
 		oidc_serror(s, "apr_pool_create failed: cannot flush metrics");
-		return;
+		return FALSE;
 	}
 
 	/* lock the shared memory for other processes */
-	oidc_cache_mutex_lock(pool, s, _oidc_metrics_global_mutex);
+	if (oidc_cache_mutex_lock(pool, s, _oidc_metrics_global_mutex) == FALSE) {
+		apr_pool_destroy(pool);
+		return FALSE;
+	}
 
 	/* get the global stringified JSON metrics */
 	s_json = _oidc_metrics_storage_get(s, pool);
@@ -733,9 +736,14 @@ static void oidc_metrics_store(server_rec *s) {
 	_oidc_metrics_storage_set(s, s_json);
 
 	/* unlock the shared memory for other processes */
-	oidc_cache_mutex_unlock(pool, s, _oidc_metrics_global_mutex);
+	if (oidc_cache_mutex_unlock(pool, s, _oidc_metrics_global_mutex) == FALSE) {
+		/* the transfer already completed; report it as consumed so a later cycle cannot double-count it */
+		apr_pool_destroy(pool);
+		return TRUE;
+	}
 
 	apr_pool_destroy(pool);
+	return TRUE;
 }
 
 #define OIDC_METRICS_CACHE_STORAGE_INTERVAL_ENV_VAR "OIDC_METRICS_CACHE_STORAGE_INTERVAL"
@@ -789,19 +797,22 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		// NB: no exit here because we need to write our local metrics into the cache before exiting
 
 		/* lock the mutex that protects the locally cached metrics */
-		oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_process_mutex);
+		if (oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_process_mutex) == FALSE)
+			continue;
 
 		/* flush the locally cached metrics into the global shared memory */
-		oidc_metrics_store(s);
+		if (oidc_metrics_store(s) == TRUE) {
+			/* record that a flush cycle completed, for the metrics self-health output */
+			apr_atomic_set32(&_oidc_metrics_shm_hdr()->last_flush,
+					 (apr_uint32_t)apr_time_sec(apr_time_now()));
 
-		/* record that a flush cycle completed, for the metrics self-health output */
-		apr_atomic_set32(&_oidc_metrics_shm_hdr()->last_flush, (apr_uint32_t)apr_time_sec(apr_time_now()));
-
-		/* release all allocations made while gathering this flush interval */
-		oidc_metrics_local_reset(s);
+			/* release all allocations made while gathering this flush interval */
+			oidc_metrics_local_reset(s);
+		}
 
 		/* unlock the mutex that protects the locally cached metrics */
-		oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex);
+		if (oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex) == FALSE)
+			break;
 	}
 
 	/* NB: don't call apr_thread_exit here because it seems that Apache is cleaning up its own threads */
@@ -1027,7 +1038,8 @@ void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, 
 	oidc_metrics_counter_t *counter = NULL;
 
 	/* lock the local metrics cache hashtable */
-	oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_process_mutex);
+	if (oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_process_mutex) == FALSE)
+		return;
 
 	/* obtain or create the entry for the specified key */
 	counter =
@@ -1045,7 +1057,7 @@ void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, 
 	}
 
 	/* unlock the local metrics cache hashtable */
-	oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_process_mutex);
+	(void)oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_process_mutex);
 }
 
 /*
@@ -1064,7 +1076,7 @@ static inline void _oidc_metrics_timing_clear(oidc_metrics_timing_t *timing) {
  */
 static inline void _oidc_metrics_timing_buckets_inc(oidc_metrics_timing_t *timing, apr_time_t elapsed) {
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
-		if ((elapsed < _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0)) {
+		if ((elapsed <= _oidc_metric_buckets[i].threshold) || (_oidc_metric_buckets[i].threshold == 0)) {
 			for (int j = i; j < OIDC_METRICS_BUCKET_NUM; j++)
 				timing->buckets[j]++;
 			break;
@@ -1086,7 +1098,8 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	}
 
 	/* lock the local metrics cache hashtable */
-	oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_process_mutex);
+	if (oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_process_mutex) == FALSE)
+		return;
 
 	/* obtain or create the entry for the specified key */
 	timing = _oidc_metrics_timing_get(r, type);
@@ -1100,7 +1113,7 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
 	timing->count++;
 
 	/* unlock the local metrics cache hashtable */
-	oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_process_mutex);
+	(void)oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_process_mutex);
 }
 
 /*
@@ -1396,6 +1409,32 @@ static const char *oidc_metric_prometheus_normalize_name(apr_pool_t *pool, const
 	return apr_psprintf(pool, "%s_%s", OIDC_METRICS_PROMETHEUS_PREFIX, label);
 }
 
+/* Escape a Prometheus text-format label value: backslash, quote and LF are special. */
+static const char *oidc_metrics_prometheus_escape_label(apr_pool_t *pool, const char *value) {
+	apr_size_t len = _oidc_strlen(value);
+	char *result = apr_palloc(pool, (len * 2) + 1);
+	char *dst = result;
+
+	for (const char *src = value; *src != '\0'; src++) {
+		switch (*src) {
+		case '\\':
+		case '"':
+			*dst++ = '\\';
+			*dst++ = *src;
+			break;
+		case '\n':
+			*dst++ = '\\';
+			*dst++ = 'n';
+			break;
+		default:
+			*dst++ = *src;
+			break;
+		}
+	}
+	*dst = '\0';
+	return result;
+}
+
 #define OIDC_METRICS_PROMETHEUS_CONTENT_TYPE "text/plain; version=0.0.4"
 
 #define OIDC_METRICS_PROMETHEUS_SERVER "server_name"
@@ -1417,9 +1456,11 @@ static char *oidc_metrics_prometheus_counter_named(apr_pool_t *pool, char *s_tex
 	void *iter = oidc_json_object_iter(j_value);
 	while (iter) {
 		const char *s_value = oidc_json_object_iter_key(iter);
-		s_text = apr_psprintf(pool, "%s%s,%s=\"%s\",%s=\"%s\"} %s\n", s_text, s_start,
-				      OIDC_METRICS_PROMETHEUS_NAME, s_key, OIDC_METRICS_PROMETHEUS_VALUE, s_value,
-				      _json_int2str(pool, oidc_json_integer_value(oidc_json_object_iter_value(iter))));
+		s_text =
+		    apr_psprintf(pool, "%s%s,%s=\"%s\",%s=\"%s\"} %s\n", s_text, s_start, OIDC_METRICS_PROMETHEUS_NAME,
+				 oidc_metrics_prometheus_escape_label(pool, s_key), OIDC_METRICS_PROMETHEUS_VALUE,
+				 oidc_metrics_prometheus_escape_label(pool, s_value),
+				 _json_int2str(pool, oidc_json_integer_value(oidc_json_object_iter_value(iter))));
 		iter = oidc_json_object_iter_next(j_value, iter);
 	}
 	return s_text;
@@ -1438,7 +1479,8 @@ static char *oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, char *s_tex
 		if (oidc_json_is_integer(j_value))
 			s_text =
 			    apr_psprintf(pool, "%s%s,%s=\"%s\"} %s\n", s_text, s_start, OIDC_METRICS_PROMETHEUS_VALUE,
-					 s_key, _json_int2str(pool, oidc_json_integer_value(j_value)));
+					 oidc_metrics_prometheus_escape_label(pool, s_key),
+					 _json_int2str(pool, oidc_json_integer_value(j_value)));
 		else
 			s_text = oidc_metrics_prometheus_counter_named(pool, s_text, s_start, s_key, j_value);
 		iter = oidc_json_object_iter_next(j_counter, iter);
@@ -1463,8 +1505,8 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
 	while (iter) {
 		const char *s_server = oidc_json_object_iter_key(iter);
 		oidc_json_t *j_counter = oidc_json_object_iter_value(iter);
-		const char *s_start =
-		    apr_psprintf(ctx->pool, "%s{%s=\"%s\"", s_label, OIDC_METRICS_PROMETHEUS_SERVER, s_server);
+		const char *s_start = apr_psprintf(ctx->pool, "%s{%s=\"%s\"", s_label, OIDC_METRICS_PROMETHEUS_SERVER,
+						   oidc_metrics_prometheus_escape_label(ctx->pool, s_server));
 		if (oidc_json_is_integer(j_counter))
 			s_text = apr_psprintf(ctx->pool, "%s%s} %s\n", s_text, s_start,
 					      _json_int2str(ctx->pool, oidc_json_integer_value(j_counter)));
@@ -1506,6 +1548,7 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	void *iter1 = oidc_json_object_iter(o_timer);
 	while (iter1) {
 		s_server = oidc_json_object_iter_key(iter1);
+		const char *s_server_escaped = oidc_metrics_prometheus_escape_label(ctx->pool, s_server);
 		j_timing = oidc_json_object_iter_value(iter1);
 		void *iter3 = oidc_json_object_iter(j_timing);
 		while (iter3) {
@@ -1514,30 +1557,30 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 			v = oidc_json_integer_value(j_member);
 			bucket = oidc_metrics_prometheus_bucket_get(s_key);
 			if (bucket != NULL) {
-				s_text =
-				    apr_psprintf(ctx->pool, "%s%s_%s{%s,%s=\"%s\"} %s\n", s_text, s_label,
-						 OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label,
-						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
-				s_secs =
-				    apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s,%s=\"%s\"} %s\n", s_secs, s_label,
-						 OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label_seconds,
-						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
+				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s,%s=\"%s\"} %s\n", s_text, s_label,
+						      OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label,
+						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
+						      _json_int2str(ctx->pool, v));
+				s_secs = apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s,%s=\"%s\"} %s\n", s_secs, s_label,
+						      OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label_seconds,
+						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
+						      _json_int2str(ctx->pool, v));
 			} else if (_oidc_strcmp(s_key, OIDC_METRICS_SUM) == 0) {
 				/* the sum is kept in microseconds in shared memory: truncate to
 				 * milliseconds for the legacy family, exact seconds for _seconds */
 				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server,
+						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
 						      _json_int2str(ctx->pool, v / 1000));
-				s_secs =
-				    apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %.6f\n", s_secs, s_label, s_key,
-						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, (double)v / 1000000.0);
+				s_secs = apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %.6f\n", s_secs, s_label,
+						      s_key, OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
+						      (double)v / 1000000.0);
 			} else {
-				s_text =
-				    apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
-						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
-				s_secs =
-				    apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %s\n", s_secs, s_label, s_key,
-						 OIDC_METRICS_PROMETHEUS_SERVER, s_server, _json_int2str(ctx->pool, v));
+				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
+						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
+						      _json_int2str(ctx->pool, v));
+				s_secs = apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %s\n", s_secs, s_label,
+						      s_key, OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
+						      _json_int2str(ctx->pool, v));
 			}
 			iter3 = oidc_json_object_iter_next(j_timing, iter3);
 		}
@@ -1598,8 +1641,9 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 	    "this server process.\n"
 	    "# TYPE %s_metrics_last_flush_timestamp_seconds gauge\n"
 	    "%s_metrics_last_flush_timestamp_seconds %u\n\n",
-	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX, NAMEVERSION,
 	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX,
+	    oidc_metrics_prometheus_escape_label(r->pool, NAMEVERSION), OIDC_METRICS_PROMETHEUS_PREFIX,
+	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX,
 	    apr_atomic_read32(&_oidc_metrics_shm_hdr()->flush_errors), OIDC_METRICS_PROMETHEUS_PREFIX,
 	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX,
 	    apr_atomic_read32(&_oidc_metrics_shm_hdr()->last_flush));
@@ -1728,7 +1772,8 @@ int oidc_metrics_handle_request(request_rec *r) {
 		return HTTP_NOT_FOUND;
 
 	/* lock the global shared memory */
-	oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_global_mutex);
+	if (oidc_cache_mutex_lock(r->pool, r->server, _oidc_metrics_global_mutex) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* retrieve the JSON formatted metrics as a string; NB: on the request pool, since
 	 * it is handed to the content handler below, after the mutex has been released */
@@ -1739,7 +1784,8 @@ int oidc_metrics_handle_request(request_rec *r) {
 		oidc_metrics_storage_reset(r->server, r->pool);
 
 	/* unlock the global shared memory */
-	oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_global_mutex);
+	if (oidc_cache_mutex_unlock(r->pool, r->server, _oidc_metrics_global_mutex) == FALSE)
+		return HTTP_INTERNAL_SERVER_ERROR;
 
 	/* handle the specified format */
 	return handler->callback(r, s_json);

@@ -507,6 +507,53 @@ START_TEST(test_metrics_flushed_twice_updates_entries) {
 }
 END_TEST
 
+/* Prometheus label values must escape quotes, backslashes and line feeds so a
+ * claim cannot terminate a label or inject another exposition line. */
+START_TEST(test_metrics_prometheus_escapes_claim_labels) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *claim_name = "display\"\\\nname";
+	const char *claim_value = "quote\"slash\\line\nnext";
+	cmd_parms *cmd = oidc_test_cmd_get("OIDCMetricsData");
+	ck_assert_ptr_null(
+	    oidc_cmd_metrics_hook_data_set(cmd, NULL, apr_psprintf(r->pool, "claim.id_token.%s", claim_name)));
+	e2e_metrics_setup_flushed(r);
+
+	OIDC_METRICS_COUNTER_INC_NAME_VALUE(r, c, OM_CLAIM_ID_TOKEN, claim_name, claim_value);
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "display", 5000));
+
+	r->args = "format=prometheus&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "name=\"display\\\"\\\\\\nname\"") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"quote\\\"slash\\\\line\\nnext\"} 1") != NULL, "BODY=[%s]", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
+/* Prometheus histogram le buckets are inclusive at the exact boundary. */
+START_TEST(test_metrics_histogram_boundary_inclusive) {
+	request_rec *r = oidc_test_request_get();
+	e2e_metrics_setup_flushed(r);
+
+	oidc_metrics_timing_add(r, OM_PROVIDER_TOKEN, apr_time_from_msec(1));
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "\"le1\":1", 5000));
+
+	r->args = "format=prometheus&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(
+	    _oidc_strstr(body, "oidc_provider_token_seconds_bucket{le=\"0.001\",server_name=\"www.example.com\"} 1") !=
+		NULL,
+	    "BODY=[%s]", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 /* the counters and timers added for the instrumentation gaps flush and render */
 START_TEST(test_metrics_flushed_gap_counters) {
 	request_rec *r = oidc_test_request_get();
@@ -758,6 +805,8 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_reset_nested_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_counter_inc_twice_before_flush);
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
+	tcase_add_test(flushed, test_metrics_prometheus_escapes_claim_labels);
+	tcase_add_test(flushed, test_metrics_histogram_boundary_inclusive);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
 	tcase_add_test(flushed, test_metrics_flushed_gap_counters);
