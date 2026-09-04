@@ -933,6 +933,9 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 	if (_oidc_metrics_is_parent == TRUE)
 		apr_shm_destroy(_oidc_metrics_cache);
 	_oidc_metrics_cache = NULL;
+	/* the cached segment size lives exactly as long as the segment: the next post_config (a graceful
+	 * restart, or the next unit test in the same process) sizes a new one from its own configuration */
+	_g_oidc_metrics_shm_size = 0;
 
 	/* delete the process mutex that guards the local metrics data */
 	if (oidc_cache_mutex_destroy(s, _oidc_metrics_process_mutex) == FALSE)

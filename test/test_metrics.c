@@ -178,9 +178,9 @@ START_TEST(test_metrics_handle_request_format_status) {
 	ck_assert_int_eq(rc, OK);
 	const char *body = oidc_request_state_get(r, "sent_body");
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strncmp(body, "OK\n", 3) == 0, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "cache: shm: ok") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "provider: metadata: ") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strncmp(body, "OK\n", 3) == 0, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "cache: shm: ok") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "provider: metadata: ") != NULL, "body starts with [%.200s]", body);
 
 	metrics_subsystem_teardown(r);
 }
@@ -484,10 +484,10 @@ START_TEST(test_metrics_flushed_twice_updates_entries) {
 	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
 	body = oidc_request_state_get(r, "sent_body");
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_authn_request_error_url") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "value=\"200\"} 2") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "value=\"404\"} 1") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "name=\"email\"") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_authn_request_error_url") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"200\"} 2") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"404\"} 1") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "name=\"email\"") != NULL, "body starts with [%.200s]", body);
 
 	/* the status formatter with a name+value selector digs into the nested
 	 * name -> value counter object */
@@ -496,7 +496,7 @@ START_TEST(test_metrics_flushed_twice_updates_entries) {
 	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
 	body = oidc_request_state_get(r, "sent_body");
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strstr(body, "OK: 2") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "OK: 2") != NULL, "body starts with [%.200s]", body);
 
 	/* a name that does not exist under the counter yields the bare OK */
 	r->args = "format=status&server_name=www.example.com&counter=claim.id_token"
@@ -526,8 +526,9 @@ START_TEST(test_metrics_prometheus_escapes_claim_labels) {
 	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
 	const char *body = oidc_request_state_get(r, "sent_body");
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strstr(body, "name=\"display\\\"\\\\\\nname\"") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "value=\"quote\\\"slash\\\\line\\nnext\"} 1") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "name=\"display\\\"\\\\\\nname\"") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"quote\\\"slash\\\\line\\nnext\"} 1") != NULL,
+		      "body starts with [%.200s]", body);
 
 	e2e_metrics_teardown_flushed(r);
 }
@@ -548,7 +549,7 @@ START_TEST(test_metrics_histogram_boundary_inclusive) {
 	ck_assert_msg(
 	    _oidc_strstr(body, "oidc_provider_token_seconds_bucket{le=\"0.001\",server_name=\"www.example.com\"} 1") !=
 		NULL,
-	    "BODY=[%s]", body);
+	    "body starts with [%.200s]", body);
 
 	e2e_metrics_teardown_flushed(r);
 }
@@ -588,36 +589,40 @@ START_TEST(test_metrics_flushed_gap_counters) {
 	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
 	body = oidc_request_state_get(r, "sent_body");
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_error") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_error") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_registration_error") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_revocation_error") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_dpop_retry") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_session_fallback_cookie") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_retry") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_hit") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_miss") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_eviction") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_error") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_error") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_registration_error") != NULL, "body starts with [%.200s]",
+		      body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_revocation_error") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_dpop_retry") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_session_fallback_cookie") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_retry") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_hit") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_miss") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_eviction") != NULL, "body starts with [%.200s]", body);
 	/* the cache.error counter is labeled with the backend name */
-	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_error") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "value=\"shm\"} 1") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_logout_backchannel") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_bucket") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_bucket") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_cache_cache_error") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "value=\"shm\"} 1") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_logout_backchannel") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_bucket") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_par_bucket") != NULL, "body starts with [%.200s]", body);
 
 	/* the timing histograms are dual-emitted: the legacy millisecond family (above) and the
 	 * Prometheus-idiomatic _seconds family with seconds le= labels and 10s/30s buckets */
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_bucket") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "le=\"0.0001\"") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "le=\"30\"") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "le=\"30000\"") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_sum") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_count") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_bucket") != NULL, "body starts with [%.200s]",
+		      body);
+	ck_assert_msg(_oidc_strstr(body, "le=\"0.0001\"") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "le=\"30\"") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "le=\"30000\"") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_sum") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_provider_jwks_seconds_count") != NULL, "body starts with [%.200s]",
+		      body);
 
 	/* the prometheus output opens with the build info and the metrics self-health gauges */
-	ck_assert_msg(_oidc_strstr(body, "oidc_build_info{version=\"") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 0") != NULL, "BODY=[%s]", body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_last_flush_timestamp_seconds ") != NULL, "BODY=[%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_build_info{version=\"") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 0") != NULL, "body starts with [%.200s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_last_flush_timestamp_seconds ") != NULL,
+		      "body starts with [%.200s]", body);
 
 	e2e_metrics_teardown_flushed(r);
 }
@@ -663,6 +668,11 @@ START_TEST(test_metrics_flush_errors_reported) {
 	int waited = 0;
 	const char *body = NULL;
 
+	/* size (and tear down) a segment at the default first: the size must be re-read from the
+	 * configuration when the subsystem is set up again, not kept from the previous segment */
+	metrics_subsystem_setup(r);
+	metrics_subsystem_teardown(r);
+
 	/* shrink the segment via the directive so the first flush cannot fit */
 	ck_assert_ptr_null(
 	    oidc_cmd_metrics_cache_json_max_set(oidc_test_cmd_get(OIDCMetricsCacheJsonMax), NULL, "1024"));
@@ -684,7 +694,9 @@ START_TEST(test_metrics_flush_errors_reported) {
 		waited += 100;
 	}
 	ck_assert_ptr_nonnull(body);
-	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 1") != NULL, "BODY=[%s]", body);
+	/* NB: keep the diagnostic short: libcheck aborts the whole run on an over-long failure message */
+	ck_assert_msg(_oidc_strstr(body, "oidc_metrics_flush_errors 1") != NULL,
+		      "no dropped flush reported after %d ms; body starts with [%.200s]", waited, body);
 
 	e2e_metrics_teardown_flushed(r);
 }

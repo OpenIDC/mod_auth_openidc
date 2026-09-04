@@ -1,4 +1,5 @@
 09/04/2026
+- metrics: re-read OIDCMetricsCacheJsonMax when the subsystem is re-initialized (graceful restart)
 - session: export a non-reversible fingerprint of the session identifier (the first 16 characters of
   the base64url-encoded SHA-256 hash) as OIDC_SESSION_ID and log that fingerprint in place of the
   identifier itself: for server-cache sessions the identifier is the session cookie value, so a log
