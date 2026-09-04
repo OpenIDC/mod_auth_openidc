@@ -340,7 +340,7 @@ START_TEST(test_metrics_handle_request_flushed_status_counter_with_value) {
 }
 END_TEST
 
-/* format=json no longer resets the collected metrics by default (pre-2.4.21 behavior);
+/* format=json no longer resets the collected metrics by default (pre-2.4.20.4 behavior);
  * an explicit reset=true is required */
 START_TEST(test_metrics_handle_request_flushed_json_default_no_reset) {
 	request_rec *r = oidc_test_request_get();

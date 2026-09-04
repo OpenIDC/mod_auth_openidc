@@ -634,7 +634,7 @@ void oidc_util_set_trace_parent(request_rec *r, const oidc_cfg_t *c, const char 
 
 	/* the generated trace is always recorded by this module (the trace-id is exported into the
 	 * request notes/environment for log correlation above), so the W3C "sampled" flag is set
-	 * unconditionally; before 2.4.21 it was set only when metrics collection was enabled */
+	 * unconditionally; before 2.4.20.4 it was set only when metrics collection was enabled */
 	trace_flags = trace_flags | 0x01;
 
 	oidc_http_hdr_in_set(r, OIDC_HTTP_HDR_TRACE_PARENT,

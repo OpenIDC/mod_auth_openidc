@@ -1535,7 +1535,7 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	unsigned int type = _oidc_metrics_key2type(key);
 	const char *s_label =
 	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_timing_type2s(ctx->pool, type));
-	/* the unsuffixed millisecond family is deprecated as of 2.4.21 in favor of the
+	/* the unsuffixed millisecond family is deprecated as of 2.4.20.4 in favor of the
 	 * Prometheus-idiomatic _seconds family emitted alongside it below, and will be
 	 * removed in a future release */
 	char *s_text =
@@ -1697,8 +1697,8 @@ typedef struct oidc_metrics_handler_t {
 } oidc_metrics_content_handler_t;
 
 // output handlers
-// NB: no format resets the collected metrics by default (json did before 2.4.21);
-// a caller that wants the pre-2.4.21 behavior passes reset=true explicitly
+// NB: no format resets the collected metrics by default (json did before 2.4.20.4);
+// a caller that wants the pre-2.4.20.4 behavior passes reset=true explicitly
 const oidc_metrics_content_handler_t _oidc_metrics_handlers[] = {
     // first is default
     {"prometheus", oidc_metrics_handle_prometheus, 0},
