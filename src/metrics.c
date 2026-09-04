@@ -735,12 +735,10 @@ static apr_byte_t oidc_metrics_store(server_rec *s) {
 	/* store the serialized metrics data in shared memory */
 	_oidc_metrics_storage_set(s, s_json);
 
-	/* unlock the shared memory for other processes */
-	if (oidc_cache_mutex_unlock(pool, s, _oidc_metrics_global_mutex) == FALSE) {
-		/* the transfer already completed; report it as consumed so a later cycle cannot double-count it */
-		apr_pool_destroy(pool);
-		return TRUE;
-	}
+	/* unlock the shared memory for other processes; the transfer already completed, so an unlock
+	 * failure (logged by the mutex layer) still reports the data as consumed and a later cycle
+	 * cannot double-count it */
+	(void)oidc_cache_mutex_unlock(pool, s, _oidc_metrics_global_mutex);
 
 	apr_pool_destroy(pool);
 	return TRUE;
@@ -962,7 +960,7 @@ apr_status_t oidc_metrics_cleanup(server_rec *s) {
 /*
  * obtain the local metrics hashtable for the current vhost
  */
-static inline apr_hash_t *_oidc_metrics_server_hash(request_rec *r, apr_hash_t *table) {
+static inline apr_hash_t *_oidc_metrics_server_hash(const request_rec *r, apr_hash_t *table) {
 	apr_hash_t *server_hash = NULL;
 	const char *name = "_default_";
 
@@ -1001,8 +999,7 @@ static inline oidc_metrics_timing_t *_oidc_metrics_timing_get(request_rec *r, un
 /*
  * retrieve or create a counter from a hashtable of values
  */
-static inline oidc_metrics_counter_t *_oidc_metrics_counter_value_get(request_rec *r, apr_hash_t *table,
-								      const char *value) {
+static inline oidc_metrics_counter_t *_oidc_metrics_counter_value_get(apr_hash_t *table, const char *value) {
 	/* get the entry to the specified metric */
 	oidc_metrics_counter_t *result = apr_hash_get(table, value, APR_HASH_KEY_STRING);
 	if (result == NULL) {
@@ -1042,8 +1039,7 @@ void oidc_metrics_counter_inc(request_rec *r, oidc_metrics_counter_type_t type, 
 		return;
 
 	/* obtain or create the entry for the specified key */
-	counter =
-	    _oidc_metrics_counter_value_get(r, _oidc_metrics_counter_get(r, type, name), _metrics_value2key(value));
+	counter = _oidc_metrics_counter_value_get(_oidc_metrics_counter_get(r, type, name), _metrics_value2key(value));
 
 	/* performance */
 	if (counter->count <= 0) {
@@ -1305,22 +1301,22 @@ static oidc_json_t *oidc_metrics_status_select_value(oidc_json_t *j_counter, con
  * returns a 503 with an "ERROR" body when the cache backend is not usable
  */
 static int oidc_metrics_status_readiness(request_rec *r) {
-	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	char *value = NULL;
-	char *msg = NULL;
+	const char *msg = NULL;
 	const char *s_provider = NULL;
 	apr_byte_t ok = FALSE;
 
 	/* write/read round-trip through the configured cache backend */
-	if (oidc_cache_set(r, OIDC_CACHE_SECTION_HEALTH, OIDC_METRICS_STATUS_PING_KEY, "OK",
-			   apr_time_now() + apr_time_from_sec(60)) == TRUE)
-		if ((oidc_cache_get(r, OIDC_CACHE_SECTION_HEALTH, OIDC_METRICS_STATUS_PING_KEY, &value) == TRUE) &&
-		    (value != NULL) && (_oidc_strcmp(value, "OK") == 0))
-			ok = TRUE;
+	if ((oidc_cache_set(r, OIDC_CACHE_SECTION_HEALTH, OIDC_METRICS_STATUS_PING_KEY, "OK",
+			    apr_time_now() + apr_time_from_sec(60)) == TRUE) &&
+	    (oidc_cache_get(r, OIDC_CACHE_SECTION_HEALTH, OIDC_METRICS_STATUS_PING_KEY, &value) == TRUE) &&
+	    (value != NULL) && (_oidc_strcmp(value, "OK") == 0))
+		ok = TRUE;
 
 	if (oidc_cfg_metadata_dir_get(cfg) != NULL)
 		s_provider = "metadata_dir";
-	else if (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get((oidc_cfg_t *)cfg)) != NULL)
+	else if (oidc_cfg_provider_issuer_get(oidc_cfg_provider_get(cfg)) != NULL)
 		s_provider = "static";
 	else
 		s_provider = "none";

@@ -52,7 +52,12 @@ replay() {
 
 # version_lt A B : true when dotted version A is strictly older than B
 version_lt() {
-	[ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+	local a="$1"
+	local b="$2"
+	if [ "$a" != "$b" ] && [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | head -n1)" = "$a" ]; then
+		return 0
+	fi
+	return 1
 }
 
 # cjose below 0.6.2.8 has a memory-safety bug in its RSA content-encryption-key
