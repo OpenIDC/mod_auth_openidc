@@ -114,6 +114,9 @@ const oidc_metrics_counter_info_t _oidc_metrics_counters_info[] = {
 /* one entry per oidc_metrics_counter_type_t value */
 OIDC_STATIC_ASSERT(sizeof(_oidc_metrics_counters_info) / sizeof(oidc_metrics_counter_info_t) == OM_NUMBER_OF_COUNTERS,
 		   counters_info_matches_enum);
+/* one entry per oidc_metrics_timing_type_t value */
+OIDC_STATIC_ASSERT(sizeof(_oidc_metrics_timings_info) / sizeof(oidc_metrics_timing_info_t) == OM_NUMBER_OF_TIMINGS,
+		   timings_info_matches_enum);
 
 typedef struct oidc_metrics_t {
 	apr_pool_t *pool;
@@ -598,12 +601,24 @@ static inline char *_oidc_metrics_type_name2key(apr_pool_t *pool, unsigned int t
 }
 
 /*
- * convert a string key type to an enum type
+ * look up the info table entry for the enum type in a "<type>[.<name>]" key: the keys come out of the
+ * JSON in the shared memory segment that this module writes itself, but a corrupted or stale segment
+ * (or a key that does not parse) must not turn into an out-of-bounds index into the info tables, so
+ * the type is checked against the table size right where it indexes it; NULL for a key that does not
+ * name a type this build knows, which the callers skip
  */
-static inline unsigned int _oidc_metrics_key2type(const char *key) {
+static inline const oidc_metrics_counter_info_t *_oidc_metrics_key2counter_info(const char *key) {
 	unsigned int type = 0;
-	sscanf(key, "%u", &type);
-	return type;
+	if ((key == NULL) || (sscanf(key, "%u", &type) != 1) || (type >= OM_NUMBER_OF_COUNTERS))
+		return NULL;
+	return &_oidc_metrics_counters_info[type];
+}
+
+static inline const oidc_metrics_timing_info_t *_oidc_metrics_key2timing_info(const char *key) {
+	unsigned int type = 0;
+	if ((key == NULL) || (sscanf(key, "%u", &type) != 1) || (type >= OM_NUMBER_OF_TIMINGS))
+		return NULL;
+	return &_oidc_metrics_timings_info[type];
 }
 
 /*
@@ -1120,19 +1135,17 @@ void oidc_metrics_timing_add(request_rec *r, oidc_metrics_timing_type_t type, ap
  */
 
 /*
- * convert in integer counter enum type to its corresponding string name
+ * the "class.metric" name of a counter, from its info table entry
  */
-static inline char *_oidc_metrics_counter_type2s(apr_pool_t *pool, unsigned int type) {
-	return apr_psprintf(pool, "%s.%s", _oidc_metrics_counters_info[type].class_name,
-			    _oidc_metrics_counters_info[type].metric_name);
+static inline char *_oidc_metrics_counter_info2s(apr_pool_t *pool, const oidc_metrics_counter_info_t *info) {
+	return apr_psprintf(pool, "%s.%s", info->class_name, info->metric_name);
 }
 
 /*
- * convert in integer timings enum type to its corresponding string name
+ * the "class.metric" name of a timing, from its info table entry
  */
-static inline char *_oidc_metrics_timing_type2s(apr_pool_t *pool, unsigned int type) {
-	return apr_psprintf(pool, "%s.%s", _oidc_metrics_timings_info[type].class_name,
-			    _oidc_metrics_timings_info[type].metric_name);
+static inline char *_oidc_metrics_timing_info2s(apr_pool_t *pool, const oidc_metrics_timing_info_t *info) {
+	return apr_psprintf(pool, "%s.%s", info->class_name, info->metric_name);
 }
 
 /*
@@ -1164,7 +1177,8 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 	oidc_json_t *o_timings = NULL;
 	oidc_json_t *o_timing = NULL;
 	const char *s_server = NULL;
-	unsigned int type = 0;
+	const oidc_metrics_counter_info_t *c_info = NULL;
+	const oidc_metrics_timing_info_t *t_info = NULL;
 	void *i1 = NULL;
 	void *i2 = NULL;
 
@@ -1189,7 +1203,12 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 
 		i2 = oidc_json_object_iter(j_counters);
 		while (i2) {
-			type = _oidc_metrics_key2type(oidc_json_object_iter_key(i2));
+			c_info = _oidc_metrics_key2counter_info(oidc_json_object_iter_key(i2));
+			if (c_info == NULL) {
+				/* not a counter this build knows: skip it rather than index past the info table */
+				i2 = oidc_json_object_iter_next(j_counters, i2);
+				continue;
+			}
 			j_counter = oidc_json_object_iter_value(i2);
 			o_counter = oidc_json_object();
 			if (oidc_json_is_integer(j_counter))
@@ -1197,12 +1216,11 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 			else
 				oidc_json_object_set_new(o_counter, "values", oidc_json_deep_copy(j_counter));
 			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_CLASS_NAME,
-						 oidc_json_string(_oidc_metrics_counters_info[type].class_name));
+						 oidc_json_string(c_info->class_name));
 			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_METRIC_NAME,
-						 oidc_json_string(_oidc_metrics_counters_info[type].metric_name));
-			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_DESC,
-						 oidc_json_string(_oidc_metrics_counters_info[type].desc));
-			oidc_json_object_set_new(o_counters, _oidc_metrics_counter_type2s(r->pool, type), o_counter);
+						 oidc_json_string(c_info->metric_name));
+			oidc_json_object_set_new(o_counter, OIDC_METRICS_JSON_DESC, oidc_json_string(c_info->desc));
+			oidc_json_object_set_new(o_counters, _oidc_metrics_counter_info2s(r->pool, c_info), o_counter);
 			i2 = oidc_json_object_iter_next(j_counters, i2);
 		}
 
@@ -1212,7 +1230,11 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 
 		i2 = oidc_json_object_iter(j_timings);
 		while (i2) {
-			type = _oidc_metrics_key2type(oidc_json_object_iter_key(i2));
+			t_info = _oidc_metrics_key2timing_info(oidc_json_object_iter_key(i2));
+			if (t_info == NULL) {
+				i2 = oidc_json_object_iter_next(j_timings, i2);
+				continue;
+			}
 			j_timing = oidc_json_object_iter_value(i2);
 
 			o_timing = oidc_json_deep_copy(j_timing);
@@ -1222,13 +1244,12 @@ static int oidc_metrics_handle_json(request_rec *r, const char *s_json) {
 			    oidc_json_integer(
 				oidc_json_integer_value(oidc_json_object_get(j_timing, OIDC_METRICS_SUM)) / 1000));
 			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_CLASS_NAME,
-						 oidc_json_string(_oidc_metrics_timings_info[type].class_name));
+						 oidc_json_string(t_info->class_name));
 			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_METRIC_NAME,
-						 oidc_json_string(_oidc_metrics_timings_info[type].metric_name));
-			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_DESC,
-						 oidc_json_string(_oidc_metrics_timings_info[type].desc));
+						 oidc_json_string(t_info->metric_name));
+			oidc_json_object_set_new(o_timing, OIDC_METRICS_JSON_DESC, oidc_json_string(t_info->desc));
 
-			oidc_json_object_set_new(o_timings, _oidc_metrics_timing_type2s(r->pool, type), o_timing);
+			oidc_json_object_set_new(o_timings, _oidc_metrics_timing_info2s(r->pool, t_info), o_timing);
 
 			i2 = oidc_json_object_iter_next(j_timings, i2);
 		}
@@ -1265,10 +1286,11 @@ static int oidc_metrics_handle_internal(request_rec *r, const char *s_json) {
  */
 static oidc_json_t *oidc_metrics_status_find_counter(request_rec *r, oidc_json_t *j_counters,
 						     const char *s_metric_param) {
+	const oidc_metrics_counter_info_t *info = NULL;
 	void *iter = oidc_json_object_iter(j_counters);
 	while (iter) {
-		unsigned int type = _oidc_metrics_key2type(oidc_json_object_iter_key(iter));
-		if (_oidc_strcmp(_oidc_metrics_counter_type2s(r->pool, type), s_metric_param) == 0)
+		info = _oidc_metrics_key2counter_info(oidc_json_object_iter_key(iter));
+		if ((info != NULL) && (_oidc_strcmp(_oidc_metrics_counter_info2s(r->pool, info), s_metric_param) == 0))
 			return oidc_json_object_iter_value(iter);
 		iter = oidc_json_object_iter_next(j_counters, iter);
 	}
@@ -1493,11 +1515,15 @@ static char *oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, char *s_tex
 static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_t *ctx, const char *key,
 					    oidc_json_t *value) {
 	oidc_json_t *o_counter = value;
-	unsigned int type = _oidc_metrics_key2type(key);
-	const char *s_label =
-	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_type2s(ctx->pool, type));
-	char *s_text =
-	    apr_psprintf(ctx->pool, "# HELP %s The number of %s.\n", s_label, _oidc_metrics_counters_info[type].desc);
+	const oidc_metrics_counter_info_t *info = _oidc_metrics_key2counter_info(key);
+	const char *s_label = NULL;
+	char *s_text = NULL;
+
+	if (info == NULL)
+		return 1;
+
+	s_label = oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_info2s(ctx->pool, info));
+	s_text = apr_psprintf(ctx->pool, "# HELP %s The number of %s.\n", s_label, info->desc);
 	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s counter\n", s_text, s_label);
 
 	void *iter = oidc_json_object_iter(o_counter);
@@ -1531,17 +1557,21 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	const oidc_json_t *j_member = NULL;
 	oidc_json_t *o_timer = value;
 	oidc_json_int_t v = 0;
-	unsigned int type = _oidc_metrics_key2type(key);
-	const char *s_label =
-	    oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_timing_type2s(ctx->pool, type));
+	const oidc_metrics_timing_info_t *info = _oidc_metrics_key2timing_info(key);
+	const char *s_label = NULL;
+	char *s_text = NULL;
+	char *s_secs = NULL;
+
+	if (info == NULL)
+		return 1;
+
+	s_label = oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_timing_info2s(ctx->pool, info));
 	/* the unsuffixed millisecond family is deprecated as of 2.4.20.4 in favor of the
 	 * Prometheus-idiomatic _seconds family emitted alongside it below, and will be
 	 * removed in a future release */
-	char *s_text =
-	    apr_psprintf(ctx->pool, "# HELP %s A histogram of %s.\n", s_label, _oidc_metrics_timings_info[type].desc);
+	s_text = apr_psprintf(ctx->pool, "# HELP %s A histogram of %s.\n", s_label, info->desc);
 	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s histogram\n", s_text, s_label);
-	char *s_secs = apr_psprintf(ctx->pool, "# HELP %s_seconds A histogram of %s in seconds.\n", s_label,
-				    _oidc_metrics_timings_info[type].desc);
+	s_secs = apr_psprintf(ctx->pool, "# HELP %s_seconds A histogram of %s in seconds.\n", s_label, info->desc);
 	s_secs = apr_psprintf(ctx->pool, "%s# TYPE %s_seconds histogram\n", s_secs, s_label);
 
 	void *iter1 = oidc_json_object_iter(o_timer);

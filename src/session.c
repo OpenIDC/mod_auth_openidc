@@ -265,7 +265,7 @@ static apr_byte_t oidc_session_load_cache(request_rec *r, oidc_session_t *z) {
 	apr_byte_t rc = FALSE;
 
 	/* get the cookie that should be our uuid/key */
-	char *uuid = oidc_http_get_cookie(r, oidc_cfg_dir_cookie_get(r));
+	const char *uuid = oidc_http_get_cookie(r, oidc_cfg_dir_cookie_get(r));
 
 	/* get the string-encoded session from the cache based on the key; decryption is based on the cache backend
 	 * config */

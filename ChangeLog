@@ -8,6 +8,16 @@
   tests that need symlinks, file permissions, RLIMIT_FSIZE/RLIMIT_NOFILE or
   fork are compiled on POSIX only (test_cache, test_util); no change in what
   runs on Linux
+- metrics: look the counter/timing info table entry up through one accessor
+  that checks the type parsed out of a metrics key against the table size, and
+  skip entries that name no known type, instead of indexing the tables with
+  the raw value at six places; OM_NUMBER_OF_TIMINGS + a static assert tie the
+  timings table to its enum like the counters table already was; resolves the
+  "array index injection" findings SonarCloud raised on metrics.c (the keys
+  are the module's own shared-memory JSON, so this hardens against a corrupt
+  or stale segment rather than fixing a reachable overflow)
+- session: make the cookie value in oidc_session_load_cache a const char *
+  (SonarCloud S5350)
 
 09/04/2026
 - metrics: re-read OIDCMetricsCacheJsonMax when the subsystem is re-initialized (graceful restart)

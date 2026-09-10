@@ -74,6 +74,8 @@ typedef enum {
 	OM_CACHE_READ,
 	OM_CACHE_WRITE,
 
+	OM_NUMBER_OF_TIMINGS
+
 } oidc_metrics_timing_type_t;
 
 typedef struct oidc_metrics_timing_info_t {
