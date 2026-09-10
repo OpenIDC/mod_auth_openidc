@@ -195,12 +195,12 @@ static oidc_metrics_bucket_t _oidc_metric_buckets[] = {
 #define OIDC_METRICS_COUNTERS "counters"
 
 /*
- * convert a Jansson number to a string: OIDC_JSON_INT_FORMAT does not work with apr_psprintf !?
+ * convert a Jansson number to a string: apr_psprintf does not understand OIDC_JSON_INT_FORMAT
+ * ("%lld"), APR spells a 64-bit integer as APR_INT64_T_FMT, and oidc_json_int_t is at most 64
+ * bits wide
  */
 static inline char *_json_int2str(apr_pool_t *pool, oidc_json_int_t n) {
-	char s[255];
-	snprintf(s, 255, "%" OIDC_JSON_INT_FORMAT, n);
-	return apr_pstrdup(pool, s);
+	return apr_psprintf(pool, "%" APR_INT64_T_FMT, (apr_int64_t)n);
 }
 
 #define OIDC_METRICS_INT_MAX OIDC_JSON_INT_MAX

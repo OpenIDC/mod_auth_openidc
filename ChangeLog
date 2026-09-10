@@ -18,6 +18,8 @@
   or stale segment rather than fixing a reachable overflow)
 - session: make the cookie value in oidc_session_load_cache a const char *
   (SonarCloud S5350)
+- metrics: format JSON integers with apr_psprintf and APR_INT64_T_FMT instead
+  of snprintf into a stack buffer
 
 09/04/2026
 - metrics: re-read OIDCMetricsCacheJsonMax when the subsystem is re-initialized (graceful restart)
