@@ -56,11 +56,14 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+/* the symlink, permission and RLIMIT_FSIZE tests below are POSIX-only */
 #include <sys/resource.h>
+#include <unistd.h>
+#endif
 #if APR_HAS_FORK
 #include <sys/wait.h>
 #endif
-#include <unistd.h>
 
 #ifdef USE_LIBHIREDIS
 #include "cache/redis.h"
@@ -518,6 +521,8 @@ static void *APR_THREAD_FUNC oidc_cache_shm_thread(apr_thread_t *thread, void *d
 		apr_pool_clear(pool);
 	}
 	apr_pool_destroy(pool);
+	/* on Windows the value apr_thread_join reports only comes through apr_thread_exit */
+	apr_thread_exit(thread, APR_SUCCESS);
 	return NULL;
 }
 
@@ -886,8 +891,8 @@ static oidc_cache_t *e2e_switch_to_file_backend(request_rec *r) {
 	oidc_cache_t *prev = (oidc_cache_t *)cfg->cache.impl;
 	cfg->cache.impl = &oidc_cache_file;
 
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-cache.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp cache dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-cache");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-cache");
 	cfg->cache.file_dir = tmpl;
 
 	/* disable JWT compression: the cache wrapper's encryption path goes through
@@ -1113,6 +1118,7 @@ END_TEST
  * the cleaning cycle walks the cache directory and has to cope with whatever else is in there:
  * an entry it cannot open, an entry whose header is unreadable, and files that are not its own
  */
+#ifndef _WIN32
 START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -1170,11 +1176,13 @@ START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	e2e_restore_cache_backend(prev);
 }
 END_TEST
+#endif
 
 /*
  * a cache directory that cannot be listed must not stop entries from being written: cleaning is
  * housekeeping, and its failure is logged rather than propagated
  */
+#ifndef _WIN32
 START_TEST(test_cache_file_clean_cycle_unreadable_dir) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -1201,6 +1209,7 @@ START_TEST(test_cache_file_clean_cycle_unreadable_dir) {
 	e2e_restore_cache_backend(prev);
 }
 END_TEST
+#endif
 
 /*
  * a cache directory that does not exist: neither the "last cleaned" marker nor the entry itself
@@ -1257,6 +1266,7 @@ END_TEST
  * RLIMIT_FSIZE simulates a failed write. Ignore SIGXFSZ so the write fails instead of killing
  * the process; the set must fail and remove its partial temp file.
  */
+#ifndef _WIN32
 START_TEST(test_cache_file_short_write_fails_the_set) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cache_t *prev = e2e_switch_to_file_backend(r);
@@ -1311,6 +1321,7 @@ START_TEST(test_cache_file_short_write_fails_the_set) {
 	e2e_restore_cache_backend(prev);
 }
 END_TEST
+#endif
 
 #ifdef USE_LIBHIREDIS
 
@@ -2464,11 +2475,17 @@ int main(void) {
 	tcase_add_test(file, test_cache_file_truncated_entry_is_an_error);
 	tcase_add_test(file, test_cache_file_rejects_oversized_value_length);
 	tcase_add_test(file, test_cache_file_expired_entry_left_for_cleaner);
+#ifndef _WIN32
 	tcase_add_test(file, test_cache_file_clean_cycle_handles_junk);
+#endif
+#ifndef _WIN32
 	tcase_add_test(file, test_cache_file_clean_cycle_unreadable_dir);
+#endif
 	tcase_add_test(file, test_cache_file_missing_dir_fails_the_write);
 	tcase_add_test(file, test_cache_file_delete_missing_and_rename_failure);
+#ifndef _WIN32
 	tcase_add_test(file, test_cache_file_short_write_fails_the_set);
+#endif
 
 	Suite *s = suite_create("cache");
 	suite_add_tcase(s, core);

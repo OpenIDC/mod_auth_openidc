@@ -1,0 +1,9 @@
+# The unit test fixtures are read back byte for byte (file lengths, PEM bodies, payload lists):
+# keep them LF in every checkout, whatever core.autocrlf says there (true on the Windows build
+# VM), and leave the fuzz corpus alone altogether.
+test/*.pem text eol=lf
+test/*.key text eol=lf
+test/*.template text eol=lf
+test/open-redirect-payload-list.txt text eol=lf
+test/fuzz/dict/* text eol=lf
+test/fuzz/corpus/** -text

@@ -235,13 +235,13 @@ static void e2e_force_metrics_flush(request_rec *r, oidc_cfg_t *c) {
 
 static void e2e_metrics_setup_flushed(request_rec *r) {
 	/* shrink the flush interval before post_config because the thread reads the env once */
-	setenv("OIDC_METRICS_CACHE_STORAGE_INTERVAL", "100", 1);
+	oidc_test_setenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL", "100");
 	metrics_subsystem_setup(r);
 }
 
 static void e2e_metrics_teardown_flushed(request_rec *r) {
 	metrics_subsystem_teardown(r);
-	unsetenv("OIDC_METRICS_CACHE_STORAGE_INTERVAL");
+	oidc_test_unsetenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL");
 }
 
 /* defined below: poll the JSON formatter until the asynchronously-flushed data appears, so a value
@@ -705,12 +705,12 @@ END_TEST
 /* an out-of-bounds OIDC_METRICS_CACHE_JSON_MAX falls back to the default shm size */
 START_TEST(test_metrics_shm_size_env_out_of_bounds) {
 	request_rec *r = oidc_test_request_get();
-	setenv("OIDC_METRICS_CACHE_JSON_MAX", "0", 1);
+	oidc_test_setenv(r->pool, "OIDC_METRICS_CACHE_JSON_MAX", "0");
 	metrics_subsystem_setup(r);
 	r->args = "format=status";
 	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
 	metrics_subsystem_teardown(r);
-	unsetenv("OIDC_METRICS_CACHE_JSON_MAX");
+	oidc_test_unsetenv(r->pool, "OIDC_METRICS_CACHE_JSON_MAX");
 }
 END_TEST
 

@@ -357,13 +357,7 @@ END_TEST
 START_TEST(test_jose_jwk_and_json_and_copy_lists) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
-	const char *src_file = __FILE__;
-	char *dir = NULL;
-	const char *slash = strrchr(src_file, '/');
-	if (slash)
-		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
-	else
-		dir = apr_pstrdup(pool, ".");
+	const char *dir = oidc_test_srcdir();
 	char *pub_path = apr_psprintf(pool, "%s/public.pem", dir);
 
 	oidc_jwk_t *pub = NULL;
@@ -668,13 +662,7 @@ START_TEST(test_jwt_sign_verify_and_encrypt_decrypt) {
 		      "alg is not 'none'");
 	oidc_json_decref(hdr_obj);
 
-	const char *src_file = __FILE__;
-	char *dir = NULL;
-	const char *slash = strrchr(src_file, '/');
-	if (slash)
-		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
-	else
-		dir = apr_pstrdup(pool, ".");
+	const char *dir = oidc_test_srcdir();
 	char *pub_path = apr_psprintf(pool, "%s/public.pem", dir);
 	char *priv_path = apr_psprintf(pool, "%s/private.pem", dir);
 
@@ -721,13 +709,7 @@ END_TEST
  * hand back the matching pub/priv key pair so decrypt-path tests can craft a keys hash around it */
 static char *_jose_test_build_jwe(apr_pool_t *pool, oidc_jwk_t **out_pub, oidc_jwk_t **out_priv) {
 	oidc_jose_error_t err;
-	const char *src_file = __FILE__;
-	char *dir = NULL;
-	const char *slash = strrchr(src_file, '/');
-	if (slash)
-		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
-	else
-		dir = apr_pstrdup(pool, ".");
+	const char *dir = oidc_test_srcdir();
 	char *pub_path = apr_psprintf(pool, "%s/public.pem", dir);
 	char *priv_path = apr_psprintf(pool, "%s/private.pem", dir);
 
@@ -843,13 +825,7 @@ END_TEST
 START_TEST(test_jwk_json_parse_and_jwks) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	oidc_jose_error_t err;
-	const char *src_file = __FILE__;
-	char *dir = NULL;
-	const char *slash = strrchr(src_file, '/');
-	if (slash)
-		dir = apr_pstrndup(pool, src_file, (int)(slash - src_file));
-	else
-		dir = apr_pstrdup(pool, ".");
+	const char *dir = oidc_test_srcdir();
 	char *pub_path = apr_psprintf(pool, "%s/public.pem", dir);
 
 	oidc_jwk_t *pub = NULL;
@@ -936,7 +912,7 @@ START_TEST(test_jwk_public_key_parse) {
 	char publicKeyFile[512];
 	char certificateFile[512];
 	char ecCertificateFile[512];
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	snprintf(publicKeyFile, 512, "%s/%s", dir, "/public.pem");
 	snprintf(certificateFile, 512, "%s/%s", dir, "/certificate.pem");
 	snprintf(ecCertificateFile, 512, "%s/%s", dir, "/eccert.pem");
@@ -1024,7 +1000,7 @@ START_TEST(test_jwk_private_key_parse) {
 	char rsaPrivateKeyFile[512];
 	char ecPrivateKeyFile[512];
 
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	snprintf(rsaPrivateKeyFile, 512, "%s/%s", dir, "/private.pem");
 	snprintf(ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
 
@@ -1692,7 +1668,7 @@ START_TEST(test_jwk_copy_preserves_x5c) {
 	oidc_jwk_t *jwk = NULL;
 
 	char certificateFile[512];
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	snprintf(certificateFile, 512, "%s/%s", dir, "/certificate.pem");
 
 	ck_assert_int_eq(oidc_jwk_parse_pem_public_key(pool, NULL, certificateFile, &jwk, &err), TRUE);
@@ -1718,7 +1694,7 @@ START_TEST(test_jwk_pem_certificate_chain) {
 	oidc_jwk_t *jwk = NULL;
 
 	char certificateFile[512];
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	snprintf(certificateFile, 512, "%s/%s", dir, "/certificate.pem");
 
 	/* build a two-entry "chain" by concatenating the same certificate twice */
@@ -1793,7 +1769,7 @@ START_TEST(test_jwk_default_jws_alg_curves) {
 
 	/* P-521: the checked-in EC private key */
 	char ecPrivateKeyFile[512];
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	snprintf(ecPrivateKeyFile, 512, "%s/%s", dir, "/ecpriv.key");
 	ck_assert_int_eq(oidc_jwk_parse_pem_private_key(pool, NULL, ecPrivateKeyFile, &jwk, &err), TRUE);
 	ck_assert_str_eq(oidc_jwk_default_jws_alg(jwk), "ES512");

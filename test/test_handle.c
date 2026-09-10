@@ -535,7 +535,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_fixed_ttl) {
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *key_cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(
 	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir))));
@@ -1956,7 +1956,7 @@ START_TEST(test_handle_response_post_restore_template) {
 
 	const char *secret = "post-restore-shared-secret-long-enough";
 	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	c->post_restore_template = apr_psprintf(r->pool, "%s/post_restore.template", dir);
 
 	char *state = e2e_implicit_state_cookie(r, c, OIDC_PROTO_RESPONSE_TYPE_IDTOKEN, "nonce-pr1", NULL,
@@ -1991,7 +1991,7 @@ START_TEST(test_handle_response_post_preserve_javascript_legs) {
 	ck_assert_int_eq(oidc_response_post_preserve_javascript(r, NULL, &js, &jm), FALSE);
 
 	/* a proper form POST rendered through the configured preserve template */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	c->post_preserve_template = apr_psprintf(r->pool, "%s/post_preserve.template", dir);
 	e2e_post_body(r, "field1=value1&field2=value2");
 	ck_assert_int_eq(oidc_response_post_preserve_javascript(r, "https://www.example.com/return", &js, &jm), TRUE);
@@ -2344,8 +2344,8 @@ END_TEST
 /* point OIDCMetadataDir at a fresh empty temp dir so oidc_discovery_response
  * takes the resolve-issuer (non-static) code path */
 static void e2e_discovery_set_empty_metadata_dir(request_rec *r) {
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-disco");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-disco");
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 }
@@ -2417,8 +2417,8 @@ START_TEST(test_handle_discovery_request_with_metadata_dir) {
 
 	/* point OIDCMetadataDir at a fresh temp dir with one provider entry, then
 	 * exercise the form-generation branch of oidc_discovery_request */
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-disco");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-disco");
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 
@@ -2466,8 +2466,8 @@ END_TEST
 
 /* helper: populate a temp OIDCMetadataDir with provider + client metadata */
 static void e2e_write_metadata_dir(request_rec *r, const char *jwks_uri) {
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco2.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-disco2");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-disco2");
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 
@@ -2908,7 +2908,7 @@ static const char *e2e_dpop_response_proof(request_rec *r) {
 START_TEST(test_handle_dpop_returns_proof) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *kerr = oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir));
 	ck_assert_msg(kerr == NULL, "could not load private key: %s", kerr);
@@ -3040,7 +3040,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_with_private_keys) {
 	oidc_session_load(r, &session);
 
 	/* load test/private.pem so cfg->private_keys holds an RSA signing key with kid "rsa-1" */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *key_cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *key_err = oidc_cmd_private_keys_set(
 	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
@@ -3092,7 +3092,7 @@ START_TEST(test_handle_userinfo_pass_as_signed_jwt_cached) {
 	oidc_session_t *session = NULL;
 	oidc_session_load(r, &session);
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *key_cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *key_err = oidc_cmd_private_keys_set(
 	    key_cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
@@ -3433,7 +3433,7 @@ START_TEST(test_handle_legacy_open_redirect) {
 			 FALSE);
 
 	/* now walk the open-redirect payload list — every entry must be REJECTED */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *filename = apr_psprintf(r->pool, "%s/%s", dir, "open-redirect-payload-list.txt");
 	apr_file_t *f = NULL;
 	apr_status_t rv = apr_file_open(&f, filename, APR_READ, APR_OS_DEFAULT, r->pool);
@@ -4514,7 +4514,7 @@ START_TEST(test_handle_jwks_request_with_public_key) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	/* publish one RSA public key (test/public.pem) at the JWKs endpoint so the serialization loop runs */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *err =
 	    oidc_cmd_public_keys_set(oidc_test_cmd_get(OIDCPublicKeyFiles), NULL,
 				     apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/public.pem", dir)));
@@ -6337,8 +6337,8 @@ START_TEST(test_handle_request_authenticate_user_discovery_and_static_metadata) 
 
 	/* provider == NULL with an OIDCMetadataDir configured: discovery is deferred to the
 	 * content handler by stamping the discovery request state and r->user="" */
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/mod_auth_openidc_test_XXXXXX");
-	ck_assert_ptr_nonnull(mkdtemp(tmpl));
+	char *tmpl = oidc_test_mkdtemp(r->pool, "mod_auth_openidc_test");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for mod_auth_openidc_test");
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(oidc_test_cmd_get(OIDCMetadataDir), NULL, tmpl));
 	ck_assert_int_eq(oidc_request_authenticate_user(r, c, NULL, "https://www.example.com/protected/x", NULL, NULL,
 							NULL, NULL, NULL),
@@ -6346,7 +6346,7 @@ START_TEST(test_handle_request_authenticate_user_discovery_and_static_metadata) 
 	ck_assert_ptr_nonnull(r->user);
 	ck_assert_str_eq(r->user, "");
 	ck_assert_ptr_nonnull(oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY));
-	rmdir(tmpl);
+	apr_dir_remove(tmpl, r->pool);
 }
 END_TEST
 
@@ -6659,8 +6659,8 @@ START_TEST(test_handle_discovery_response_test_config_short_circuit) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-disco");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-disco");
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 
@@ -6731,8 +6731,8 @@ START_TEST(test_handle_discovery_response_issuer_not_allowed) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-disco");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-disco");
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 	oidc_test_discovery_write_metadata_dir(r, tmpl);
@@ -6752,8 +6752,8 @@ START_TEST(test_handle_discovery_response_issuer_allowed) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
-	char *tmpl = apr_pstrdup(r->pool, "/tmp/oidc-test-disco.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-disco");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-disco");
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCMetadataDir);
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 	oidc_test_discovery_write_metadata_dir(r, tmpl);

@@ -49,11 +49,14 @@
 #include "util/request_state.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
-#include <fcntl.h>   /* open()/close() for the EMFILE fd-exhaustion trick below */
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
-#include <signal.h>  /* SIGXFSZ for the RLIMIT_FSIZE trick below */
+#ifndef _WIN32
+/* the symlink, EMFILE and RLIMIT_FSIZE tests below are POSIX-only */
+#include <fcntl.h>	  /* open()/close() for the EMFILE fd-exhaustion trick below */
+#include <signal.h>	  /* SIGXFSZ for the RLIMIT_FSIZE trick below */
 #include <sys/resource.h> /* getrlimit()/setrlimit(RLIMIT_NOFILE/RLIMIT_FSIZE) for the same tricks */
 #include <unistd.h>
+#endif
 
 #ifdef HAVE_LIBPCRE2
 #define PCRE2_CODE_UNIT_WIDTH 8
@@ -384,6 +387,7 @@ START_TEST(test_util_file) {
 END_TEST
 
 /* Accept symlinks to regular config files, but reject directory and dangling targets. */
+#ifndef _WIN32
 START_TEST(test_util_file_read_symlink) {
 	request_rec *r = oidc_test_request_get();
 	const char *dir = NULL;
@@ -422,8 +426,10 @@ START_TEST(test_util_file_read_symlink) {
 	apr_file_remove(target, r->pool);
 }
 END_TEST
+#endif
 
 /* Exhaust descriptors so stat succeeds but open fails with EMFILE, even when tests run as root. */
+#ifndef _WIN32
 START_TEST(test_util_file_read_open_fails_after_stat) {
 	request_rec *r = oidc_test_request_get();
 	const char *dir = NULL;
@@ -456,6 +462,7 @@ START_TEST(test_util_file_read_open_fails_after_stat) {
 	apr_file_remove(path, r->pool);
 }
 END_TEST
+#endif
 
 /* a file larger than OIDC_UTIL_FILE_SIZE_MAX (16MB) is rejected before its contents are read; a
  * sparse file (seek past the cap, write one byte) gets it reported as that large without actually
@@ -571,6 +578,7 @@ END_TEST
 /* apr_file_write_full surfaces a hard error (rather than a silent short write) as soon as the
  * underlying write(2) cannot make progress; RLIMIT_FSIZE, with SIGXFSZ ignored so the process is
  * not killed, gets there deterministically once the cap is exceeded, without needing a full disk */
+#ifndef _WIN32
 START_TEST(test_util_file_write_hard_failure) {
 	request_rec *r = oidc_test_request_get();
 	const char *dir = NULL;
@@ -610,6 +618,7 @@ START_TEST(test_util_file_write_hard_failure) {
 	ck_assert_int_ne(apr_stat(&fi, path, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
 }
 END_TEST
+#endif
 
 START_TEST(test_util_html_escape) {
 	apr_pool_t *pool = oidc_test_pool_get();
@@ -683,7 +692,7 @@ START_TEST(test_util_html_template) {
 	int rv = -1;
 	char *template_contents = NULL;
 	request_rec *r = oidc_test_request_get();
-	char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	char *fname = apr_psprintf(r->pool, "%s/%s", dir, "post_preserve.template");
 
 	rv = oidc_util_html_send_in_template(r, fname, &template_contents, "arg1", OIDC_POST_PRESERVE_ESCAPE_NONE,
@@ -1892,12 +1901,18 @@ int main(void) {
 	c = tcase_create("file");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_file);
+#ifndef _WIN32
 	tcase_add_test(c, test_util_file_read_symlink);
+#endif
+#ifndef _WIN32
 	tcase_add_test(c, test_util_file_read_open_fails_after_stat);
+#endif
 	tcase_add_test(c, test_util_file_read_too_large);
 	tcase_add_test(c, test_util_file_read_server);
 	tcase_add_test(c, test_util_file_write_rename_fails);
+#ifndef _WIN32
 	tcase_add_test(c, test_util_file_write_hard_failure);
+#endif
 	suite_add_tcase(s, c);
 
 	c = tcase_create("html");

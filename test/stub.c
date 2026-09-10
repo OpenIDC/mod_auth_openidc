@@ -10,6 +10,12 @@
 #include <http_core.h>
 #include <http_log.h>
 
+#ifdef WIN32
+/* os/win32/os.h maps every exit() onto this server variable, so any test program that includes
+ * the httpd headers references it; set, the real exit code passes through */
+int ap_real_exit_code = 1;
+#endif
+
 // clang-format on
 
 /* NB: deliberately not "util.h": including it here pulls in <http_request.h>, whose AP_DECLARE_HOOK

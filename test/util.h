@@ -57,6 +57,15 @@ apr_pool_t *oidc_test_pool_get(void);
 request_rec *oidc_test_request_get(void);
 oidc_cfg_t *oidc_test_cfg_get(void);
 cmd_parms *oidc_test_cmd_get(const char *primitive);
+/* a fresh, empty directory under the system temp dir, "<tmp>/<prefix>.<unique>"; NULL when it
+ * could not be made; the portable replacement for mkdtemp("/tmp/<prefix>.XXXXXX") */
+char *oidc_test_mkdtemp(apr_pool_t *pool, const char *prefix);
+/* the directory the fixture files (private.pem, ...) are in: $srcdir as the automake test driver
+ * sets it, "." otherwise, with forward slashes even on Windows so it can go into a JSON string */
+const char *oidc_test_srcdir(void);
+/* set/unset an environment variable the way the module reads it back with getenv */
+void oidc_test_setenv(apr_pool_t *pool, const char *name, const char *value);
+void oidc_test_unsetenv(apr_pool_t *pool, const char *name);
 void oidc_test_set_auth_type(const char *auth_type);
 void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg);
 

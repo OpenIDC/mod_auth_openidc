@@ -505,7 +505,7 @@ START_TEST(test_proto_profile_helpers) {
 	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider));
 	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_REQUIRED);
 	/* ... and with one, it is not */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
 	    pool, provider, apr_psprintf(pool, "%s/certificate.pem", dir)));
 	ck_assert_int_eq(oidc_proto_profile_dpop_mode_get(provider), OIDC_DPOP_MODE_OFF);
@@ -761,7 +761,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 
 	/* load test/private.pem so cfg->private_keys has an RSA key with kid "rsa-1" */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *err = oidc_cmd_private_keys_set(
 	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
@@ -795,7 +795,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 
 	/* load private.pem as above */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *err = oidc_cmd_private_keys_set(
 	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
@@ -824,7 +824,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_client_keys) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	oidc_jose_error_t err;
 	oidc_jwk_t *jwk = NULL;
 	char *priv_path = apr_psprintf(r->pool, "%s/private.pem", dir);
@@ -936,7 +936,7 @@ START_TEST(test_proto_token_endpoint_auth_idempotent) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *err = oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir));
 	ck_assert_msg(err == NULL, "could not load private key: %s", err);
@@ -1453,7 +1453,7 @@ START_TEST(test_proto_dpop_create_embeds_public_key_only) {
 	char *dpop = NULL;
 
 	/* load test/private.pem so DPoP proof creation has an RSA key to sign with */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *kerr = oidc_cmd_private_keys_set(
 	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
@@ -2025,7 +2025,7 @@ START_TEST(test_proto_token_endpoint_request_dpop_required_but_bearer) {
 	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(r->pool, provider, "required"));
 	/* a private key so the DPoP proof for the token request can be created
 	 * and the request actually reaches the (Bearer-answering) endpoint */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(
 	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop-tk#%s/private.pem", dir)));
@@ -2061,7 +2061,7 @@ START_TEST(test_proto_token_endpoint_request_dpop_required_but_missing_token_typ
 	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(r->pool, provider, "required"));
 	/* a private key so the DPoP proof for the token request can be created
 	 * and the request actually reaches the (token_type-less-answering) endpoint */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(
 	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop-tk#%s/private.pem", dir)));
@@ -2128,7 +2128,7 @@ START_TEST(test_proto_token_endpoint_request_dpop_nonce_retry_new_assertion) {
 	ck_assert_ptr_null(oidc_cfg_provider_dpop_mode_set(r->pool, provider, "required"));
 
 	/* a private key for both the DPoP proof and the private_key_jwt client assertion */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
 	oidc_cfg_provider_client_id_set(r->pool, provider, "myclient");
@@ -2552,7 +2552,7 @@ START_TEST(test_proto_userinfo_request_dpop) {
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
 	/* DPoP proof creation needs an asymmetric signing key */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
 
@@ -3086,7 +3086,7 @@ START_TEST(test_proto_userinfo_request_dpop_nonce_retry) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
 
@@ -3127,7 +3127,7 @@ START_TEST(test_proto_userinfo_request_dpop_nonce_retry_still_error) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
 
@@ -3244,7 +3244,7 @@ START_TEST(test_proto_userinfo_request_dpop_plain_error) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
 
@@ -3273,7 +3273,7 @@ START_TEST(test_proto_userinfo_request_dpop_retry_garbage) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-dpop#%s/private.pem", dir)));
 
@@ -3390,7 +3390,7 @@ START_TEST(test_proto_private_keys_load_from_pem) {
 
 	/* load test/private.pem via the OIDCPrivateKeyFiles cmd setter and verify the
 	 * key lands in cfg->private_keys */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *arg = apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir);
 	const char *rv = oidc_cmd_private_keys_set(cmd, NULL, apr_pstrdup(r->pool, arg));
@@ -3433,7 +3433,7 @@ START_TEST(test_proto_request_auth_with_request_object_rs256) {
 	oidc_provider_t *provider = oidc_cfg_provider_get(c);
 
 	/* load a private key first so the RS256-signed request object can be created */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *arg = apr_psprintf(r->pool, "rsa-sig#%s/private.pem", dir);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_pstrdup(r->pool, arg)));
@@ -3533,7 +3533,7 @@ START_TEST(test_proto_request_auth_request_object_signing_keys) {
 	c->private_keys = fixture_keys;
 
 	/* per-provider client keys are preferred over the global list */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(oidc_test_cmd_get(OIDCPrivateKeyFiles), NULL,
 						     apr_psprintf(r->pool, "rsa-client#%s/private.pem", dir)));
 	apr_array_header_t *keys = (apr_array_header_t *)oidc_cfg_private_keys_get(c);
@@ -3600,7 +3600,7 @@ START_TEST(test_proto_request_auth_with_request_object_encrypted_rsa) {
 	oidc_jose_error_t err;
 
 	/* derive the public encryption JWK from the test RSA private key */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "rsa-enc#%s/private.pem", dir)));
 	oidc_jwk_t *priv = APR_ARRAY_IDX(oidc_cfg_private_keys_get(c), 0, oidc_jwk_t *);
@@ -4320,7 +4320,7 @@ START_TEST(test_proto_dpop_create_with_rsa_private_key) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	/* load test/private.pem so cfg->private_keys has an RSA signing key */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	const char *err = oidc_cmd_private_keys_set(
 	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir)));
@@ -4416,7 +4416,7 @@ START_TEST(test_proto_request_auth_with_copy_and_remove_from_request) {
 
 	/* same shape as the request_object_rs256 test but with copy_and_remove_from_request
 	 * including "state" — this exercises oidc_request_uri_delete_from_request */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(
 	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-sig#%s/private.pem", dir))));
@@ -4505,7 +4505,7 @@ START_TEST(test_proto_dpop_create_no_access_token_no_nonce) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(
 	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", dir))));

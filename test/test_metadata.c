@@ -210,7 +210,7 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	const char *metadata =
 	    "{"
@@ -264,7 +264,7 @@ START_TEST(test_metadata_parse_mtls_endpoint_aliases_invalid) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	oidc_json_t *j = NULL;
 
 	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
@@ -319,7 +319,7 @@ END_TEST
 
 /* a client secret plus a certificate: client_secret_basic authentication with the certificate for binding only */
 static oidc_provider_t *oidc_test_metadata_cert_bound_parse(request_rec *r, oidc_cfg_t *c, const char *metadata) {
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 	oidc_json_t *j = NULL;
 
@@ -395,7 +395,7 @@ END_TEST
 START_TEST(test_metadata_parse_mtls_explicit_endpoint_wins) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 	oidc_json_t *j = NULL;
 
@@ -446,7 +446,7 @@ END_TEST
 START_TEST(test_metadata_parse_mtls_aliases_private_key_jwt) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 	oidc_json_t *j = NULL;
 
@@ -1117,7 +1117,7 @@ END_TEST
 START_TEST(test_metadata_oauth_provider_parse_mtls_invalid_alias_url) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointCert);
 	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_tls_client_cert_set(
@@ -1137,7 +1137,7 @@ END_TEST
 START_TEST(test_metadata_oauth_provider_parse_mtls) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	oidc_json_t *j =
 	    json_pack("{s:s,s:s,s:[s,s],s:{s:s}}", "issuer", "https://as.example.com", "introspection_endpoint",
@@ -1189,8 +1189,8 @@ END_TEST
 
 /* create a fresh, empty temp dir and configure OIDCMetadataDir to point at it */
 static const char *e2e_make_metadata_dir(request_rec *r) {
-	char *tmpl = apr_psprintf(r->pool, "/tmp/oidc-test-metadata.XXXXXX");
-	ck_assert_msg(mkdtemp(tmpl) != NULL, "could not create temp metadata dir at %s", tmpl);
+	char *tmpl = oidc_test_mkdtemp(r->pool, "oidc-test-metadata");
+	ck_assert_msg(tmpl != NULL, "could not create a temp dir for oidc-test-metadata");
 	cmd_parms *cmd = oidc_test_cmd_get("OIDCMetadataDir");
 	ck_assert_ptr_null(oidc_cmd_metadata_dir_set(cmd, NULL, tmpl));
 	return tmpl;
@@ -1476,7 +1476,7 @@ START_TEST(test_metadata_disk_mtls_aliases_from_conf) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	const char *dir = e2e_make_metadata_dir(r);
-	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *srcdir = oidc_test_srcdir();
 
 	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), OIDC_TEST_METADATA_PKEY_MTLS);
 	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
@@ -1516,7 +1516,7 @@ START_TEST(test_metadata_disk_mtls_aliases_from_conf_dpop) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	const char *dir = e2e_make_metadata_dir(r);
-	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *srcdir = oidc_test_srcdir();
 	oidc_json_t *j = NULL;
 	char *s_json = NULL;
 
@@ -1552,7 +1552,7 @@ START_TEST(test_metadata_disk_mtls_aliases_conf_off) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	const char *dir = e2e_make_metadata_dir(r);
-	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *srcdir = oidc_test_srcdir();
 
 	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.provider", dir), OIDC_TEST_METADATA_PKEY_MTLS);
 	e2e_write_file(r, apr_psprintf(r->pool, "%s/idp.example.com.conf", dir),
@@ -1901,7 +1901,7 @@ START_TEST(test_metadata_conf_parse_string_fields) {
 	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
 
 	/* the tls_client_cert/key setters access(2)-check the path, so point them at real fixtures */
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *cert_path = apr_psprintf(r->pool, "%s/certificate.pem", dir);
 	const char *key_path = apr_psprintf(r->pool, "%s/ecpriv.key", dir);
 
@@ -2381,7 +2381,7 @@ START_TEST(test_metadata_disk_dyn_registration_cert_bound_tokens) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
 	const char *dir = e2e_make_metadata_dir(r);
-	const char *srcdir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *srcdir = oidc_test_srcdir();
 
 	oidc_test_http_response_t resp = {.status_code = 200,
 					  .content_type = "application/json",

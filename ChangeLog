@@ -1,3 +1,14 @@
+09/10/2026
+- test: make the libcheck suites portable: oidc_test_mkdtemp (on
+  apr_temp_dir_get) replaces mkdtemp("/tmp/..."), oidc_test_srcdir replaces the
+  getenv("srcdir") idiom and the __FILE__-derived fixture directory in
+  test_jose, oidc_test_setenv/unsetenv replace setenv/unsetenv (test_metrics),
+  the cache thread calls apr_thread_exit, test_cfg accepts the system temp dir
+  rather than /tmp, the fixture files are kept LF by .gitattributes, and the
+  tests that need symlinks, file permissions, RLIMIT_FSIZE/RLIMIT_NOFILE or
+  fork are compiled on POSIX only (test_cache, test_util); no change in what
+  runs on Linux
+
 09/04/2026
 - metrics: re-read OIDCMetricsCacheJsonMax when the subsystem is re-initialized (graceful restart)
 - session: export a non-reversible fingerprint of the session identifier (the first 16 characters of

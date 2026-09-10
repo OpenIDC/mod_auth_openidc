@@ -54,6 +54,7 @@
 #include "proto/proto.h"
 #include "util.h"
 #include "util/util_cfg.h"
+#include <apr_file_io.h>
 
 // provider
 
@@ -808,9 +809,11 @@ START_TEST(test_cmd_cache_dir) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCCacheDir);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 
-	/* /tmp exists and is a directory => accepted */
-	ck_assert_ptr_null(oidc_cmd_cache_file_dir_set(cmd, NULL, "/tmp"));
-	ck_assert_str_eq(cfg->cache.file_dir, "/tmp");
+	/* the system temp dir exists and is a directory => accepted */
+	const char *tmp = NULL;
+	ck_assert_int_eq(apr_temp_dir_get(&tmp, oidc_test_pool_get()), APR_SUCCESS);
+	ck_assert_ptr_null(oidc_cmd_cache_file_dir_set(cmd, NULL, tmp));
+	ck_assert_str_eq(cfg->cache.file_dir, tmp);
 
 	/* a path that does not exist is rejected */
 	ck_assert_ptr_nonnull(oidc_cmd_cache_file_dir_set(cmd, NULL, "/nonexistent/path/that/should/not/be/there"));
@@ -871,7 +874,7 @@ END_TEST
 START_TEST(test_cfg_parse_public_key_files) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	apr_array_header_t *keys = NULL;
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	/* successful load of a real X.509/PEM via "<kid>#<filename>" */
 	const char *arg = apr_psprintf(pool, "rsa-1#%s/public.pem", dir);
@@ -893,7 +896,7 @@ END_TEST
 
 START_TEST(test_cfg_parse_key_files_alg) {
 	apr_pool_t *pool = oidc_test_pool_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	oidc_jose_error_t err;
 	char *s_json = NULL;
 
@@ -1210,7 +1213,7 @@ START_TEST(test_cmd_provider_token_endpoint_tls) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *cert = apr_psprintf(r->pool, "%s/certificate.pem", dir);
 	const char *key = apr_psprintf(r->pool, "%s/private.pem", dir);
 
@@ -1235,7 +1238,7 @@ END_TEST
 START_TEST(test_cmd_oauth_introspection_endpoint_tls) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *cert = apr_psprintf(r->pool, "%s/certificate.pem", dir);
 	const char *key = apr_psprintf(r->pool, "%s/private.pem", dir);
 
@@ -1259,7 +1262,7 @@ START_TEST(test_cmd_provider_metadata_only_setters) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	/* client_keys: parsed from public key files like OIDCPublicKeyFiles */
 	cmd_parms *cmd = oidc_test_cmd_get("OIDCProviderClientKeys");
@@ -1286,7 +1289,7 @@ END_TEST
 START_TEST(test_cmd_public_keys) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPublicKeyFiles);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	const char *arg = apr_psprintf(cmd->pool, "rsa-1#%s/public.pem", dir);
 	ck_assert_ptr_null(oidc_cmd_public_keys_set(cmd, NULL, arg));
@@ -1383,7 +1386,7 @@ END_TEST
 START_TEST(test_cmd_post_preserve_templates) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCPreservePostTemplates);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	const char *preserve = apr_psprintf(cmd->pool, "%s/post_preserve.template", dir);
 	const char *restore = apr_psprintf(cmd->pool, "%s/post_restore.template", dir);
@@ -1398,7 +1401,7 @@ END_TEST
 START_TEST(test_cmd_ca_bundle_path) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCCABundlePath);
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 
 	const char *path = apr_psprintf(cmd->pool, "%s/certificate.pem", dir);
 	ck_assert_ptr_null(oidc_cmd_ca_bundle_path_set(cmd, NULL, path));
@@ -2247,7 +2250,7 @@ END_TEST
 START_TEST(test_cmd_oauth_verify_public_keys) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthVerifyCertFiles);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *arg = apr_psprintf(cmd->pool, "rsa-1#%s/public.pem", dir);
 
 	ck_assert_ptr_null(oidc_cmd_oauth_verify_public_keys_set(cmd, NULL, arg));
@@ -2399,7 +2402,7 @@ START_TEST(test_cmd_provider_verify_and_client_keys) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCProviderVerifyCertFiles);
-	const char *dir = getenv("srcdir") ? getenv("srcdir") : ".";
+	const char *dir = oidc_test_srcdir();
 	const char *arg = apr_psprintf(cmd->pool, "rsa-1#%s/public.pem", dir);
 
 	ck_assert_ptr_null(oidc_cmd_provider_verify_public_keys_set(cmd, NULL, arg));

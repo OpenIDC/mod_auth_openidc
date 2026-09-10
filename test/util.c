@@ -49,6 +49,8 @@
 #include "proto/proto.h"
 #include "session.h"
 #include "util/util.h"
+#include <apr_env.h>
+#include <apr_file_info.h>
 #include <openssl/evp.h>
 
 /* Per-test fixture state; module-level test statics need their own CK_FORK=no reset. */
@@ -219,6 +221,57 @@ void oidc_test_teardown(void) {
 	apr_terminate();
 	request = NULL;
 	pool = NULL;
+}
+
+char *oidc_test_mkdtemp(apr_pool_t *pool, const char *prefix) {
+	static int counter = 0;
+	const char *dir = NULL;
+	char *path = NULL;
+	int i;
+
+	if (apr_temp_dir_get(&dir, pool) != APR_SUCCESS)
+		return NULL;
+
+	/* the time in microseconds plus a counter is unique enough for a test run; retry the odd
+	 * collision with a run that left its directory behind */
+	for (i = 0; i < 16; i++) {
+		path = apr_psprintf(pool, "%s/%s.%" APR_TIME_T_FMT ".%d", dir, prefix, apr_time_now(), counter++);
+		if (apr_dir_make(path, APR_FPROT_OS_DEFAULT, pool) == APR_SUCCESS)
+			return path;
+	}
+
+	return NULL;
+}
+
+const char *oidc_test_srcdir(void) {
+	static char dir[1024];
+	const char *env = getenv("srcdir");
+	char *p = NULL;
+
+	apr_cpystrn(dir, (env != NULL) ? env : ".", sizeof(dir));
+	for (p = dir; *p != '\0'; p++)
+		if (*p == '\\')
+			*p = '/';
+
+	return dir;
+}
+
+void oidc_test_setenv(apr_pool_t *pool, const char *name, const char *value) {
+#ifdef _WIN32
+	/* apr_env_set goes through SetEnvironmentVariable, which the C runtime's getenv -- what the
+	 * module reads -- does not see; _putenv_s updates both */
+	_putenv_s(name, value);
+#else
+	apr_env_set(name, value, pool);
+#endif
+}
+
+void oidc_test_unsetenv(apr_pool_t *pool, const char *name) {
+#ifdef _WIN32
+	_putenv_s(name, "");
+#else
+	apr_env_delete(name, pool);
+#endif
 }
 
 apr_pool_t *oidc_test_pool_get(void) {
