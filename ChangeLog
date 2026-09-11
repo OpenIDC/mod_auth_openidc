@@ -1,3 +1,9 @@
+09/11/2026
+- implicit flow: the script that posts the fragment parameters to the redirect
+  URI called replace() on each "key=value" element and discarded the result,
+  so its form-encoded "+" to space conversion never took effect; assign the
+  result back
+
 09/10/2026
 - test: make the libcheck suites portable: oidc_test_mkdtemp (on
   apr_temp_dir_get) replaces mkdtemp("/tmp/..."), oidc_test_srcdir replaces the

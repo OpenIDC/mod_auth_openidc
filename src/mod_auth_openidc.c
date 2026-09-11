@@ -926,7 +926,7 @@ static int oidc_javascript_implicit(request_rec *r, oidc_cfg_t *c) {
 	    "      function postOnLoad() {\n"
 	    "        encoded = location.hash.substring(1).split('&');\n"
 	    "        for (i = 0; i < encoded.length; i++) {\n"
-	    "          encoded[i].replace(/\\+/g, ' ');\n"
+	    "          encoded[i] = encoded[i].replace(/\\+/g, ' ');\n"
 	    "          var n = encoded[i].indexOf('=');\n"
 	    "          var input = document.createElement('input');\n"
 	    "          input.type = 'hidden';\n"
