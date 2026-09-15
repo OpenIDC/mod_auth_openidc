@@ -57,12 +57,13 @@ Every target builds three ways from the same `fuzz_*.c`:
    a change in this tree and nowhere else; the project's build script there is one
    line calling this one.
 
-   Three things it has to work around are documented inline, because none are
-   obvious and all three fail late: cjose commits autotools output from a newer
-   automake than the base image has (so always `autoreconf -fi`), `apxs` supplies
-   `-flto` flags that discard the sanitizer-coverage constructors (so `-fno-lto`),
-   and the runner image lacks the builder's distro libraries (so they are copied
-   to `$OUT/lib` behind an `$ORIGIN` rpath).
+   Two things it has to work around are documented inline, because neither is
+   obvious and both fail late: `apxs` supplies `-flto` flags that discard the
+   sanitizer-coverage constructors (so `-fno-lto`), and the runner image lacks the
+   builder's distro libraries (so they are copied to `$OUT/lib` behind an
+   `$ORIGIN` rpath). Every dependency is the distro package, cjose and jansson
+   included: building those two from source for instrumentation tied the nightly
+   build to their upstream build systems, and cjose's move to CMake broke it.
 
    Verified locally with `infra/helper.py build_fuzzers` + `check_build`.
 

@@ -27,42 +27,21 @@
 : "${LIB_FUZZING_ENGINE:=-fsanitize=fuzzer}"
 
 root="$SRC/mod_auth_openidc"
-prefix="$WORK/deps"
-mkdir -p "$prefix"
 
 # ---------------------------------------------------------------------------
-# instrumented dependencies
+# dependencies
 #
-# Only the libraries the targets actually parse through are built from source:
-# jansson (fuzz_json, and every JOSE payload) and cjose (fuzz_jwt). apr,
-# apr-util, openssl, curl and pcre2 come from the distro -- uninstrumented, so
-# ASan still catches our own overflows but coverage stops at their boundary.
-# Promoting those to source builds is the obvious next step if the coverage
-# report shows the frontier sitting there.
+# All of them are the distro packages the Dockerfile installs, cjose and jansson
+# included. Those two used to be built from source under $CFLAGS so the sanitizers
+# and the coverage report could see inside them, but that tied every nightly build
+# to their upstream build systems: when cjose's main branch dropped autotools for
+# CMake (2026-09-12) the autoreconf here failed and no build ran for days. The
+# distro packages are what the module is built and tested against everywhere
+# else, and configure finds cjose through PKG_CHECK_MODULES(CJOSE, cjose), so
+# nothing needs pointing anywhere. The price: ASan only sees this module's own
+# code, and coverage stops at the library boundary -- the parsers behind
+# fuzz_json and fuzz_jwt are exercised as the black boxes the distro ships.
 # ---------------------------------------------------------------------------
-build_dep() {
-	name=$1
-	shift
-	echo "=== building $name"
-	cd "$SRC/$name"
-	# Always regenerate, never reuse a committed ./configure: cjose keeps its
-	# generated autotools files (configure, Makefile.in, aclocal.m4) in git, built
-	# by a newer automake than the base image carries. Reusing them makes make fire
-	# its maintainer rebuild rules and invoke an aclocal-<newer> that is not
-	# installed, which fails the build well after configure has appeared to succeed.
-	autoreconf -fi
-	./configure --prefix="$prefix" --disable-shared --enable-static "$@" >/dev/null
-	make -j"$(nproc)" >/dev/null
-	make install >/dev/null
-	return 0
-}
-
-build_dep jansson
-build_dep cjose --with-jansson="$prefix"
-
-# configure.ac locates cjose with PKG_CHECK_MODULES(CJOSE, cjose) -- there is no
-# --with-cjose; the instrumented build is selected by putting its .pc first
-export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
 # ---------------------------------------------------------------------------
 # the module itself: only the static convenience library is needed. The loadable
@@ -130,11 +109,9 @@ echo "feature flags: ${feature_cflags:-(none)}"
 targets="base64 url jwt json cookie response_header form_params metadata state_cookie jwks discovery_response pem_key backchannel_logout authz_response current_url bearer_token redirect_uri post_preserve strings"
 
 apache_inc=$(apxs -q INCLUDEDIR 2>/dev/null || echo /usr/include/apache2)
-inc="-I$root/src -I$root/test -I$apache_inc -I$prefix/include \
-     $(pkg-config --cflags apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8)"
-libs="$prefix/lib/libcjose.a $prefix/lib/libjansson.a \
-      $(pkg-config --libs apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8) \
-      -lz -lm -lrt -lpthread"
+pkgs="cjose jansson apr-1 apr-util-1 libcrypto libssl libcurl libpcre2-8"
+inc="-I$root/src -I$root/test -I$apache_inc $(pkg-config --cflags $pkgs)"
+libs="$(pkg-config --libs $pkgs) -lz -lm -lrt -lpthread"
 
 for t in $targets; do
 	src="$root/test/fuzz/fuzz_$t.c"
@@ -149,15 +126,11 @@ for t in $targets; do
 done
 
 # ---------------------------------------------------------------------------
-# The runner image is not the builder image: apr, apr-util, curl, openssl and
-# pcre2 come from build-time distro packages that do not exist there, and a
-# target that dynamically links them dies with "error while loading shared
-# libraries" -- which is what check_build reports as a broken build. Ship them
-# next to the binaries; the rpath above resolves them relative to $OUT.
-#
-# Building these from source as static libraries instead would drop the copy and
-# instrument them at the same time; it is the better end state, and the reason
-# this is worth doing first is that it is what makes check_build pass at all.
+# The runner image is not the builder image: cjose, jansson, apr, apr-util,
+# curl, openssl and pcre2 come from build-time distro packages that do not exist
+# there, and a target that dynamically links them dies with "error while loading
+# shared libraries" -- which is what check_build reports as a broken build. Ship
+# them next to the binaries; the rpath above resolves them relative to $OUT.
 # ---------------------------------------------------------------------------
 mkdir -p "$OUT/lib"
 for t in $targets; do
