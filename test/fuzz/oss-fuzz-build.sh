@@ -41,7 +41,46 @@ root="$SRC/mod_auth_openidc"
 # nothing needs pointing anywhere. The price: ASan only sees this module's own
 # code, and coverage stops at the library boundary -- the parsers behind
 # fuzz_json and fuzz_jwt are exercised as the black boxes the distro ships.
+#
+# Transitional: until the Dockerfile that installs libcjose-dev and libjansson-dev
+# is merged (google/oss-fuzz#16139) the previous one is what builds the image,
+# and it clones both trees into $SRC instead. So that the two halves of the
+# switch can land in either order, build whatever was cloned -- provided it
+# still has an autotools build, which is what OpenIDC/cjose's default branch
+# (0.8.x) carries -- and put its pkg-config files first. Once the clones are
+# gone this block is a no-op and can be deleted.
 # ---------------------------------------------------------------------------
+prefix="$WORK/deps"
+
+build_dep() {
+	name=$1
+	shift
+	echo "=== building $name from $SRC/$name"
+	cd "$SRC/$name"
+	# Always regenerate, never reuse a committed ./configure: cjose keeps its
+	# generated autotools files (configure, Makefile.in, aclocal.m4) in git, built
+	# by a newer automake than the base image carries. Reusing them makes make fire
+	# its maintainer rebuild rules and invoke an aclocal-<newer> that is not
+	# installed, which fails the build well after configure has appeared to succeed.
+	autoreconf -fi
+	./configure --prefix="$prefix" --disable-shared --enable-static "$@" >/dev/null
+	make -j"$(nproc)" >/dev/null
+	make install >/dev/null
+}
+
+if [[ -f "$SRC/jansson/configure.ac" ]]; then
+	build_dep jansson
+fi
+if [[ -f "$SRC/cjose/configure.ac" ]]; then
+	if [[ -f "$prefix/include/jansson.h" ]]; then
+		build_dep cjose --with-jansson="$prefix"
+	else
+		build_dep cjose
+	fi
+fi
+if [[ -d "$prefix/lib/pkgconfig" ]]; then
+	export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+fi
 
 # ---------------------------------------------------------------------------
 # the module itself: only the static convenience library is needed. The loadable

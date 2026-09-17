@@ -64,6 +64,9 @@ Every target builds three ways from the same `fuzz_*.c`:
    `$ORIGIN` rpath). Every dependency is the distro package, cjose and jansson
    included: building those two from source for instrumentation tied the nightly
    build to their upstream build systems, and cjose's move to CMake broke it.
+   Until the project Dockerfile that installs the two packages is merged
+   (google/oss-fuzz#16139) the script still builds whatever the previous
+   Dockerfile cloned into `$SRC`, so the two halves can land in either order.
 
    Verified locally with `infra/helper.py build_fuzzers` + `check_build`.
 
