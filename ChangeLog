@@ -1,3 +1,10 @@
+09/19/2026
+- userinfo: remove the resolution of aggregated and distributed claims (OpenID
+  Connect Core 1.0 section 5.6.2, optional for RPs): it accepted the aggregated
+  JWTs without verifying their signatures and fetched distributed claims from
+  whatever endpoint the userinfo response named; a response that still carries
+  "_claim_names" is now passed on unresolved and a warning is logged
+
 09/11/2026
 - implicit flow: the script that posts the fragment parameters to the redirect
   URI called replace() on each "key=value" element and discarded the result,
