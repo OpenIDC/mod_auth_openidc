@@ -62,12 +62,11 @@ Every target builds three ways from the same `fuzz_*.c`:
    sanitizer-coverage constructors (so `-fno-lto`, except on the introspector
    build, whose analysis is itself an LTO pass and needs the `-flto` it was
    given), and the runner image lacks the builder's distro libraries (so they
-   are copied to `$OUT/lib` behind an `$ORIGIN` rpath). Every dependency is the distro package, cjose and jansson
-   included: building those two from source for instrumentation tied the nightly
-   build to their upstream build systems, and cjose's move to CMake broke it.
-   Until the project Dockerfile that installs the two packages is merged
-   (google/oss-fuzz#16139) the script still builds whatever the previous
-   Dockerfile cloned into `$SRC`, so the two halves can land in either order.
+   are copied to `$OUT/lib` behind an `$ORIGIN` rpath). Every dependency is the
+   distro package except cjose, which the project Dockerfile clones and this
+   script builds under the sanitizer flags: the parsers behind `fuzz_jwt` and
+   `fuzz_jwks` live there, and Ubuntu's 0.6.2.2 carries bugs fixed upstream that
+   ClusterFuzz otherwise files against this project (google/oss-fuzz#16154).
 
    Verified locally with `infra/helper.py build_fuzzers` + `check_build`.
 

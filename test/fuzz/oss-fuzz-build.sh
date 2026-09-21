@@ -31,24 +31,18 @@ root="$SRC/mod_auth_openidc"
 # ---------------------------------------------------------------------------
 # dependencies
 #
-# All of them are the distro packages the Dockerfile installs, cjose and jansson
-# included. Those two used to be built from source under $CFLAGS so the sanitizers
-# and the coverage report could see inside them, but that tied every nightly build
-# to their upstream build systems: when cjose's main branch dropped autotools for
-# CMake (2026-09-12) the autoreconf here failed and no build ran for days. The
-# distro packages are what the module is built and tested against everywhere
-# else, and configure finds cjose through PKG_CHECK_MODULES(CJOSE, cjose), so
-# nothing needs pointing anywhere. The price: ASan only sees this module's own
-# code, and coverage stops at the library boundary -- the parsers behind
-# fuzz_json and fuzz_jwt are exercised as the black boxes the distro ships.
-#
-# Transitional: until the Dockerfile that installs libcjose-dev and libjansson-dev
-# is merged (google/oss-fuzz#16139) the previous one is what builds the image,
-# and it clones both trees into $SRC instead. So that the two halves of the
-# switch can land in either order, build whatever was cloned -- provided it
-# still has an autotools build, which is what OpenIDC/cjose's default branch
-# (0.8.x) carries -- and put its pkg-config files first. Once the clones are
-# gone this block is a no-op and can be deleted.
+# apr, apr-util, curl, openssl, pcre2, zlib and jansson are the distro packages
+# the Dockerfile installs; configure finds them through pkg-config and nothing
+# needs pointing anywhere. cjose is not: the Dockerfile clones OpenIDC/cjose
+# (its default branch, 0.8.x, the 0.8.1 line that still carries the autotools
+# build) into $SRC/cjose and it is built here, static, under $CFLAGS, so that
+# ASan, UBSan and the coverage report see inside it -- the parsers behind
+# fuzz_jwt and fuzz_jwks spend most of their time there -- and because Ubuntu's
+# libcjose 0.6.2.2 carries bugs fixed upstream since 0.6.2.5. The nightlies that
+# used the distro package (2026-09-18 to 09-21) got two of those filed as
+# ClusterFuzz issues against this project and crashed fuzz_jwt's daily coverage
+# merge, which is what google/oss-fuzz#16154 reverted. jansson stays the distro
+# package: nothing has surfaced in it, and cjose links the same one.
 # ---------------------------------------------------------------------------
 prefix="$WORK/deps"
 
@@ -68,19 +62,9 @@ build_dep() {
 	make install >/dev/null
 }
 
-if [[ -f "$SRC/jansson/configure.ac" ]]; then
-	build_dep jansson
-fi
-if [[ -f "$SRC/cjose/configure.ac" ]]; then
-	if [[ -f "$prefix/include/jansson.h" ]]; then
-		build_dep cjose --with-jansson="$prefix"
-	else
-		build_dep cjose
-	fi
-fi
-if [[ -d "$prefix/lib/pkgconfig" ]]; then
-	export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-fi
+[[ -f "$SRC/cjose/configure.ac" ]] || { echo "error: no cjose source tree at $SRC/cjose (the project Dockerfile clones it)" >&2; exit 1; }
+build_dep cjose
+export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
 # ---------------------------------------------------------------------------
 # the module itself: only the static convenience library is needed. The loadable
