@@ -95,6 +95,15 @@ cd "$root"
 # libauth_openidc.a then fails to link with "defined in discarded section". automake
 # puts $(CFLAGS) after $(AM_CFLAGS), so -fno-lto here overrides what apxs supplied.
 #
+# Not on the introspector leg, though: that build carries no sanitizer-coverage
+# instrumentation (compile strips it for coverage and introspector builds), and
+# Fuzz Introspector's own analysis IS an LTO pass -- its CFLAGS are -flto
+# -fuse-ld=gold and the gold plugin writes the fuzzerLogFile-*.data it reports
+# from at link time. A -fno-lto after those switched LTO off, so the pass never
+# ran, the daily correlate step found no data and the step exited 1 behind a
+# `success: true` in the status feed (2026-08-09 through 2026-09-20). Let the
+# introspector flags stand there.
+#
 # -include stddef.h: the builder's apr.h (1.7.2) does not include <stddef.h>, so
 # offsetof is undefined when apr_general.h is preprocessed and APR_OFFSETOF falls
 # back to the &((struct apr_bucket *)NULL)->link idiom inside APR_RING_SENTINEL.
@@ -103,7 +112,11 @@ cd "$root"
 # passes a brigade (APR_BRIGADE_INSERT_TAIL in oidc_util_http_send, the
 # ap_get_brigade stub) on the libfuzzer-undefined leg. With offsetof defined
 # up front APR uses the builtin and the false positive is gone.
-export CFLAGS="$CFLAGS -fno-lto -include stddef.h"
+lto_cflags="-fno-lto"
+if [[ "${SANITIZER:-}" == "introspector" ]]; then
+	lto_cflags=""
+fi
+export CFLAGS="$CFLAGS $lto_cflags -include stddef.h"
 
 ./autogen.sh
 ./configure \

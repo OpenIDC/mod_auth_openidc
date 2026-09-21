@@ -59,9 +59,10 @@ Every target builds three ways from the same `fuzz_*.c`:
 
    Two things it has to work around are documented inline, because neither is
    obvious and both fail late: `apxs` supplies `-flto` flags that discard the
-   sanitizer-coverage constructors (so `-fno-lto`), and the runner image lacks the
-   builder's distro libraries (so they are copied to `$OUT/lib` behind an
-   `$ORIGIN` rpath). Every dependency is the distro package, cjose and jansson
+   sanitizer-coverage constructors (so `-fno-lto`, except on the introspector
+   build, whose analysis is itself an LTO pass and needs the `-flto` it was
+   given), and the runner image lacks the builder's distro libraries (so they
+   are copied to `$OUT/lib` behind an `$ORIGIN` rpath). Every dependency is the distro package, cjose and jansson
    included: building those two from source for instrumentation tied the nightly
    build to their upstream build systems, and cjose's move to CMake broke it.
    Until the project Dockerfile that installs the two packages is merged
