@@ -1444,6 +1444,34 @@ START_TEST(test_metadata_client_parse_response_type_explicitly_set) {
 }
 END_TEST
 
+/* client_secret and the token endpoint key password from metadata are stored as is */
+START_TEST(test_metadata_passphrase_verbatim) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_test_exec_line_prime("value-from-exec");
+
+	oidc_json_t *j_conf = NULL;
+	ck_assert_int_eq(
+	    oidc_json_decode_object(r, "{\"token_endpoint_tls_client_key_pwd\":\"exec:/bin/echo value\"}", &j_conf),
+	    TRUE);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j_conf, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider), "exec:/bin/echo value");
+	oidc_json_decref(j_conf);
+
+	oidc_json_t *j_client = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(
+			     r, "{\"client_id\":\"rp-test\",\"client_secret\":\"exec:/bin/echo value\"}", &j_client),
+			 TRUE);
+	ck_assert_int_eq(oidc_metadata_client_parse(r, c, j_client, provider), TRUE);
+	ck_assert_str_eq(oidc_cfg_provider_client_secret_get(provider), "exec:/bin/echo value");
+	oidc_json_decref(j_client);
+
+	oidc_test_exec_line_prime(NULL);
+}
+END_TEST
+
 /* conf metadata without an explicit "response_type" must leave it unset so the client-metadata
  * fallback still runs; conf_parse runs before client_parse, exactly as oidc_metadata_get() does */
 START_TEST(test_metadata_conf_then_client_response_type_fallback) {
@@ -2540,6 +2568,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_post_logout_redirect_uris);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_not_advertised);
 	tcase_add_test(disk, test_metadata_client_parse_response_type_explicitly_set);
+	tcase_add_test(disk, test_metadata_passphrase_verbatim);
 	tcase_add_test(disk, test_metadata_conf_then_client_response_type_fallback);
 	tcase_add_test(disk, test_metadata_disk_client_secret_expired);
 	tcase_add_test(disk, test_metadata_disk_client_secret_never_expires);

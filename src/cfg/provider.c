@@ -257,14 +257,30 @@ struct oidc_provider_t {
 
 /*
  * passphrases
+ *
+ * "exec:" handling is part of the configuration directive; the setter, which provider/client
+ * metadata is applied with as well, stores the value as is
  */
 #define OIDC_PROVIDER_TYPE_MEMBER_FUNCS_PASSPHRASE(member)                                                             \
                                                                                                                        \
 	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \
-		return oidc_cfg_parse_passphrase(pool, arg, &provider->member);                                        \
+		provider->member = apr_pstrdup(pool, arg);                                                             \
+		return NULL;                                                                                           \
 	}                                                                                                              \
                                                                                                                        \
-	OIDC_PROVIDER_MEMBER_FUNCS_TYPE_DEF(member, const char *, NULL)
+	const char *oidc_cmd_provider_##member##_set(cmd_parms *cmd, void *ptr, const char *arg) {                     \
+		oidc_cfg_t *cfg =                                                                                      \
+		    (oidc_cfg_t *)ap_get_module_config(cmd->server->module_config, &auth_openidc_module);              \
+		char *passphrase = NULL;                                                                               \
+		const char *rv = oidc_cfg_parse_passphrase(cmd->pool, arg, &passphrase);                               \
+		if (rv == NULL)                                                                                        \
+			rv = oidc_cfg_provider_##member##_set(cmd->pool, cfg->provider, passphrase);                   \
+		return OIDC_CONFIG_DIR_RV(cmd, rv);                                                                    \
+	}                                                                                                              \
+                                                                                                                       \
+	const char *oidc_cfg_provider_##member##_get(const oidc_provider_t *provider) {                                \
+		return provider->member;                                                                               \
+	}
 
 OIDC_PROVIDER_TYPE_MEMBER_FUNCS_PASSPHRASE(client_secret)
 OIDC_PROVIDER_TYPE_MEMBER_FUNCS_PASSPHRASE(token_endpoint_tls_client_key_pwd)

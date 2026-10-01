@@ -1,3 +1,12 @@
+10/01/2026
+- security: honor the "exec:" prefix of OIDCClientSecret and
+  OIDCClientTokenEndpointKeyPassword only when set as a configuration directive;
+  since 2.4.16 the same setter also applied it to the "client_secret" of client
+  metadata (e.g. a Dynamic Client Registration response) and to
+  "token_endpoint_tls_client_key_pwd" in provider .conf metadata, so an OP
+  could have an arbitrary command executed on the RP host; reported by
+  ivantsepp (GHSA-j3g4-73w8-p842)
+
 09/19/2026
 - userinfo: remove the resolution of aggregated and distributed claims (OpenID
   Connect Core 1.0 section 5.6.2, optional for RPs): it accepted the aggregated

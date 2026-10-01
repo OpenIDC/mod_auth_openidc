@@ -1118,6 +1118,40 @@ START_TEST(test_cmd_crypto_passphrase_exec) {
 }
 END_TEST
 
+/* exec: for the provider passphrase directives; the setters store the value as is */
+START_TEST(test_cmd_provider_passphrase_exec) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCClientSecret);
+	const char *rv = NULL;
+
+	oidc_test_exec_line_prime("secret-from-exec");
+	ck_assert_ptr_null(oidc_cmd_provider_client_secret_set(cmd, NULL, "exec:/bin/echo secret-from-exec"));
+	ck_assert_str_eq(oidc_cfg_provider_client_secret_get(provider), "secret-from-exec");
+
+	cmd = oidc_test_cmd_get(OIDCClientTokenEndpointKeyPassword);
+	oidc_test_exec_line_prime("keypwd-from-exec");
+	ck_assert_ptr_null(
+	    oidc_cmd_provider_token_endpoint_tls_client_key_pwd_set(cmd, NULL, "exec:/bin/echo keypwd-from-exec"));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider), "keypwd-from-exec");
+
+	/* a failing command is reported for the directive */
+	oidc_test_exec_line_prime(NULL);
+	rv = oidc_cmd_provider_token_endpoint_tls_client_key_pwd_set(cmd, NULL, "exec:/no/such/command");
+	ck_assert_ptr_nonnull(rv);
+	ck_assert_ptr_nonnull(_oidc_strstr(rv, "Unable to get passphrase"));
+
+	/* the setters store the value as is */
+	oidc_test_exec_line_prime("value-from-exec");
+	ck_assert_ptr_null(oidc_cfg_provider_client_secret_set(cmd->pool, provider, "exec:/bin/echo value"));
+	ck_assert_str_eq(oidc_cfg_provider_client_secret_get(provider), "exec:/bin/echo value");
+	ck_assert_ptr_null(
+	    oidc_cfg_provider_token_endpoint_tls_client_key_pwd_set(cmd->pool, provider, "exec:/bin/echo value"));
+	ck_assert_str_eq(oidc_cfg_provider_token_endpoint_tls_client_key_pwd_get(provider), "exec:/bin/echo value");
+	oidc_test_exec_line_prime(NULL);
+}
+END_TEST
+
 START_TEST(test_cmd_outgoing_proxy) {
 	cmd_parms *cmd = oidc_test_cmd_get(OIDCOutgoingProxy);
 
@@ -2456,6 +2490,7 @@ int main(void) {
 	tcase_add_test(core, test_cmd_oauth_decrypt_shared_keys);
 	tcase_add_test(core, test_cmd_crypto_passphrase);
 	tcase_add_test(core, test_cmd_crypto_passphrase_exec);
+	tcase_add_test(core, test_cmd_provider_passphrase_exec);
 	tcase_add_test(core, test_cmd_outgoing_proxy);
 	tcase_add_test(core, test_cmd_cookie_domain);
 	tcase_add_test(core, test_cmd_session_inactivity_timeout);
