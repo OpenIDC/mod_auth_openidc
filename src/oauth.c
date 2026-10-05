@@ -387,9 +387,8 @@ static apr_byte_t oidc_oauth_cache_key_add_jwks(request_rec *r, const oidc_cfg_t
 	apr_array_header_t *keys = apr_array_make(r->pool, 4, sizeof(const char *));
 	oidc_jose_error_t err;
 	char *s_json = NULL;
-	int i = 0;
 
-	for (i = 0; (public_keys != NULL) && (i < public_keys->nelts); i++) {
+	for (int i = 0; (public_keys != NULL) && (i < public_keys->nelts); i++) {
 		if (oidc_jwk_to_json(r->pool, APR_ARRAY_IDX(public_keys, i, const oidc_jwk_t *), &s_json, &err) ==
 		    FALSE)
 			goto error;
@@ -398,9 +397,9 @@ static apr_byte_t oidc_oauth_cache_key_add_jwks(request_rec *r, const oidc_cfg_t
 
 	for (apr_hash_index_t *hi = (shared_keys != NULL) ? apr_hash_first(r->pool, shared_keys) : NULL; hi != NULL;
 	     hi = apr_hash_next(hi)) {
-		const oidc_jwk_t *jwk = NULL;
-		apr_hash_this(hi, NULL, NULL, (void **)&jwk);
-		if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == FALSE)
+		void *jwk = NULL;
+		apr_hash_this(hi, NULL, NULL, &jwk);
+		if (oidc_jwk_to_json(r->pool, (const oidc_jwk_t *)jwk, &s_json, &err) == FALSE)
 			goto error;
 		APR_ARRAY_PUSH(keys, const char *) = s_json;
 	}
@@ -445,7 +444,7 @@ const char *oidc_oauth_cache_key(request_rec *r, const oidc_cfg_t *c, const char
 /*
  * cache the OAuth 2.0 introspection results for the specified access token
  */
-static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, apr_time_t cache_until,
+static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, const oidc_cfg_t *c, apr_time_t cache_until,
 						const char *access_token, oidc_json_t *json) {
 
 	/* no cache mode */
@@ -479,7 +478,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 /*
  * retrieve the OAuth 2.0 introspection results from the cache, for a previously introspected access token
  */
-static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t *c, const char *access_token,
+static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, const oidc_cfg_t *c, const char *access_token,
 						     oidc_json_t **json) {
 	oidc_json_t *cache_entry = NULL;
 	char *s_cache_entry = NULL;
@@ -899,7 +898,7 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, const oidc_cfg_t *
  * handle "special" requests directed at the Redirect URI (JWKS, remove-access-token-cache);
  * returns the status to send back, or DECLINED if not a special request
  */
-static int oidc_oauth_check_userid_redirect_uri(request_rec *r, oidc_cfg_t *c) {
+static int oidc_oauth_check_userid_redirect_uri(request_rec *r, const oidc_cfg_t *c) {
 	if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
 		/*

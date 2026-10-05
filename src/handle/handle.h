@@ -128,7 +128,7 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 
 // revoke.c
 int oidc_revoke_session(request_rec *r, const oidc_cfg_t *c);
-int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c);
+int oidc_revoke_at_cache_remove(request_rec *r, const oidc_cfg_t *c);
 
 // session_management.c
 int oidc_session_management(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
