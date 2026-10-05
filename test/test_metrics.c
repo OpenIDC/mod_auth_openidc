@@ -229,8 +229,15 @@ static void e2e_force_metrics_flush(request_rec *r, oidc_cfg_t *c) {
 	apr_sleep(apr_time_from_msec(1));
 	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
 	/* the thread first sleeps up to 100ms of randomized jitter, then one flush tick of
-	 * OIDC_METRICS_CACHE_STORAGE_INTERVAL (=100ms here); 300ms covers both with slack for CI */
-	apr_sleep(apr_time_from_msec(300));
+	 * OIDC_METRICS_CACHE_STORAGE_INTERVAL (=100ms here); a fixed sleep races that on a
+	 * loaded builder, so poll the "internal" handler, which returns NOT_FOUND until the
+	 * shm holds the flushed JSON */
+	int waited = 0;
+	r->args = "format=internal&reset=false";
+	while ((oidc_metrics_handle_request(r) != OK) && (waited < 5000)) {
+		apr_sleep(apr_time_from_msec(100));
+		waited += 100;
+	}
 }
 
 static void e2e_metrics_setup_flushed(request_rec *r) {
