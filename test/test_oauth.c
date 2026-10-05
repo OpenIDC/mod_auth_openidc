@@ -1102,26 +1102,42 @@ START_TEST(test_oauth_metadata_does_not_mutate_shared_config) {
 }
 END_TEST
 
-/* sub-requests and internal redirects recycle the user from the initial request */
+/* sub-requests and internal redirects do not recycle the user from the initial request: the
+ * user set by another module or configuration must not satisfy this location's authentication */
 START_TEST(test_oauth_check_userid_subrequest) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
-	r->user = apr_pstrdup(r->pool, "alice");
+	const char *secret = e2e_setup_jwt_validation(r, c);
 
+	/* an authenticated user, and the empty user set by an anonymous "pass" location */
+	const char *users[] = {"alice", ""};
+	for (int i = 0; i < 2; i++) {
+		r->user = apr_pstrdup(r->pool, users[i]);
+
+		request_rec *sub = apr_pmemdup(r->pool, r, sizeof(request_rec));
+		sub->main = r;
+		sub->prev = NULL;
+		sub->user = NULL;
+		ck_assert_int_eq(oidc_oauth_check_userid(sub, c, NULL), HTTP_UNAUTHORIZED);
+		ck_assert_ptr_null(sub->user);
+
+		request_rec *redir = apr_pmemdup(r->pool, r, sizeof(request_rec));
+		redir->main = NULL;
+		redir->prev = r;
+		redir->user = NULL;
+		ck_assert_int_eq(oidc_oauth_check_userid(redir, c, NULL), HTTP_UNAUTHORIZED);
+		ck_assert_ptr_null(redir->user);
+	}
+
+	/* a sub-request that carries a valid bearer token is authenticated on its own merits */
+	r->user = apr_pstrdup(r->pool, "mallory");
 	request_rec *sub = apr_pmemdup(r->pool, r, sizeof(request_rec));
 	sub->main = r;
+	sub->prev = NULL;
 	sub->user = NULL;
-	ck_assert_int_eq(oidc_oauth_check_userid(sub, c, NULL), OK);
+	ck_assert_int_eq(oidc_oauth_check_userid(sub, c, e2e_sign_jwt_access_token_hs256(r, secret, 300)), OK);
 	ck_assert_ptr_nonnull(sub->user);
 	ck_assert_str_eq(sub->user, "alice");
-
-	request_rec *redir = apr_pmemdup(r->pool, r, sizeof(request_rec));
-	redir->prev = r;
-	redir->main = NULL;
-	redir->user = NULL;
-	ck_assert_int_eq(oidc_oauth_check_userid(redir, c, NULL), OK);
-	ck_assert_ptr_nonnull(redir->user);
-	ck_assert_str_eq(redir->user, "alice");
 }
 END_TEST
 

@@ -131,7 +131,6 @@ apr_byte_t oidc_enabled(request_rec *r, oidc_cfg_t *c);
 
 void oidc_scrub_headers(request_rec *r);
 void oidc_strip_cookies(request_rec *r);
-apr_byte_t oidc_subrequest_recycle_user(request_rec *r);
 apr_byte_t oidc_get_remote_user(request_rec *r, const char *claim_name, const char *replace, const char *reg_exp,
 				const oidc_json_t *json, char **request_user);
 apr_byte_t oidc_get_provider_from_session(request_rec *r, oidc_cfg_t *c, const oidc_session_t *session,

@@ -4215,76 +4215,32 @@ END_TEST
  * oidc_enabled is TRUE and the dispatcher routes to the OIDC branch.
  */
 
-START_TEST(test_handle_check_user_id_subrequest_recycles_user) {
+START_TEST(test_handle_check_user_id_subrequest_does_not_recycle_user) {
 	request_rec *r = oidc_test_request_get();
 
-	/* a sub-request (r->main set) recycles the authenticated user from the main request;
-	 * ap_is_initial_req in the stub keys off main/prev being NULL */
-	r->user = apr_pstrdup(r->pool, "alice");
-	request_rec subr = *r;
-	subr.main = r;
-	subr.prev = NULL;
-	subr.user = NULL;
-	ck_assert_int_eq(oidc_check_user_id(&subr), OK);
-	ck_assert_ptr_nonnull(subr.user);
-	ck_assert_str_eq(subr.user, "alice");
+	/* neither a user authenticated by another module or configuration, nor the empty user set
+	 * by an anonymous "pass" location, may satisfy this location's authentication on a sub-request
+	 * (r->main set) or an internally-redirected request (r->prev set); without a session of its
+	 * own the request falls through to the regular unauthenticated handling (not auth-capable =>
+	 * 401); ap_is_initial_req in the stub keys off main/prev being NULL */
+	const char *users[] = {"alice", "", NULL};
+	for (int i = 0; i < 3; i++) {
+		r->user = users[i] ? apr_pstrdup(r->pool, users[i]) : NULL;
 
-	/* an internally-redirected request (r->prev set) recycles from the previous request */
-	request_rec subr2 = *r;
-	subr2.main = NULL;
-	subr2.prev = r;
-	subr2.user = NULL;
-	ck_assert_int_eq(oidc_check_user_id(&subr2), OK);
-	ck_assert_ptr_nonnull(subr2.user);
-	ck_assert_str_eq(subr2.user, "alice");
+		request_rec subr = *r;
+		subr.main = r;
+		subr.prev = NULL;
+		subr.user = NULL;
+		ck_assert_int_eq(oidc_check_user_id(&subr), HTTP_UNAUTHORIZED);
+		ck_assert_ptr_null(subr.user);
 
-	/* a sub-request whose main request carries no user cannot recycle and falls through
-	 * to the regular unauthenticated handling (not auth-capable => 401) */
-	r->user = NULL;
-	request_rec subr3 = *r;
-	subr3.main = r;
-	subr3.prev = NULL;
-	ck_assert_int_eq(oidc_check_user_id(&subr3), HTTP_UNAUTHORIZED);
-}
-END_TEST
-
-/* an internally-redirected request restores the parsed token state from the previous
- * request's still-alive state instead of re-loading and re-parsing the session */
-START_TEST(test_handle_check_user_id_internal_redirect_restores_state) {
-	request_rec *r = oidc_test_request_get();
-
-	/* seed the "previous" request's state with parsed token state */
-	oidc_json_t *j = NULL;
-	ck_assert_int_eq(oidc_json_decode_object(r, "{\"sub\":\"alice\",\"iss\":\"https://idp.example.com\"}", &j),
-			 TRUE);
-	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, j);
-	oidc_json_decref(j);
-	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SCOPE, "openid email");
-	r->user = apr_pstrdup(r->pool, "alice");
-
-	/* the internally-redirected request has its own pool - and thus starts with an empty
-	 * request-state hash - and carries no session cookie to fall back to */
-	request_rec redir = *r;
-	redir.main = NULL;
-	redir.prev = r;
-	redir.user = NULL;
-	apr_pool_create(&redir.pool, r->pool);
-	redir.headers_in = apr_table_copy(redir.pool, r->headers_in);
-	apr_table_unset(redir.headers_in, "Cookie");
-
-	ck_assert_int_eq(oidc_check_user_id(&redir), OK);
-	ck_assert_ptr_nonnull(redir.user);
-	ck_assert_str_eq(redir.user, "alice");
-
-	/* the id_token claims and the scope must have been restored from the previous request */
-	oidc_json_t *restored = oidc_request_state_json_get(&redir, OIDC_REQUEST_STATE_KEY_IDTOKEN);
-	ck_assert_ptr_nonnull(restored);
-	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(restored, "sub")), "alice");
-	const char *scope = oidc_request_state_get(&redir, OIDC_REQUEST_STATE_KEY_SCOPE);
-	ck_assert_ptr_nonnull(scope);
-	ck_assert_str_eq(scope, "openid email");
-
-	apr_pool_destroy(redir.pool);
+		request_rec subr2 = *r;
+		subr2.main = NULL;
+		subr2.prev = r;
+		subr2.user = NULL;
+		ck_assert_int_eq(oidc_check_user_id(&subr2), HTTP_UNAUTHORIZED);
+		ck_assert_ptr_null(subr2.user);
+	}
 }
 END_TEST
 
@@ -7027,8 +6983,7 @@ int main(void) {
 
 	TCase *checkuid = tcase_create("check_user_id");
 	tcase_add_checked_fixture(checkuid, oidc_test_setup, oidc_test_teardown);
-	tcase_add_test(checkuid, test_handle_check_user_id_subrequest_recycles_user);
-	tcase_add_test(checkuid, test_handle_check_user_id_internal_redirect_restores_state);
+	tcase_add_test(checkuid, test_handle_check_user_id_subrequest_does_not_recycle_user);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_redirects_to_op);
 	tcase_add_test(checkuid, test_handle_check_user_id_unauthenticated_not_auth_capable);
 	tcase_add_test(checkuid, test_handle_check_user_id_redirect_uri);

@@ -1138,77 +1138,6 @@ int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session
 }
 
 /*
- * on a sub-request, try to recycle the authenticated user from the main/prev request;
- * returns TRUE if the user could be recycled and the caller should return OK
- */
-/*
- * recycle r->user from the main (or previous, on internal redirect) request into a sub-request;
- * returns FALSE when there is no user to recycle
- */
-apr_byte_t oidc_subrequest_recycle_user(request_rec *r) {
-	if (r->main != NULL)
-		r->user = r->main->user;
-	else if (r->prev != NULL)
-		r->user = r->prev->user;
-
-	if (r->user == NULL)
-		return FALSE;
-
-	oidc_debug(r, "recycling user '%s' from initial request for sub-request", r->user);
-
-	return TRUE;
-}
-
-/* Restore parsed token state from the previous request after an internal redirect. */
-static apr_byte_t oidc_copy_tokens_from_prev_request_state(request_rec *r) {
-	const oidc_json_t *id_token = NULL;
-	const oidc_json_t *claims = NULL;
-	const char *scope = NULL;
-
-	if (r->prev == NULL)
-		return FALSE;
-
-	id_token = oidc_request_state_json_get(r->prev, OIDC_REQUEST_STATE_KEY_IDTOKEN);
-	if (id_token == NULL)
-		return FALSE;
-
-	/* the (shallow) copies take their own JSON references, so the restored state stays valid
-	 * independent of the previous request's cleanup order */
-	oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_IDTOKEN, id_token);
-
-	claims = oidc_request_state_json_get(r->prev, OIDC_REQUEST_STATE_KEY_CLAIMS);
-	if (claims != NULL)
-		oidc_request_state_json_set(r, OIDC_REQUEST_STATE_KEY_CLAIMS, claims);
-
-	scope = oidc_request_state_get(r->prev, OIDC_REQUEST_STATE_KEY_SCOPE);
-	if (scope != NULL)
-		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_SCOPE, apr_pstrdup(r->pool, scope));
-
-	oidc_debug(r, "restored the token request state from the previous request on this internal redirect");
-
-	return TRUE;
-}
-
-static apr_byte_t oidc_check_userid_openidc_subreq(request_rec *r) {
-	/* this is a sub-request and we may have a session (headers will have been scrubbed and set already) */
-	if (oidc_subrequest_recycle_user(r) == FALSE)
-		return FALSE;
-
-	/* apparently request state can get lost in sub-requests, so see if id_token/claims need to be restored,
-	 * preferably from the previous request's parsed state, falling back to a full session load */
-	if ((oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_IDTOKEN) == NULL) &&
-	    (oidc_copy_tokens_from_prev_request_state(r) == FALSE)) {
-		oidc_session_t *session = NULL;
-		oidc_session_load(r, &session);
-		oidc_copy_tokens_to_request_state(r, session);
-		oidc_session_free(r, session);
-	}
-
-	oidc_strip_cookies(r);
-	return TRUE;
-}
-
-/*
  * handle a request to the redirect URI: dispatch, optionally retain the session and free, then return rc
  */
 static int oidc_check_userid_openidc_redirect_uri(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
@@ -1253,9 +1182,11 @@ static int oidc_check_userid_openidc(request_rec *r, oidc_cfg_t *c) {
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	/* on a sub-request, try to recycle the user from the main/prev request; fall through if it cannot */
-	if (!ap_is_initial_req(r) && (oidc_check_userid_openidc_subreq(r) == TRUE))
-		return OK;
+	/*
+	 * NB: do not recycle r->user from r->main/r->prev on sub-requests or internal redirects:
+	 * Apache core already does that when the per-directory configuration is identical and only
+	 * runs this hook when it differs, in which case this location's authentication must be applied
+	 */
 
 	/* load the session from the request state; this will be a new "empty" session if no state exists */
 	oidc_session_t *session = NULL;

@@ -5,6 +5,22 @@
   OIDCCryptoPassphrase would otherwise accept a token from the cache that they
   would reject when validating it themselves; reported by Yonghwa Lee, Xint by
   Theori (GHSA-gwg9-pmp9-m6wv)
+- security: do not recycle the user from the main/previous request in
+  sub-requests and internal redirects, for both "openid-connect" and "oauth20";
+  any non-NULL r->user, including the empty user set for anonymous users by
+  OIDCUnAuthAction pass or a user authenticated by another module or
+  configuration, was accepted for a separately protected location reached
+  through e.g. DirectoryIndex or a WebDAV COPY/MOVE Destination, without a
+  session or a valid access token; Apache core already reuses the user when
+  the per-directory configuration is identical, so the target location's
+  authentication is now always applied; reported by Yonghwa Lee, Xint by Theori
+  (GHSA-98m5-m556-8684)
+  NB: the user and the id_token/claims are no longer carried over into a
+  sub-request or internal redirect to a location with a different
+  configuration: the session is loaded again, so a deployment that lists the
+  session cookie in OIDCStripCookies, or a request that only carried the access
+  token in a POST body or query parameter, will now be asked to (re-)
+  authenticate there instead of inheriting the user
 
 10/01/2026
 - security: honor the "exec:" prefix of OIDCClientSecret and

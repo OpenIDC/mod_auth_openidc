@@ -896,18 +896,6 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, const oidc_cfg_t *
 }
 
 /*
- * sub-request handling: recycle the user from the initial request when available;
- * returns OK if handled, DECLINED to continue the main flow
- */
-static int oidc_oauth_check_userid_subrequest(request_rec *r) {
-	if (oidc_subrequest_recycle_user(r) == FALSE)
-		return DECLINED;
-
-	oidc_strip_cookies(r);
-	return OK;
-}
-
-/*
  * handle "special" requests directed at the Redirect URI (JWKS, remove-access-token-cache);
  * returns the status to send back, or DECLINED if not a special request
  */
@@ -967,10 +955,12 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 	char *s_token = NULL;
 	int rv = DECLINED;
 
-	/* check if this is a sub-request or an initial request */
-	if (!ap_is_initial_req(r))
-		rv = oidc_oauth_check_userid_subrequest(r);
-	else if (oidc_util_url_matches_redirect_uri(r, c) == TRUE)
+	/*
+	 * NB: do not recycle r->user from r->main/r->prev on sub-requests or internal redirects:
+	 * Apache core already does that when the per-directory configuration is identical and only
+	 * runs this hook when it differs, in which case the bearer token must be validated here
+	 */
+	if (ap_is_initial_req(r) && (oidc_util_url_matches_redirect_uri(r, c) == TRUE))
 		rv = oidc_oauth_check_userid_redirect_uri(r, c);
 	if (rv != DECLINED)
 		return rv;
