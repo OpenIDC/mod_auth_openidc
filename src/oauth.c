@@ -369,6 +369,79 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 #define OIDC_OAUTH_CACHE_KEY_RESPONSE "r"
 #define OIDC_OAUTH_CACHE_KEY_TIMESTAMP "t"
 
+static const char *oidc_oauth_cache_key_str(const char *s) {
+	return (s != NULL) ? s : "";
+}
+
+static int oidc_oauth_cache_key_cmp(const void *a, const void *b) {
+	return _oidc_strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+/*
+ * add the JSON serialization of each local verification key, sorted so that the result does not
+ * depend on configuration order or on the iteration order of the shared key hash table
+ */
+static apr_byte_t oidc_oauth_cache_key_add_jwks(request_rec *r, const oidc_cfg_t *c, apr_array_header_t *parts) {
+	const apr_array_header_t *public_keys = oidc_cfg_oauth_verify_public_keys_get(c);
+	apr_hash_t *shared_keys = oidc_cfg_oauth_verify_shared_keys_get(c);
+	apr_array_header_t *keys = apr_array_make(r->pool, 4, sizeof(const char *));
+	oidc_jose_error_t err;
+	char *s_json = NULL;
+	int i = 0;
+
+	for (i = 0; (public_keys != NULL) && (i < public_keys->nelts); i++) {
+		if (oidc_jwk_to_json(r->pool, APR_ARRAY_IDX(public_keys, i, const oidc_jwk_t *), &s_json, &err) ==
+		    FALSE)
+			goto error;
+		APR_ARRAY_PUSH(keys, const char *) = s_json;
+	}
+
+	for (apr_hash_index_t *hi = (shared_keys != NULL) ? apr_hash_first(r->pool, shared_keys) : NULL; hi != NULL;
+	     hi = apr_hash_next(hi)) {
+		const oidc_jwk_t *jwk = NULL;
+		apr_hash_this(hi, NULL, NULL, (void **)&jwk);
+		if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == FALSE)
+			goto error;
+		APR_ARRAY_PUSH(keys, const char *) = s_json;
+	}
+
+	qsort(keys->elts, keys->nelts, keys->elt_size, oidc_oauth_cache_key_cmp);
+	apr_array_cat(parts, keys);
+	return TRUE;
+
+error:
+	oidc_error(r, "oidc_jwk_to_json failed: %s", oidc_jose_e2s(r->pool, err));
+	return FALSE;
+}
+
+/*
+ * return the cache key for the validation result of an access token: the result is only valid for
+ * the verifier that produced it, so bind it to the introspection endpoint and client, or to the
+ * JWKs URI and the local verification keys; returns NULL when the key cannot be constructed
+ */
+const char *oidc_oauth_cache_key(request_rec *r, const oidc_cfg_t *c, const char *access_token) {
+	apr_array_header_t *parts = apr_array_make(r->pool, 8, sizeof(const char *));
+	const char *url = oidc_cfg_oauth_introspection_endpoint_url_get(c);
+	char *binding = NULL;
+
+	if (url != NULL) {
+		APR_ARRAY_PUSH(parts, const char *) = "introspect";
+		APR_ARRAY_PUSH(parts, const char *) = url;
+		APR_ARRAY_PUSH(parts, const char *) = oidc_oauth_cache_key_str(oidc_cfg_oauth_client_id_get(c));
+	} else {
+		APR_ARRAY_PUSH(parts, const char *) = "jwt";
+		APR_ARRAY_PUSH(parts, const char *) = oidc_oauth_cache_key_str(oidc_cfg_oauth_verify_jwks_uri_get(c));
+		if (oidc_oauth_cache_key_add_jwks(r, c, parts) == FALSE)
+			return NULL;
+	}
+
+	if (oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256, apr_array_pstrcat(r->pool, parts, '\n'),
+						       &binding) == FALSE)
+		return NULL;
+
+	return apr_pstrcat(r->pool, binding, ".", access_token, NULL);
+}
+
 /*
  * cache the OAuth 2.0 introspection results for the specified access token
  */
@@ -382,6 +455,10 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 		return TRUE;
 	}
 
+	const char *key = oidc_oauth_cache_key(r, c, access_token);
+	if (key == NULL)
+		return FALSE;
+
 	oidc_debug(r, "caching introspection result");
 
 	oidc_json_t *cache_entry = oidc_json_object();
@@ -392,7 +469,7 @@ static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, oidc_cfg_t *c, a
 
 	/* set it in the cache so subsequent request don't need to validate the access_token and get the claims anymore
 	 */
-	oidc_cache_set_access_token(r, access_token, cache_value, cache_until);
+	oidc_cache_set_access_token(r, key, cache_value, cache_until);
 
 	oidc_json_decref(cache_entry);
 
@@ -413,8 +490,12 @@ static apr_byte_t oidc_oauth_get_cached_access_token(request_rec *r, oidc_cfg_t 
 		return FALSE;
 	}
 
+	const char *key = oidc_oauth_cache_key(r, c, access_token);
+	if (key == NULL)
+		return FALSE;
+
 	/* see if we've got the claims for this access_token cached already */
-	oidc_cache_get_access_token(r, access_token, &s_cache_entry);
+	oidc_cache_get_access_token(r, key, &s_cache_entry);
 
 	if (s_cache_entry == NULL)
 		return FALSE;

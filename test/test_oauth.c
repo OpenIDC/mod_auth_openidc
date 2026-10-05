@@ -489,7 +489,7 @@ START_TEST(test_oauth_check_userid_jwt_validation_cached) {
 	ck_assert_str_eq(r->user, "alice");
 
 	/* the first validation must have populated the access-token cache */
-	oidc_cache_get_access_token(r, access_token, &s_cache_entry);
+	oidc_cache_get_access_token(r, oidc_oauth_cache_key(r, c, access_token), &s_cache_entry);
 	ck_assert_ptr_nonnull(s_cache_entry);
 
 	/* plant a synthetic cache entry for the same token; the next request must then be
@@ -497,7 +497,8 @@ START_TEST(test_oauth_check_userid_jwt_validation_cached) {
 	apr_time_t now = apr_time_sec(apr_time_now());
 	const char *planted = apr_psprintf(
 	    r->pool, "{\"r\":{\"sub\":\"bob\",\"exp\":%" APR_TIME_T_FMT "},\"t\":%" APR_TIME_T_FMT "}", now + 300, now);
-	oidc_cache_set_access_token(r, access_token, planted, apr_time_now() + apr_time_from_sec(300));
+	oidc_cache_set_access_token(r, oidc_oauth_cache_key(r, c, access_token), planted,
+				    apr_time_now() + apr_time_from_sec(300));
 	r->user = NULL;
 	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
 	ck_assert_ptr_nonnull(r->user);
@@ -665,8 +666,8 @@ START_TEST(test_oauth_check_userid_jwt_no_audience_claim) {
 }
 END_TEST
 
-/* the audience is enforced on the cache-hit path as well: the validation cache is keyed on the
- * token and the crypto passphrase, so vhosts binding to different audiences can share entries */
+/* the audience is enforced on the cache-hit path as well: vhosts that verify with the same keys
+ * share validation cache entries even when they bind to different audiences */
 START_TEST(test_oauth_check_userid_jwt_audience_cached) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -688,9 +689,144 @@ START_TEST(test_oauth_check_userid_jwt_audience_cached) {
 			 "{\"r\":{\"sub\":\"bob\",\"aud\":\"https://other-api.example.org\",\"exp\":%" APR_TIME_T_FMT
 			 "},\"t\":%" APR_TIME_T_FMT "}",
 			 now + 300, now);
-	oidc_cache_set_access_token(r, access_token, planted, apr_time_now() + apr_time_from_sec(300));
+	oidc_cache_set_access_token(r, oidc_oauth_cache_key(r, c, access_token), planted,
+				    apr_time_now() + apr_time_from_sec(300));
 	r->user = NULL;
 	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), HTTP_UNAUTHORIZED);
+	ck_assert_ptr_null(r->user);
+}
+END_TEST
+
+/*
+ * Cross-vhost cache binding: a second vhost inherits the test server's cache and crypto passphrase
+ * by merging, but configures its own verifier; a validation result cached by one verifier must
+ * never satisfy another.
+ */
+
+/* create the per-server config of a second vhost on which directives can be set with e2e_vhost_cmd */
+static server_rec *e2e_vhost_create(request_rec *r) {
+	server_rec *s = apr_pmemdup(r->pool, r->server, sizeof(server_rec));
+	s->module_config = apr_pcalloc(r->pool, sizeof(void *) * (auth_openidc_module.module_index + 1));
+	ap_set_module_config(s->module_config, &auth_openidc_module, oidc_cfg_server_create(r->pool, s));
+	return s;
+}
+
+static cmd_parms *e2e_vhost_cmd(server_rec *s, const char *primitive) {
+	cmd_parms *cmd = oidc_test_cmd_get(primitive);
+	cmd->server = s;
+	return cmd;
+}
+
+/* merge the vhost config onto the test server's, as Apache does for a <VirtualHost> */
+static oidc_cfg_t *e2e_vhost_merge(request_rec *r, oidc_cfg_t *base, server_rec *s) {
+	return oidc_cfg_server_merge(r->pool, base, ap_get_module_config(s->module_config, &auth_openidc_module));
+}
+
+static oidc_cfg_t *e2e_vhost_with_shared_key(request_rec *r, oidc_cfg_t *base, const char *secret) {
+	server_rec *s = e2e_vhost_create(r);
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_verify_shared_keys_set(e2e_vhost_cmd(s, OIDCOAuthVerifySharedKeys), NULL, secret));
+	return e2e_vhost_merge(r, base, s);
+}
+
+/* a JWT validated by one vhost must not be accepted from the cache by a vhost with another key */
+START_TEST(test_oauth_check_userid_jwt_cached_other_verifier) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	char *access_token = e2e_sign_jwt_access_token_hs256(r, secret, 300);
+	oidc_cfg_t *other = e2e_vhost_with_shared_key(r, c, "fedcba9876543210fedcba9876543210");
+
+	/* cold: the other vhost rejects the token on its signature */
+	ck_assert_int_eq(oidc_oauth_check_userid(r, other, access_token), HTTP_UNAUTHORIZED);
+
+	/* the vhost that holds the signing key validates it and populates the cache */
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+
+	/* warm: the other vhost must still verify the signature itself */
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, other, access_token), HTTP_UNAUTHORIZED);
+	ck_assert_ptr_null(r->user);
+
+	/* a vhost configured with the same key does share the cached result */
+	oidc_cfg_t *same = e2e_vhost_with_shared_key(r, c, secret);
+	ck_assert_str_eq(oidc_oauth_cache_key(r, same, access_token), oidc_oauth_cache_key(r, c, access_token));
+	ck_assert_ptr_nonnull(oidc_oauth_cache_key(r, other, access_token));
+	ck_assert_str_ne(oidc_oauth_cache_key(r, other, access_token), oidc_oauth_cache_key(r, c, access_token));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, same, access_token), OK);
+	ck_assert_str_eq(r->user, "alice");
+}
+END_TEST
+
+/* an introspection result cached for one introspection endpoint must not satisfy a vhost that
+ * introspects at another endpoint */
+START_TEST(test_oauth_check_userid_introspection_cached_other_endpoint) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	int exp_ts = (int)apr_time_sec(apr_time_now()) + 3600;
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = apr_psprintf(r->pool, "{\"active\":true,\"sub\":\"alice\",\"exp\":%d}", exp_ts)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-OTHER-AS"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* the other vhost's authorization server reports the token as inactive */
+	oidc_test_http_response_t inactive = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"active\":false}"};
+	oidc_test_http_server_t *srv2 = oidc_test_http_server_start(r->pool, &inactive);
+	ck_assert_ptr_nonnull(srv2);
+	server_rec *s = e2e_vhost_create(r);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_url_set(
+	    e2e_vhost_cmd(s, OIDCOAuthIntrospectionEndpoint), NULL, oidc_test_http_server_url(srv2, r->pool)));
+	oidc_cfg_t *other = e2e_vhost_merge(r, c, s);
+
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, other, "AT-OTHER-AS"), HTTP_UNAUTHORIZED);
+	ck_assert_ptr_null(r->user);
+	(void)oidc_test_http_server_wait(srv2);
+	oidc_test_http_server_stop(srv2);
+}
+END_TEST
+
+/* an introspection result must not satisfy a vhost that validates JWTs locally */
+START_TEST(test_oauth_check_userid_introspection_cached_jwt_vhost) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* the test server validates JWTs locally */
+	(void)e2e_setup_jwt_validation(r, c);
+
+	/* a vhost that introspects populates the cache with its result */
+	int exp_ts = (int)apr_time_sec(apr_time_now()) + 3600;
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = apr_psprintf(r->pool, "{\"active\":true,\"sub\":\"alice\",\"exp\":%d}", exp_ts)};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	server_rec *s = e2e_vhost_create(r);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_url_set(
+	    e2e_vhost_cmd(s, OIDCOAuthIntrospectionEndpoint), NULL, oidc_test_http_server_url(srv, r->pool)));
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_ssl_validate_server_set(e2e_vhost_cmd(s, OIDCOAuthSSLValidateServer), NULL, "Off"));
+	oidc_cfg_t *introspecting = e2e_vhost_merge(r, c, s);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, introspecting, "AT-OPAQUE"), OK);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+
+	/* the opaque token is not a JWT signed with the local key */
+	r->user = NULL;
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-OPAQUE"), HTTP_UNAUTHORIZED);
 	ck_assert_ptr_null(r->user);
 }
 END_TEST
@@ -781,7 +917,7 @@ START_TEST(test_oauth_check_userid_jwt_real_exp) {
 	ck_assert_int_eq(oidc_oauth_check_userid(r, c, access_token), OK);
 	ck_assert_str_eq(r->user, "alice");
 
-	oidc_cache_get_access_token(r, access_token, &s_cache_entry);
+	oidc_cache_get_access_token(r, oidc_oauth_cache_key(r, c, access_token), &s_cache_entry);
 	ck_assert_ptr_nonnull(s_cache_entry);
 }
 END_TEST
@@ -1212,9 +1348,11 @@ START_TEST(test_oauth_introspection_cache_negatives) {
 	apr_time_t future = apr_time_now() + apr_time_from_sec(300);
 
 	/* 1: a cached entry that does not decode falls through to a live introspection */
-	ck_assert_int_eq(oidc_cache_set_access_token(r, "AT-CACHE-GARBAGE", "not-json-at-all", future), TRUE);
 	srv = oidc_test_http_server_start(r->pool, &resp);
 	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(
+	    oidc_cache_set_access_token(r, oidc_oauth_cache_key(r, c, "AT-CACHE-GARBAGE"), "not-json-at-all", future),
+	    TRUE);
 	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-CACHE-GARBAGE"), OK);
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
@@ -1224,10 +1362,11 @@ START_TEST(test_oauth_introspection_cache_negatives) {
 	ck_assert_ptr_null(oidc_cmd_dir_token_introspection_interval_set(cmd, dir_cfg, "60"));
 	char *stale = apr_psprintf(r->pool, "{\"r\":{\"active\":true,\"sub\":\"alice\"},\"t\":%d}",
 				   (int)apr_time_sec(apr_time_now()) - 3600);
-	ck_assert_int_eq(oidc_cache_set_access_token(r, "AT-CACHE-STALE", stale, future), TRUE);
 	r->user = NULL;
 	srv = oidc_test_http_server_start(r->pool, &resp);
 	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	ck_assert_int_eq(oidc_cache_set_access_token(r, oidc_oauth_cache_key(r, c, "AT-CACHE-STALE"), stale, future),
+			 TRUE);
 	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-CACHE-STALE"), OK);
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
@@ -1376,6 +1515,8 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_inactive);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_error_response);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached);
+	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached_other_endpoint);
+	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached_jwt_vhost);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_mandatory_real_expiry);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_jwks);
 	tcase_add_test(introspect, test_oauth_check_userid_redirect_uri_remove_at_cache);
@@ -1403,6 +1544,7 @@ int main(void) {
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_audience_array);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_audience_claim);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_audience_cached);
+	tcase_add_test(jwt, test_oauth_check_userid_jwt_cached_other_verifier);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_wrong_issuer);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_matching_issuer);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_issuer_claim);

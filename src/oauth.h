@@ -47,5 +47,6 @@
 
 int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_token);
 apr_byte_t oidc_oauth_get_bearer_token(request_rec *r, const char **access_token);
+const char *oidc_oauth_cache_key(request_rec *r, const oidc_cfg_t *c, const char *access_token);
 
 #endif /* _MOD_AUTH_OPENIDC_OAUTH_H_ */

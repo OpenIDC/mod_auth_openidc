@@ -42,6 +42,7 @@
 
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
+#include "oauth.h"
 
 int oidc_revoke_session(request_rec *r, const oidc_cfg_t *c) {
 	apr_byte_t rc = FALSE;
@@ -70,14 +71,18 @@ int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c) {
 	if (access_token == NULL)
 		return HTTP_BAD_REQUEST;
 
+	const char *key = oidc_oauth_cache_key(r, c, access_token);
+	if (key == NULL)
+		return HTTP_INTERNAL_SERVER_ERROR;
+
 	char *cache_entry = NULL;
-	oidc_cache_get_access_token(r, access_token, &cache_entry);
+	oidc_cache_get_access_token(r, key, &cache_entry);
 	if (cache_entry == NULL) {
 		oidc_error(r, "no cached access token found for value: %s", access_token);
 		return HTTP_NOT_FOUND;
 	}
 
-	oidc_cache_set_access_token(r, access_token, NULL, 0);
+	oidc_cache_set_access_token(r, key, NULL, 0);
 
 	return OK;
 }

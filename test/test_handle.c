@@ -32,6 +32,7 @@
 #include "handle/handle.h"
 #include "http_server.h"
 #include "mod_auth_openidc.h"
+#include "oauth.h"
 #include "proto/proto.h"
 #include "session.h"
 #include "state.h"
@@ -4072,7 +4073,8 @@ START_TEST(test_handle_revoke_at_cache_remove_cached) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	/* prime the AT cache then remove */
-	oidc_cache_set_access_token(r, "AT-cached", "{\"sub\":\"alice\"}", apr_time_now() + apr_time_from_sec(3600));
+	oidc_cache_set_access_token(r, oidc_oauth_cache_key(r, c, "AT-cached"), "{\"sub\":\"alice\"}",
+				    apr_time_now() + apr_time_from_sec(3600));
 	r->args = "remove_at_cache=AT-cached";
 	int rc = oidc_revoke_at_cache_remove(r, c);
 	ck_assert_int_eq(rc, OK);
@@ -5674,9 +5676,10 @@ START_TEST(test_handle_dispatch_remove_at_cache) {
 
 	/* ... one that was is removed */
 	char *entry = NULL;
-	oidc_cache_set_access_token(r, "at-1", "{\"sub\":\"alice\"}", apr_time_now() + apr_time_from_sec(60));
+	oidc_cache_set_access_token(r, oidc_oauth_cache_key(r, c, "at-1"), "{\"sub\":\"alice\"}",
+				    apr_time_now() + apr_time_from_sec(60));
 	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
-	oidc_cache_get_access_token(r, "at-1", &entry);
+	oidc_cache_get_access_token(r, oidc_oauth_cache_key(r, c, "at-1"), &entry);
 	ck_assert_ptr_null(entry);
 
 	oidc_session_free(r, session);

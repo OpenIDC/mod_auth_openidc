@@ -1,3 +1,11 @@
+10/05/2026
+- security: bind cached OAuth 2.0 access token validation results to the
+  verifier that produced them (the introspection endpoint and client ID, or the
+  JWKs URI and local verification keys); vhosts sharing a cache and
+  OIDCCryptoPassphrase would otherwise accept a token from the cache that they
+  would reject when validating it themselves; reported by Yonghwa Lee, Xint by
+  Theori (GHSA-gwg9-pmp9-m6wv)
+
 10/01/2026
 - security: honor the "exec:" prefix of OIDCClientSecret and
   OIDCClientTokenEndpointKeyPassword only when set as a configuration directive;
