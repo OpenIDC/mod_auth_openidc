@@ -4019,6 +4019,16 @@ START_TEST(test_handle_mod_original_request_method_discovery_response) {
 	apr_uri_parse(r->pool, oidc_util_url_redirect_uri(r, c), &r->parsed_uri);
 	r->args = "iss=https%3A%2F%2Fidp.example.com&method=form_post";
 	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_FORM_POST);
+
+	/* an unknown or absent value is not stored as-is but falls back to GET */
+	r->args = "iss=https%3A%2F%2Fidp.example.com&method=FORM_POST";
+	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_GET);
+	r->args = "iss=https%3A%2F%2Fidp.example.com&method=%3Cscript%3E";
+	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_GET);
+	r->args = "iss=https%3A%2F%2Fidp.example.com&method=get";
+	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_GET);
+	r->args = "iss=https%3A%2F%2Fidp.example.com";
+	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_GET);
 }
 END_TEST
 

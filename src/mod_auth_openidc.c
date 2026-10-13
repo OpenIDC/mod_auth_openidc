@@ -314,9 +314,13 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 	char *m = NULL;
 	if ((handle_discovery_response == TRUE) && (oidc_util_url_matches_redirect_uri(r, cfg)) &&
 	    (oidc_is_discovery_response(r, cfg))) {
+		/* the method parameter is client-supplied: map it onto one of the known methods instead of
+		 * storing an arbitrary value in the state */
 		oidc_util_url_parameter_get(r, OIDC_DISC_RM_PARAM, &m);
-		if (m != NULL)
-			method = apr_pstrdup(r->pool, m);
+		if (_oidc_strcmp(m, OIDC_METHOD_FORM_POST) == 0)
+			method = OIDC_METHOD_FORM_POST;
+		else if ((m != NULL) && (_oidc_strcmp(m, OIDC_METHOD_GET) != 0))
+			oidc_warn(r, "ignoring unknown \"%s\" parameter value: %s", OIDC_DISC_RM_PARAM, m);
 	} else {
 
 		/*
