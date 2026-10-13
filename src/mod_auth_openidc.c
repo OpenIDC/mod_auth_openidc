@@ -897,6 +897,14 @@ apr_byte_t oidc_validate_redirect_url(request_rec *r, const oidc_cfg_t *c, const
 		return oidc_validate_redirect_url_fail(r, err_str, err_desc, "Malformed URL",
 						       apr_psprintf(r->pool, "not a valid URL value: %s", url));
 
+	/* only http(s) URLs may be redirected to: a "javascript:" or "data:" URL that passes the host check would
+	 * execute script when it ends up in a Javascript sink such as the POST-restore form action */
+	if ((uri.scheme != NULL) && (_oidc_strnatcasecmp(uri.scheme, "https") != 0) &&
+	    (_oidc_strnatcasecmp(uri.scheme, "http") != 0))
+		return oidc_validate_redirect_url_fail(
+		    r, err_str, err_desc, "Invalid URL",
+		    apr_psprintf(r->pool, "URL value \"%s\" has a scheme other than \"http\" or \"https\"", url));
+
 	if (oidc_cfg_redirect_urls_allowed_get(c) != NULL) {
 		if (oidc_validate_redirect_url_allowed(r, oidc_cfg_redirect_urls_allowed_get(c), url, err_str,
 						       err_desc) == FALSE)

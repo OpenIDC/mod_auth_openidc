@@ -1,3 +1,8 @@
+10/13/2026
+- security: accept only "http" and "https" URLs (or relative ones) as redirect targets, e.g. the
+  "target_link_uri" of a 3rd-party initiated login; a same-host "javascript:" URL would otherwise
+  be executed by the POST-restore page after authentication when combined with "method=form_post"
+
 10/05/2026
 - security: bind cached OAuth 2.0 access token validation results to the
   verifier that produced them (the introspection endpoint and client ID, or the

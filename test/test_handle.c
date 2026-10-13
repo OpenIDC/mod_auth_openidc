@@ -3433,6 +3433,20 @@ START_TEST(test_handle_legacy_open_redirect) {
 						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
 			 FALSE);
 
+	/* a same-host URL with a scheme other than http(s) is not, in any case */
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "HTTPS://www.example.com/somewhere",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 TRUE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "javascript://www.example.com/%0aalert(1)",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "JaVaScRiPt://www.example.com/%0aalert(1)",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "data://www.example.com/x", OIDC_REDIRECT_URL_SAME_HOST,
+						    &err_str, &err_desc),
+			 FALSE);
+
 	/* now walk the open-redirect payload list — every entry must be REJECTED */
 	const char *dir = oidc_test_srcdir();
 	const char *filename = apr_psprintf(r->pool, "%s/%s", dir, "open-redirect-payload-list.txt");
