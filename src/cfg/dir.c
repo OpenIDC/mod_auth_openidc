@@ -47,16 +47,20 @@
 #include "util/util_cfg.h"
 
 /*
- * "unset" sentinel for oauth_token_introspect_interval: the standard OIDC_CONFIG_POS_INT_UNSET (-1)
- * cannot be used since -1 is a valid configured value for this directive
+ * "unset" sentinel for the INT_OFF members below: the standard OIDC_CONFIG_POS_INT_UNSET (-1)
+ * cannot be used since -1 is a valid configured value for those directives
  */
-#define OIDC_INTROSPECT_INTERVAL_UNSET -2
+#define OIDC_DIR_INT_OFF_UNSET -2
 
 /*
  * directory related configuration
  */
-/* Generate declaration, initialization, and merge logic for simple directory members. */
-#define OIDC_DIR_CFG_SIMPLE_MEMBERS(PTR, INT)                                                                          \
+/*
+ * Generate declaration, initialization, and merge logic for simple directory members;
+ * INT_OFF members are integers for which -1 is a valid configured value, e.g. to switch a
+ * feature off in a location nested in one that enables it, so they use OIDC_DIR_INT_OFF_UNSET
+ */
+#define OIDC_DIR_CFG_SIMPLE_MEMBERS(PTR, INT, INT_OFF)                                                                 \
 	PTR(char *, discover_url)                                                                                      \
 	PTR(char *, cookie_path)                                                                                       \
 	PTR(char *, cookie)                                                                                            \
@@ -81,21 +85,23 @@
 	INT(refresh_access_token_before_expiry)                                                                        \
 	INT(refresh_access_token_interval)                                                                             \
 	INT(action_on_error_refresh)                                                                                   \
-	INT(pass_idtoken_as)
+	INT(pass_idtoken_as)                                                                                           \
+	INT_OFF(oauth_token_introspect_interval)
 
 #define OIDC_DIR_M_DECL_PTR(type, name) type name;
 #define OIDC_DIR_M_DECL_INT(name) int name;
+#define OIDC_DIR_M_DECL_INT_OFF(name) int name;
 #define OIDC_DIR_M_CREATE_PTR(type, name) c->name = NULL;
 #define OIDC_DIR_M_CREATE_INT(name) c->name = OIDC_CONFIG_POS_INT_UNSET;
+#define OIDC_DIR_M_CREATE_INT_OFF(name) c->name = OIDC_DIR_INT_OFF_UNSET;
 #define OIDC_DIR_M_MERGE_PTR(type, name) c->name = _oidc_cfg_merge_ptr(add->name, base->name);
 #define OIDC_DIR_M_MERGE_INT(name) c->name = _oidc_cfg_merge_pos_int(add->name, base->name);
+#define OIDC_DIR_M_MERGE_INT_OFF(name) c->name = _oidc_cfg_dir_merge_int_off(add->name, base->name);
 
 struct oidc_dir_cfg_t {
-	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_DECL_PTR, OIDC_DIR_M_DECL_INT)
+	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_DECL_PTR, OIDC_DIR_M_DECL_INT, OIDC_DIR_M_DECL_INT_OFF)
 	/* special: created as an (empty) hash, merged on entry count */
 	apr_hash_t *oauth_accept_token_options;
-	/* special: -1 is a valid value so this uses its own OIDC_INTROSPECT_INTERVAL_UNSET sentinel */
-	int oauth_token_introspect_interval;
 };
 
 #define OIDC_PASS_ID_TOKEN_AS_CLAIMS_STR "claims"
@@ -560,7 +566,7 @@ const char *oidc_cmd_dir_token_introspection_interval_set(cmd_parms *cmd, void *
 
 int oidc_cfg_dir_token_introspection_interval_get(request_rec *r) {
 	const oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
-	if (dir_cfg->oauth_token_introspect_interval <= OIDC_INTROSPECT_INTERVAL_UNSET)
+	if (dir_cfg->oauth_token_introspect_interval <= OIDC_DIR_INT_OFF_UNSET)
 		return OIDC_DEFAULT_TOKEN_INTROSPECTION_INTERVAL;
 	return dir_cfg->oauth_token_introspect_interval;
 }
@@ -664,9 +670,8 @@ const char *oidc_cfg_dir_path_scope_get(request_rec *r) {
  */
 void *oidc_cfg_dir_config_create(apr_pool_t *pool, char *path) {
 	oidc_dir_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg_t));
-	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_CREATE_PTR, OIDC_DIR_M_CREATE_INT)
+	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_CREATE_PTR, OIDC_DIR_M_CREATE_INT, OIDC_DIR_M_CREATE_INT_OFF)
 	c->oauth_accept_token_options = apr_hash_make(pool);
-	c->oauth_token_introspect_interval = OIDC_INTROSPECT_INTERVAL_UNSET;
 	return c;
 }
 
@@ -678,11 +683,11 @@ static apr_hash_t *_oidc_cfg_dir_merge_hash(apr_hash_t *add, apr_hash_t *base) {
 }
 
 /*
- * pick the "add" introspect interval if it was explicitly configured
- * (i.e. not the OIDC_INTROSPECT_INTERVAL_UNSET default), otherwise fall back to "base"
+ * pick the "add" INT_OFF value if it was explicitly configured, including to -1
+ * (i.e. not the OIDC_DIR_INT_OFF_UNSET default), otherwise fall back to "base"
  */
-static int _oidc_cfg_dir_merge_introspect_interval(int add, int base) {
-	return add > OIDC_INTROSPECT_INTERVAL_UNSET ? add : base;
+static int _oidc_cfg_dir_merge_int_off(int add, int base) {
+	return add > OIDC_DIR_INT_OFF_UNSET ? add : base;
 }
 
 /*
@@ -692,10 +697,8 @@ void *oidc_cfg_dir_config_merge(apr_pool_t *pool, void *BASE, void *ADD) {
 	oidc_dir_cfg_t *c = apr_pcalloc(pool, sizeof(oidc_dir_cfg_t));
 	const oidc_dir_cfg_t *base = BASE;
 	const oidc_dir_cfg_t *add = ADD;
-	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_MERGE_PTR, OIDC_DIR_M_MERGE_INT)
+	OIDC_DIR_CFG_SIMPLE_MEMBERS(OIDC_DIR_M_MERGE_PTR, OIDC_DIR_M_MERGE_INT, OIDC_DIR_M_MERGE_INT_OFF)
 	c->oauth_accept_token_options =
 	    _oidc_cfg_dir_merge_hash(add->oauth_accept_token_options, base->oauth_accept_token_options);
-	c->oauth_token_introspect_interval = _oidc_cfg_dir_merge_introspect_interval(
-	    add->oauth_token_introspect_interval, base->oauth_token_introspect_interval);
 	return c;
 }
