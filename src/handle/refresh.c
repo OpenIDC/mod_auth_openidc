@@ -511,7 +511,7 @@ end:
  * see if the access token expires within ttl_minimum seconds; returns FALSE when that cannot be
  * determined while there is no refresh interval to fall back to
  */
-static apr_byte_t oidc_refresh_access_token_ttl_due(request_rec *r, oidc_session_t *session, int ttl_minimum,
+static apr_byte_t oidc_refresh_access_token_ttl_due(request_rec *r, const oidc_session_t *session, int ttl_minimum,
 						    int interval, apr_byte_t *due) {
 	apr_time_t t_expires = -1;
 
@@ -539,7 +539,7 @@ static apr_byte_t oidc_refresh_access_token_ttl_due(request_rec *r, oidc_session
 /*
  * see if the access token was last refreshed (or obtained) more than interval seconds ago
  */
-static apr_byte_t oidc_refresh_access_token_interval_due(request_rec *r, oidc_session_t *session, int interval) {
+static apr_byte_t oidc_refresh_access_token_interval_due(request_rec *r, const oidc_session_t *session, int interval) {
 	apr_time_t t_next = -1;
 
 	if (interval < 0)
