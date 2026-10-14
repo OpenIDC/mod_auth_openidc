@@ -79,6 +79,7 @@
 	INT(pass_access_token)                                                                                         \
 	INT(pass_refresh_token)                                                                                        \
 	INT(refresh_access_token_before_expiry)                                                                        \
+	INT(refresh_access_token_interval)                                                                             \
 	INT(action_on_error_refresh)                                                                                   \
 	INT(pass_idtoken_as)
 
@@ -426,6 +427,18 @@ const char *oidc_cmd_dir_path_scope_set(cmd_parms *cmd, void *m, const char *arg
 	return OIDC_CONFIG_DIR_RV(cmd, rv);
 }
 
+/*
+ * parse a refresh trigger in seconds into member, plus the optional action to take on refresh errors
+ */
+static const char *oidc_cmd_dir_refresh_trigger_set(cmd_parms *cmd, oidc_dir_cfg_t *dir_cfg, int *member, int min_value,
+						    int max_value, const char *arg1, const char *arg2) {
+	const char *rv = oidc_cfg_parse_int_min_max(cmd->pool, arg1, member, min_value, max_value);
+	if ((rv == NULL) && (arg2 != NULL))
+		rv = oidc_cfg_parse_action_on_error_refresh_as(
+		    cmd->pool, arg2, (oidc_on_error_action_t *)&dir_cfg->action_on_error_refresh);
+	return OIDC_CONFIG_DIR_RV(cmd, rv);
+}
+
 #define OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MIN 0
 #define OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MAX (3600 * 24 * 365)
 
@@ -435,21 +448,23 @@ const char *oidc_cmd_dir_path_scope_set(cmd_parms *cmd, void *m, const char *arg
 const char *oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd_parms *cmd, void *m, const char *arg1,
 								const char *arg2) {
 	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
-	const char *rv = NULL;
+	return oidc_cmd_dir_refresh_trigger_set(cmd, dir_cfg, &dir_cfg->refresh_access_token_before_expiry,
+						OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MIN,
+						OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MAX, arg1, arg2);
+}
 
-	rv = oidc_cfg_parse_int_min_max(cmd->pool, arg1, &dir_cfg->refresh_access_token_before_expiry,
-					OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MIN,
-					OIDC_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY_MAX);
-	if (rv != NULL)
-		goto end;
+#define OIDC_REFRESH_ACCESS_TOKEN_INTERVAL_MIN 1
+#define OIDC_REFRESH_ACCESS_TOKEN_INTERVAL_MAX (3600 * 24 * 365)
 
-	if (arg2)
-		rv = oidc_cfg_parse_action_on_error_refresh_as(
-		    cmd->pool, arg2, (oidc_on_error_action_t *)&dir_cfg->action_on_error_refresh);
-
-end:
-
-	return OIDC_CONFIG_DIR_RV(cmd, rv);
+/*
+ * set the maximum time in seconds after which the access token is refreshed regardless of its expiry
+ */
+const char *oidc_cmd_dir_refresh_access_token_interval_set(cmd_parms *cmd, void *m, const char *arg1,
+							   const char *arg2) {
+	oidc_dir_cfg_t *dir_cfg = (oidc_dir_cfg_t *)m;
+	return oidc_cmd_dir_refresh_trigger_set(cmd, dir_cfg, &dir_cfg->refresh_access_token_interval,
+						OIDC_REFRESH_ACCESS_TOKEN_INTERVAL_MIN,
+						OIDC_REFRESH_ACCESS_TOKEN_INTERVAL_MAX, arg1, arg2);
 }
 
 #define OIDC_CFG_DIR_MEMBER_FUNC_PTR(member, type, parse, def_val)                                                     \
@@ -474,6 +489,10 @@ end:
 #define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY -1
 OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(refresh_access_token_before_expiry, int,
 				 OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_BEFORE_EXPIRY)
+
+/* define the default maximum age in seconds of the access token; -1 = no interval-based refresh */
+#define OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_INTERVAL -1
+OIDC_CFG_DIR_MEMBER_FUNC_INT_GET(refresh_access_token_interval, int, OIDC_DEFAULT_REFRESH_ACCESS_TOKEN_INTERVAL)
 
 /* default action to be taken on access token refresh error */
 #define OIDC_DEFAULT_ON_ERROR_REFRESH OIDC_ON_ERROR_502;

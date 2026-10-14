@@ -778,6 +778,11 @@ const command_rec oidc_cfg_cmds[] = {
 		refresh_access_token_before_expiry,
 		"Ensure the access token is valid for at least <secs> seconds by refreshing it if required."),
 	OIDC_CFG_CMD_DIR(
+		AP_INIT_TAKE12,
+		OIDCRefreshAccessTokenInterval,
+		refresh_access_token_interval,
+		"Refresh the access token when it was obtained or last refreshed more than <secs> seconds ago."),
+	OIDC_CFG_CMD_DIR(
 		AP_INIT_ITERATE,
 		OIDCPassUserInfoAs,
 		pass_userinfo_as,

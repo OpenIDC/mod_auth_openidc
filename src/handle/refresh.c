@@ -507,13 +507,13 @@ end:
 	return HTTP_MOVED_TEMPORARILY;
 }
 
-apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
-						   int ttl_minimum, apr_byte_t *needs_save) {
-
+/*
+ * see if the access token expires within ttl_minimum seconds; returns FALSE when that cannot be
+ * determined while there is no refresh interval to fall back to
+ */
+static apr_byte_t oidc_refresh_access_token_ttl_due(request_rec *r, oidc_session_t *session, int ttl_minimum,
+						    int interval, apr_byte_t *due) {
 	apr_time_t t_expires = -1;
-	oidc_provider_t *provider = NULL;
-
-	oidc_debug(r, "ttl_minimum=%d", ttl_minimum);
 
 	if (ttl_minimum < 0)
 		return TRUE;
@@ -523,22 +523,62 @@ apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *c
 		oidc_warn(
 		    r, "no access token expires_in stored in the session (i.e. returned from the OP in the "
 		       "authorization response), so the access token cannot be refreshed based on the TTL requirement");
-		return FALSE;
-	}
-
-	// NB: this fails early: when no refresh token was returned, an error will be returned on
-	//     the first authenticated request, unrelated to the actual access token expiry timestamp
-	if (oidc_session_get_refresh_token(r, session) == NULL) {
-		oidc_warn(r, "no refresh token stored in the session, so the access token cannot be refreshed based on "
-			     "the TTL requirement");
-		return FALSE;
+		return (interval >= 0);
 	}
 
 	t_expires = t_expires - apr_time_from_sec(ttl_minimum);
 
 	oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds", apr_time_sec(t_expires - apr_time_now()));
 
-	if (t_expires > apr_time_now())
+	if (t_expires <= apr_time_now())
+		*due = TRUE;
+
+	return TRUE;
+}
+
+/*
+ * see if the access token was last refreshed (or obtained) more than interval seconds ago
+ */
+static apr_byte_t oidc_refresh_access_token_interval_due(request_rec *r, oidc_session_t *session, int interval) {
+	apr_time_t t_next = -1;
+
+	if (interval < 0)
+		return FALSE;
+
+	t_next = oidc_session_get_access_token_last_refresh(r, session) + apr_time_from_sec(interval);
+
+	oidc_debug(r, "interval refresh needed in: %" APR_TIME_T_FMT " seconds", apr_time_sec(t_next - apr_time_now()));
+
+	return (t_next <= apr_time_now());
+}
+
+/*
+ * refresh the access token when it expires within ttl_minimum seconds or when it was last refreshed
+ * more than interval seconds ago, whichever comes first; a negative value disables that trigger
+ */
+apr_byte_t oidc_refresh_access_token_when_due(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, int ttl_minimum,
+					      int interval, apr_byte_t *needs_save) {
+
+	apr_byte_t due = FALSE;
+	oidc_provider_t *provider = NULL;
+
+	oidc_debug(r, "ttl_minimum=%d, interval=%d", ttl_minimum, interval);
+
+	if ((ttl_minimum < 0) && (interval < 0))
+		return TRUE;
+
+	if (oidc_refresh_access_token_ttl_due(r, session, ttl_minimum, interval, &due) == FALSE)
+		return FALSE;
+
+	// NB: this fails early: when no refresh token was returned, an error will be returned on
+	//     the first authenticated request, unrelated to the actual access token expiry timestamp
+	if (oidc_session_get_refresh_token(r, session) == NULL) {
+		oidc_warn(r, "no refresh token stored in the session, so the access token cannot be refreshed based on "
+			     "the TTL or interval requirement");
+		return FALSE;
+	}
+
+	if ((due == FALSE) && (oidc_refresh_access_token_interval_due(r, session, interval) == FALSE))
 		return TRUE;
 
 	if (oidc_get_provider_from_session(r, cfg, session, &provider) == FALSE)

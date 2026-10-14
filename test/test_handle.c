@@ -574,7 +574,7 @@ END_TEST
 
 /*
  * Tests for handle/refresh.c — drive oidc_refresh_token_grant and
- * oidc_refresh_access_token_before_expiry through their early-exit
+ * oidc_refresh_access_token_when_due through their early-exit
  * branches and a happy-path refresh against the loopback server.
  */
 
@@ -658,7 +658,7 @@ START_TEST(test_handle_refresh_before_expiry_ttl_negative) {
 
 	apr_byte_t needs_save = FALSE;
 	/* ttl_minimum < 0 => no-op, returns TRUE */
-	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, -1, &needs_save), TRUE);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, -1, -1, &needs_save), TRUE);
 
 	oidc_session_free(r, session);
 }
@@ -672,7 +672,7 @@ START_TEST(test_handle_refresh_before_expiry_no_expiry_stored) {
 
 	apr_byte_t needs_save = FALSE;
 	/* no access_token_expires stored => FALSE */
-	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 0, &needs_save), FALSE);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 0, -1, &needs_save), FALSE);
 
 	oidc_session_free(r, session);
 }
@@ -688,7 +688,7 @@ START_TEST(test_handle_refresh_before_expiry_no_refresh_token) {
 
 	apr_byte_t needs_save = FALSE;
 	/* no refresh_token in session => FALSE */
-	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 0, &needs_save), FALSE);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 0, -1, &needs_save), FALSE);
 
 	oidc_session_free(r, session);
 }
@@ -1267,7 +1267,7 @@ START_TEST(test_handle_refresh_before_expiry_due_paths) {
 	/* expiry is far enough out: no refresh needed */
 	oidc_session_set_refresh_token(r, session, "RT-NOTDUE");
 	oidc_session_set_access_token_expires(r, session, 3600);
-	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 60, &needs_save), TRUE);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, -1, &needs_save), TRUE);
 	ck_assert_int_eq(needs_save, FALSE);
 
 	/* within the TTL window and the refresh fails against a dead endpoint */
@@ -1276,7 +1276,7 @@ START_TEST(test_handle_refresh_before_expiry_due_paths) {
 	oidc_session_set_refresh_token(r, session, "RT-DUE-FAIL");
 	oidc_session_set_access_token_expires(r, session, 30);
 	needs_save = TRUE;
-	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 60, &needs_save), FALSE);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, -1, &needs_save), FALSE);
 	ck_assert_int_eq(needs_save, FALSE);
 
 	/* within the TTL window and the refresh succeeds; a scope returned from the token
@@ -1293,13 +1293,109 @@ START_TEST(test_handle_refresh_before_expiry_due_paths) {
 	oidc_session_set_refresh_token(r, session, "RT-DUE-OK");
 	oidc_session_set_access_token_expires(r, session, 30);
 	needs_save = FALSE;
-	ck_assert_int_eq(oidc_refresh_access_token_before_expiry(r, c, session, 60, &needs_save), TRUE);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, -1, &needs_save), TRUE);
 	ck_assert_int_eq(needs_save, TRUE);
 	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-DUE");
 	ck_assert_str_eq(oidc_session_get_scope(r, session), "openid profile");
 
 	(void)oidc_test_http_server_wait(srv);
 	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* the interval trigger: due once the access token is older than the interval, without needing an expiry */
+START_TEST(test_handle_refresh_interval_due_paths) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	apr_byte_t needs_save = FALSE;
+
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+
+	/* no refresh token: fails early, even when not due */
+	oidc_session_set_access_token_last_refresh(r, session, apr_time_now());
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, -1, 300, &needs_save), FALSE);
+
+	/* refreshed recently and no expiry stored: not due, and the missing expiry is not an error */
+	oidc_session_set_refresh_token(r, session, "RT-INTERVAL");
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, -1, 300, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, FALSE);
+
+	/* the same with a TTL requirement configured: the interval keeps an unknown expiry from failing */
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, 300, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, FALSE);
+
+	/* ... whereas the TTL requirement alone still fails on an unknown expiry */
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, -1, &needs_save), FALSE);
+
+	/* older than the interval: due, and the refresh fails against a dead endpoint */
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "http://127.0.0.1:1/token");
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_session_set_refresh_token(r, session, "RT-INTERVAL-FAIL");
+	oidc_session_set_access_token_last_refresh(r, session, apr_time_now() - apr_time_from_sec(301));
+	needs_save = TRUE;
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, -1, 300, &needs_save), FALSE);
+	ck_assert_int_eq(needs_save, FALSE);
+
+	/* whichever comes first: an expiry far out does not hold back a due interval ... */
+	oidc_session_set_refresh_token(r, session, "RT-INTERVAL-FIRST");
+	oidc_session_set_access_token_expires(r, session, 3600);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, 300, &needs_save), FALSE);
+
+	/* ... and a recent refresh does not hold back a due TTL */
+	oidc_session_set_refresh_token(r, session, "RT-TTL-FIRST");
+	oidc_session_set_access_token_last_refresh(r, session, apr_time_now());
+	oidc_session_set_access_token_expires(r, session, 30);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, 300, &needs_save), FALSE);
+
+	/* neither due */
+	oidc_session_set_access_token_expires(r, session, 3600);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, 300, &needs_save), TRUE);
+
+	/* due and the refresh succeeds: the new access token is stored and the refresh timestamp reset */
+	oidc_test_http_response_t resp = {.status_code = 200,
+					  .content_type = "application/json",
+					  .body = "{\"access_token\":\"AT-INTERVAL\",\"token_type\":\"Bearer\","
+						  "\"expires_in\":3600,\"refresh_token\":\"RT-INTERVAL-OK2\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_scope_set(r->pool, provider, "openid");
+	oidc_session_set_refresh_token(r, session, "RT-INTERVAL-OK");
+	apr_time_t t_old = apr_time_now() - apr_time_from_sec(301);
+	oidc_session_set_access_token_last_refresh(r, session, t_old);
+	needs_save = FALSE;
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, 60, 300, &needs_save), TRUE);
+	ck_assert_int_eq(needs_save, TRUE);
+	ck_assert_str_eq(oidc_session_get_access_token(r, session), "AT-INTERVAL");
+	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-INTERVAL-OK2");
+	ck_assert_msg(oidc_session_get_access_token_last_refresh(r, session) > t_old, "refresh timestamp reset");
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* a session without a refresh timestamp (none stored at login) is due right away */
+START_TEST(test_handle_refresh_interval_no_timestamp) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	apr_byte_t needs_save = FALSE;
+
+	oidc_session_set_issuer(r, session, "https://idp.example.com");
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, "http://127.0.0.1:1/token");
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+	oidc_session_set_refresh_token(r, session, "RT-NO-TS");
+	ck_assert_int_eq(oidc_session_get_access_token_last_refresh(r, session), -1);
+	ck_assert_int_eq(oidc_refresh_access_token_when_due(r, c, session, -1, 300, &needs_save), FALSE);
+
 	oidc_session_free(r, session);
 }
 END_TEST
@@ -5944,7 +6040,7 @@ START_TEST(test_handle_existing_session_refresh_error_actions) {
 	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
 
 	/* make the access token due for refresh while no refresh token is available,
-	 * so oidc_refresh_access_token_before_expiry fails */
+	 * so oidc_refresh_access_token_when_due fails */
 	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "60", NULL));
 
 	/* default action: 502 */
@@ -5965,6 +6061,36 @@ START_TEST(test_handle_existing_session_refresh_error_actions) {
 	existing_session_seed(r, session, TRUE);
 	oidc_session_set_access_token_expires(r, session, 30);
 	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* the interval directive drives the same error actions from the existing-session path */
+START_TEST(test_handle_existing_session_refresh_interval_error_actions) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenInterval);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	r->args = "info=json";
+	r->method_number = M_GET;
+
+	/* pin the configured cookie domain to the value the session seed stores */
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+
+	/* no refresh token available, so the interval refresh fails; no expiry is needed for that */
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "300", NULL));
+
+	/* default action: 502 */
+	existing_session_seed(r, session, TRUE);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_BAD_GATEWAY);
+
+	/* logout action: the session is killed and the logged-out page is prepped */
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "300", "logout_on_error"));
+	existing_session_seed(r, session, TRUE);
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
 
 	oidc_session_free(r, session);
 }
@@ -6806,6 +6932,8 @@ int main(void) {
 	tcase_add_test(refresh, test_handle_refresh_grant_id_token_unsigned);
 	tcase_add_test(refresh, test_handle_refresh_grant_cache_locks);
 	tcase_add_test(refresh, test_handle_refresh_before_expiry_due_paths);
+	tcase_add_test(refresh, test_handle_refresh_interval_due_paths);
+	tcase_add_test(refresh, test_handle_refresh_interval_no_timestamp);
 	tcase_add_test(refresh, test_handle_refresh_request_error_arms);
 
 	TCase *response = tcase_create("response");
@@ -7061,6 +7189,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_info_happy_sets_authn_header);
 	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_error_actions);
+	tcase_add_test(dispatch, test_handle_existing_session_refresh_interval_error_actions);
 	tcase_add_test(dispatch, test_handle_existing_session_userinfo_error_actions);
 
 	Suite *s = suite_create("handle");

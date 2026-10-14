@@ -134,6 +134,7 @@ OIDC_CFG_DIR_MEMBER_FUNCS(pass_idtoken_as, oidc_pass_idtoken_as_t)
 // 2 args
 OIDC_CFG_DIR_MEMBER_FUNCS(unautz_action, oidc_unautz_action_t, const char *)
 OIDC_CFG_DIR_MEMBER_FUNCS(refresh_access_token_before_expiry, int, const char *)
+OIDC_CFG_DIR_MEMBER_FUNCS(refresh_access_token_interval, int, const char *)
 
 // ifdefs
 #ifdef USE_LIBJQ

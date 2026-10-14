@@ -1903,6 +1903,30 @@ START_TEST(test_cmd_dir_refresh_access_token_before_expiry) {
 }
 END_TEST
 
+START_TEST(test_cmd_dir_refresh_access_token_interval) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenInterval);
+
+	/* not configured: no interval-based refresh */
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), -1);
+
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "300", NULL));
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), 300);
+
+	/* the 2nd arg sets the on-error action shared with OIDCRefreshAccessTokenBeforeExpiry */
+	ck_assert_ptr_null(
+	    oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "600", "authenticate_on_error"));
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), 600);
+	ck_assert_int_eq(oidc_cfg_dir_action_on_error_refresh_get(r), OIDC_ON_ERROR_AUTH);
+
+	/* below the min (1), above the max or an unknown 2nd arg are rejected */
+	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "0", NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "31536001", NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "60", "bogus_action"));
+}
+END_TEST
+
 START_TEST(test_cmd_dir_cookie_and_path_and_state_prefix) {
 	request_rec *r = oidc_test_request_get();
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -2536,6 +2560,7 @@ int main(void) {
 	tcase_add_test(dir, test_cmd_dir_unautz_action);
 	tcase_add_test(dir, test_cmd_dir_path_auth_request_params_and_scope);
 	tcase_add_test(dir, test_cmd_dir_refresh_access_token_before_expiry);
+	tcase_add_test(dir, test_cmd_dir_refresh_access_token_interval);
 	tcase_add_test(dir, test_cmd_dir_cookie_and_path_and_state_prefix);
 	tcase_add_test(dir, test_cmd_dir_pass_access_refresh_token);
 	tcase_add_test(dir, test_cmd_dir_token_introspection_interval);

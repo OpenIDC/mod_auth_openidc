@@ -189,6 +189,7 @@
 #define OIDCPassAccessToken "OIDCPassAccessToken"
 #define OIDCPassRefreshToken "OIDCPassRefreshToken"
 #define OIDCRefreshAccessTokenBeforeExpiry "OIDCRefreshAccessTokenBeforeExpiry"
+#define OIDCRefreshAccessTokenInterval "OIDCRefreshAccessTokenInterval"
 #define OIDCStateCookiePrefix "OIDCStateCookiePrefix"
 #define OIDCPassIDTokenAs "OIDCPassIDTokenAs"
 #define OIDCPassUserInfoAs "OIDCPassUserInfoAs"

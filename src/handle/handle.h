@@ -96,8 +96,8 @@ apr_byte_t oidc_refresh_token_grant(request_rec *r, oidc_cfg_t *c, oidc_session_
 				    const oidc_provider_t *provider, char **new_access_token,
 				    char **new_access_token_type, char **new_id_token);
 int oidc_refresh_token_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
-apr_byte_t oidc_refresh_access_token_before_expiry(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session,
-						   int ttl_minimum, apr_byte_t *needs_save);
+apr_byte_t oidc_refresh_access_token_when_due(request_rec *r, oidc_cfg_t *cfg, oidc_session_t *session, int ttl_minimum,
+					      int interval, apr_byte_t *needs_save);
 
 // request_uri.c
 int oidc_request_uri(request_rec *r, oidc_cfg_t *c);

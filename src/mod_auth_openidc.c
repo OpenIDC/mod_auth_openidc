@@ -691,8 +691,9 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	if (extend_session) {
 
 		/* if needed, refresh the access token */
-		rv = oidc_refresh_access_token_before_expiry(
-		    r, cfg, session, oidc_cfg_dir_refresh_access_token_before_expiry_get(r), needs_save);
+		rv = oidc_refresh_access_token_when_due(r, cfg, session,
+							oidc_cfg_dir_refresh_access_token_before_expiry_get(r),
+							oidc_cfg_dir_refresh_access_token_interval_get(r), needs_save);
 		if (rv == FALSE) {
 			*needs_save = FALSE;
 			oidc_debug(r, "dir_action_on_error_refresh: %d", oidc_cfg_dir_action_on_error_refresh_get(r));

@@ -1,3 +1,9 @@
+10/14/2026
+- add OIDCRefreshAccessTokenInterval <seconds> [logout_on_error|authenticate_on_error|502_on_error]
+  to refresh the access token once it was obtained or last refreshed more than <seconds> ago,
+  regardless of its expiry; combines with OIDCRefreshAccessTokenBeforeExpiry as "whichever
+  comes first" and, unlike that directive, does not require an "expires_in" hint from the OP
+
 10/13/2026
 - security: accept only "http" and "https" URLs (or relative ones) as redirect targets, e.g. the
   "target_link_uri" of a 3rd-party initiated login; a same-host "javascript:" URL would otherwise
