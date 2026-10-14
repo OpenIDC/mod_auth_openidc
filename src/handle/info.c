@@ -40,6 +40,8 @@
  * @Author: Hans Zandbelt - hans.zandbelt@openidc.com
  */
 
+#include <limits.h>
+
 #include "handle/handle.h"
 #include "mod_auth_openidc.h"
 #include "util/util.h"
@@ -55,9 +57,8 @@
 static int oidc_info_refresh_access_token(request_rec *r, oidc_cfg_t *c, oidc_session_t *session,
 					  const char *s_interval, apr_byte_t *needs_save) {
 	apr_time_t t_interval = -1;
-	apr_time_t last_refresh = 0;
-	oidc_provider_t *provider = NULL;
 
+	/* NB: unlike OIDCRefreshAccessTokenInterval, a missing refresh token is not an error here */
 	if ((s_interval == NULL) || (oidc_session_get_refresh_token(r, session) == NULL))
 		return OK;
 
@@ -65,23 +66,10 @@ static int oidc_info_refresh_access_token(request_rec *r, oidc_cfg_t *c, oidc_se
 	if (t_interval <= -1)
 		return OK;
 
-	t_interval = apr_time_from_sec(t_interval);
-	last_refresh = oidc_session_get_access_token_last_refresh(r, session);
-	oidc_debug(r, "refresh needed in: %" APR_TIME_T_FMT " seconds",
-		   apr_time_sec(last_refresh + t_interval - apr_time_now()));
-
-	if (last_refresh + t_interval >= apr_time_now())
-		return OK;
-
-	if (oidc_get_provider_from_session(r, c, session, &provider) == FALSE)
+	if (oidc_refresh_access_token_when_due(r, c, session, -1, (t_interval > INT_MAX) ? INT_MAX : (int)t_interval,
+					       needs_save) == FALSE)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
-	if (oidc_refresh_token_grant(r, c, session, provider, NULL, NULL, NULL) == FALSE) {
-		oidc_warn(r, "access_token could not be refreshed");
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	*needs_save = TRUE;
 	return OK;
 }
 
