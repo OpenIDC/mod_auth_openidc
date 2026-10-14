@@ -1897,8 +1897,13 @@ START_TEST(test_cmd_dir_refresh_access_token_before_expiry) {
 	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "120", "logout_on_error"));
 	ck_assert_int_eq(oidc_cfg_dir_action_on_error_refresh_get(r), OIDC_ON_ERROR_LOGOUT);
 
-	/* below the min (0) or unknown 2nd arg are rejected */
+	/* -1 switches it off */
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "-1", NULL));
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_before_expiry_get(r), -1);
+
+	/* below the min (0) other than -1, or unknown 2nd arg are rejected */
 	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "-99", NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "-2", NULL));
 	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, dir_cfg, "60", "bogus_action"));
 }
 END_TEST
@@ -1920,8 +1925,19 @@ START_TEST(test_cmd_dir_refresh_access_token_interval) {
 	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), 600);
 	ck_assert_int_eq(oidc_cfg_dir_action_on_error_refresh_get(r), OIDC_ON_ERROR_AUTH);
 
-	/* below the min (1), above the max or an unknown 2nd arg are rejected */
-	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "0", NULL));
+	/* -1 switches it off, still accepting the on-error action */
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "-1", "502_on_error"));
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), -1);
+	ck_assert_int_eq(oidc_cfg_dir_action_on_error_refresh_get(r), OIDC_ON_ERROR_502);
+
+	/* below the min (1) other than -1, above the max or an unknown 2nd arg are rejected and leave
+	 * the configured value alone; the range error mentions the off value */
+	const char *err = oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "0", NULL);
+	ck_assert_ptr_nonnull(err);
+	ck_assert_msg(_oidc_strstr(err, "-1 to switch it off") != NULL, "error mentions the off value: %s", err);
+	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "-2", NULL));
+	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "notanumber", NULL));
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), -1);
 	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "31536001", NULL));
 	ck_assert_ptr_nonnull(oidc_cmd_dir_refresh_access_token_interval_set(cmd, dir_cfg, "60", "bogus_action"));
 }
@@ -2077,6 +2093,35 @@ START_TEST(test_cfg_dir_config_merge_inherit) {
 	merged = oidc_cfg_dir_config_merge(pool, base, add);
 	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
 	ck_assert_int_eq(oidc_cfg_dir_token_introspection_interval_get(r), 30);
+
+	/* refresh triggers: a nested location inherits an unset value, but can switch an inherited one off */
+	base = oidc_cfg_dir_config_create(pool, NULL);
+	add = oidc_cfg_dir_config_create(pool, NULL);
+	cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenInterval);
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_interval_set(cmd, base, "300", NULL));
+	cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenBeforeExpiry);
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, base, "60", NULL));
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), 300);
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_before_expiry_get(r), 60);
+
+	cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenInterval);
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_interval_set(cmd, add, "-1", NULL));
+	cmd = oidc_test_cmd_get(OIDCRefreshAccessTokenBeforeExpiry);
+	ck_assert_ptr_null(oidc_cmd_dir_refresh_access_token_before_expiry_set(cmd, add, "-1", NULL));
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), -1);
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_before_expiry_get(r), -1);
+
+	/* ... and neither side configured resolves to the (off) default */
+	base = oidc_cfg_dir_config_create(pool, NULL);
+	add = oidc_cfg_dir_config_create(pool, NULL);
+	merged = oidc_cfg_dir_config_merge(pool, base, add);
+	ap_set_module_config(r->per_dir_config, &auth_openidc_module, merged);
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_interval_get(r), -1);
+	ck_assert_int_eq(oidc_cfg_dir_refresh_access_token_before_expiry_get(r), -1);
 
 	/* restore the original dir cfg so teardown doesn't see something unexpected */
 	ap_set_module_config(r->per_dir_config, &auth_openidc_module, prev);

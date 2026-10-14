@@ -4,9 +4,11 @@
   regardless of its expiry; combines with OIDCRefreshAccessTokenBeforeExpiry as "whichever
   comes first" and, unlike that directive, does not require an "expires_in" hint from the OP
 - fix the directory (<Location>/<Directory>) override of integer configuration primitives for
-  which -1 is a valid configured value: they now share one "unset" sentinel and merge rule, which
-  was special-cased for OIDCOAuthTokenIntrospectionInterval only, so that -1 set in a nested
-  location overrides the value inherited from the enclosing one
+  which -1 is a valid configured value, and accept -1 in OIDCRefreshAccessTokenBeforeExpiry and
+  OIDCRefreshAccessTokenInterval to switch the respective refresh trigger off: a location nested
+  in one that enables a trigger could not override the inherited value with "off" before; these
+  primitives now share one "unset" sentinel and merge rule, which was special-cased for
+  OIDCOAuthTokenIntrospectionInterval only
 
 10/13/2026
 - security: accept only "http" and "https" URLs (or relative ones) as redirect targets, e.g. the
