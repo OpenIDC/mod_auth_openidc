@@ -283,8 +283,9 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, const oidc_cfg_t *c, const char *cookieValue) {
 	char *s_payload = NULL;
 	oidc_json_t *result = NULL;
-	oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload) ||
-	    oidc_jwt_compat_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload, NULL);
+	if ((oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload) == FALSE) &&
+	    (oidc_jwt_compat_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload, NULL) == FALSE))
+		return NULL;
 	oidc_json_decode_object(r, s_payload, &result);
 	return result;
 }
