@@ -60,6 +60,7 @@ build_dep() {
 	./configure --prefix="$prefix" --disable-shared --enable-static "$@" >/dev/null
 	make -j"$(nproc)" >/dev/null
 	make install >/dev/null
+	return 0
 }
 
 [[ -f "$SRC/cjose/configure.ac" ]] || { echo "error: no cjose source tree at $SRC/cjose (the project Dockerfile clones it)" >&2; exit 1; }
