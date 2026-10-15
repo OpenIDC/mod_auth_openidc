@@ -746,9 +746,10 @@ START_TEST(test_handle_response_save_in_session_minimal) {
 	ck_assert_str_eq(oidc_session_get_scope(r, session), "openid profile");
 	ck_assert_str_eq(oidc_session_get_issuer(r, session), "https://idp.example.com");
 	ck_assert_str_eq(oidc_session_get_original_url(r, session), "https://www.example.com/protected/");
-	/* sid falls back to sub when no SID claim is present */
-	ck_assert_ptr_nonnull(session->sid);
-	ck_assert_msg(_oidc_strstr(session->sid, "alice@") != NULL, "sid should embed sub");
+	/* without a sid claim the session is indexed by sub only, never by a sid derived from it */
+	ck_assert_ptr_null(session->sid);
+	ck_assert_ptr_nonnull(session->sub);
+	ck_assert_msg(_oidc_strstr(session->sub, "alice@") != NULL, "sub index should embed sub");
 
 	oidc_jwt_destroy(jwt);
 	oidc_session_free(r, session);
@@ -823,11 +824,37 @@ START_TEST(test_handle_response_save_in_session_sub_index) {
 			 TRUE);
 	ck_assert_ptr_nonnull(s2->sub);
 	ck_assert_msg(_oidc_strstr(s2->sub, "alice@") != NULL, "sub index is derived from the sub claim");
-	/* and the secondary index resolves to the session uuid in the cache */
+	/* and the secondary index resolves to the session uuid in a cache section of its own */
 	char *by_sub = NULL;
-	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "alice", iss), &by_sub);
+	oidc_cache_get_sub(r, oidc_response_make_sid_iss_unique(r, "alice", iss), &by_sub);
 	ck_assert_str_eq(by_sub, s2->uuid);
+	char *by_sid = NULL;
+	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "alice", iss), &by_sid);
+	ck_assert_ptr_null(by_sid);
 	oidc_session_free(r, s2);
+	oidc_jwt_destroy(jwt);
+
+	/* an id_token without "sid": indexed by "sub" only, never in the sid section, with or without
+	 * back-channel logout */
+	ck_assert_ptr_null(oidc_cfg_provider_backchannel_logout_supported_set(r->pool, provider, 0));
+	jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->payload.sub = apr_pstrdup(r->pool, "carol");
+	jwt->payload.exp = apr_time_sec(apr_time_now()) + 3600;
+	oidc_session_t *s3 = NULL;
+	oidc_session_load(r, &s3);
+	ck_assert_int_eq(oidc_response_save_in_session(r, c, s3, provider, "carol", "idt", jwt, NULL, NULL, "AT",
+						       "Bearer", 600, NULL, "openid", NULL, "st",
+						       "https://www.example.com/protected/", NULL),
+			 TRUE);
+	ck_assert_ptr_null(s3->sid);
+	ck_assert_str_eq(s3->sub, oidc_response_make_sid_iss_unique(r, "carol", iss));
+	by_sub = NULL;
+	oidc_cache_get_sub(r, s3->sub, &by_sub);
+	ck_assert_str_eq(by_sub, s3->uuid);
+	by_sid = NULL;
+	oidc_cache_get_sid(r, s3->sub, &by_sid);
+	ck_assert_ptr_null(by_sid);
+	oidc_session_free(r, s3);
 
 	oidc_jwt_destroy(jwt);
 }
@@ -4934,7 +4961,7 @@ START_TEST(test_handle_logout_backchannel_dangling_sid_index) {
 
 	/* index "alice" to a session uuid that has no entry behind it */
 	const char *sid = oidc_response_make_sid_iss_unique(r, "alice", "https://idp.example.com");
-	ck_assert_int_eq(oidc_cache_set_sid(r, sid, "no-such-session-uuid", apr_time_now() + apr_time_from_sec(60)),
+	ck_assert_int_eq(oidc_cache_set_sub(r, sid, "no-such-session-uuid", apr_time_now() + apr_time_from_sec(60)),
 			 TRUE);
 
 	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", "alice",
@@ -4950,7 +4977,7 @@ START_TEST(test_handle_logout_backchannel_dangling_sid_index) {
 
 	/* the dangling index entry must be gone */
 	char *uuid = NULL;
-	oidc_cache_get_sid(r, sid, &uuid);
+	oidc_cache_get_sub(r, sid, &uuid);
 	ck_assert_ptr_null(uuid);
 
 	oidc_session_free(r, session);
@@ -5060,7 +5087,144 @@ START_TEST(test_handle_logout_backchannel_by_sub) {
 	ck_assert_ptr_null(v);
 	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "real-sid", iss), &v);
 	ck_assert_ptr_null(v);
-	oidc_cache_get_sid(r, oidc_response_make_sid_iss_unique(r, "alice-sub", iss), &v);
+	oidc_cache_get_sub(r, oidc_response_make_sid_iss_unique(r, "alice-sub", iss), &v);
+	ck_assert_ptr_null(v);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
+/* log "sub" in with an id_token that carries "sid" (none when NULL) and return the stored session */
+static oidc_session_t *e2e_login_session(request_rec *r, oidc_cfg_t *c, oidc_provider_t *provider, const char *sub,
+					 const char *sid) {
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->payload.sub = apr_pstrdup(r->pool, sub);
+	jwt->payload.exp = apr_time_sec(apr_time_now()) + 3600;
+	if (sid != NULL)
+		oidc_json_object_set_new(jwt->payload.value.json, "sid", oidc_json_string(sid));
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	ck_assert_int_eq(oidc_response_save_in_session(r, c, session, provider, sub, "idt", jwt, NULL, NULL, "AT",
+						       "Bearer", 600, NULL, "openid", NULL, "st",
+						       "https://www.example.com/protected/", NULL),
+			 TRUE);
+	oidc_jwt_destroy(jwt);
+	return session;
+}
+
+static apr_byte_t e2e_session_cached(request_rec *r, const char *uuid) {
+	char *v = NULL;
+	oidc_cache_get_session(r, uuid, &v);
+	return (v != NULL) ? TRUE : FALSE;
+}
+
+/* an unauthenticated front-channel logout request, i.e. one that carries no session */
+static void e2e_frontchannel_logout(request_rec *r, oidc_cfg_t *c, const char *sid, const char *iss) {
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	r->args = apr_psprintf(r->pool, "logout=get&sid=%s&iss=%s", oidc_http_url_encode(r, sid),
+			       oidc_http_url_encode(r, iss));
+	ck_assert_int_eq(oidc_logout(r, c, session), OK);
+	oidc_session_free(r, session);
+}
+
+static int e2e_backchannel_logout(request_rec *r, oidc_cfg_t *c, const char *iss, const char *sub, const char *jti,
+				  const char *secret) {
+	char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, iss, "client_id", sub, jti, TRUE, FALSE, secret);
+	char *body = apr_psprintf(r->pool, "logout_token=%s", oidc_http_url_encode(r, logout_jwt));
+	e2e_post_body(r, body);
+	apr_table_set(r->subprocess_env, "OIDC_REDIRECT_URI_REQUEST", "backchannel");
+	r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+	r->remaining = (apr_size_t)_oidc_strlen(r->args);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	int rc = oidc_logout(r, c, session);
+	oidc_session_free(r, session);
+	return rc;
+}
+
+/*
+ * front-channel logout is unauthenticated: naming a user's (often guessable) sub as the "sid" must not
+ * terminate that user's session, whether the sub is indexed because back-channel logout is enabled or
+ * because the id_token carried no sid
+ */
+START_TEST(test_handle_logout_frontchannel_cannot_reach_sub_index) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *iss = oidc_cfg_provider_issuer_get(provider);
+
+	oidc_session_t *carol = e2e_login_session(r, c, provider, "carol@example.com", NULL);
+	ck_assert_ptr_null(oidc_cfg_provider_backchannel_logout_supported_set(r->pool, provider, 1));
+	oidc_session_t *alice = e2e_login_session(r, c, provider, "alice@example.com", "alice-sid");
+	ck_assert_ptr_nonnull(alice->sub);
+
+	e2e_frontchannel_logout(r, c, "alice@example.com", iss);
+	ck_assert_int_eq(e2e_session_cached(r, alice->uuid), TRUE);
+	e2e_frontchannel_logout(r, c, "carol@example.com", iss);
+	ck_assert_int_eq(e2e_session_cached(r, carol->uuid), TRUE);
+
+	/* the sid itself does terminate the session, and clears its sub index too */
+	e2e_frontchannel_logout(r, c, "alice-sid", iss);
+	ck_assert_int_eq(e2e_session_cached(r, alice->uuid), FALSE);
+	char *v = NULL;
+	oidc_cache_get_sub(r, alice->sub, &v);
+	ck_assert_ptr_null(v);
+
+	oidc_session_free(r, carol);
+	oidc_session_free(r, alice);
+}
+END_TEST
+
+/* a sub-only back-channel logout token terminates a session whose id_token carried no sid, also
+ * without back-channel logout being advertised */
+START_TEST(test_handle_logout_backchannel_by_sub_without_sid_claim) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *iss = oidc_cfg_provider_issuer_get(provider);
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	oidc_session_t *carol = e2e_login_session(r, c, provider, "carol", NULL);
+	ck_assert_int_eq(e2e_session_cached(r, carol->uuid), TRUE);
+
+	ck_assert_int_eq(e2e_backchannel_logout(r, c, iss, "carol", "jti-no-sid-claim", secret), OK);
+	ck_assert_int_eq(e2e_session_cached(r, carol->uuid), FALSE);
+	char *v = NULL;
+	oidc_cache_get_sub(r, carol->sub, &v);
+	ck_assert_ptr_null(v);
+
+	oidc_session_free(r, carol);
+}
+END_TEST
+
+/* a session created by an earlier version has its sub index entry in the sid section; a sub-only
+ * back-channel logout token must still find it */
+START_TEST(test_handle_logout_backchannel_by_sub_legacy_index) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *iss = oidc_cfg_provider_issuer_get(provider);
+	const char *secret = "backchannel-logout-shared-secret-XYZ";
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	const char *uuid = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+	const char *legacy = oidc_response_make_sid_iss_unique(r, "dave", iss);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	session->uuid = apr_pstrdup(r->pool, uuid);
+	session->remote_user = apr_pstrdup(r->pool, "dave");
+	session->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, session, iss);
+	oidc_session_set_session_expires(r, session, session->expiry);
+	session->sid = apr_pstrdup(r->pool, legacy);
+	ck_assert_int_eq(oidc_session_save(r, session, OIDC_SESSION_SAVE_NEW), TRUE);
+
+	ck_assert_int_eq(e2e_backchannel_logout(r, c, iss, "dave", "jti-legacy-index", secret), OK);
+	ck_assert_int_eq(e2e_session_cached(r, uuid), FALSE);
+	char *v = NULL;
+	oidc_cache_get_sid(r, legacy, &v);
 	ck_assert_ptr_null(v);
 
 	oidc_session_free(r, session);
@@ -5542,10 +5706,10 @@ START_TEST(test_handle_logout_backchannel_jti_cache_errors_fail_open) {
 		oidc_session_t *session = NULL;
 		oidc_session_load(r, &session);
 
-		/* a sid index pointing at a (dangling) session uuid, so the logout has real work to do */
+		/* a sub index pointing at a (dangling) session uuid, so the logout has real work to do */
 		const char *sid = oidc_response_make_sid_iss_unique(r, sub, "https://idp.example.com");
 		ck_assert_int_eq(
-		    oidc_cache_set_sid(r, sid, "no-such-session-uuid", apr_time_now() + apr_time_from_sec(60)), TRUE);
+		    oidc_cache_set_sub(r, sid, "no-such-session-uuid", apr_time_now() + apr_time_from_sec(60)), TRUE);
 
 		char *logout_jwt = e2e_sign_backchannel_logout_jwt(r, "https://idp.example.com", "client_id", sub,
 								   apr_psprintf(r->pool, "jti-cache-error-%d", mode),
@@ -5562,9 +5726,9 @@ START_TEST(test_handle_logout_backchannel_jti_cache_errors_fail_open) {
 		c->cache.impl = old_impl;
 		e2e_jti_cache_failure_mode = 0;
 
-		/* the logout still ran to completion and cleared the sid index */
+		/* the logout still ran to completion and cleared the sub index */
 		char *uuid = NULL;
-		oidc_cache_get_sid(r, sid, &uuid);
+		oidc_cache_get_sub(r, sid, &uuid);
 		ck_assert_ptr_null(uuid);
 
 		oidc_session_free(r, session);
@@ -7085,6 +7249,9 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_jti);
 	tcase_add_test(logout, test_handle_logout_backchannel_encrypted);
 	tcase_add_test(logout, test_handle_logout_backchannel_by_sub);
+	tcase_add_test(logout, test_handle_logout_backchannel_by_sub_without_sid_claim);
+	tcase_add_test(logout, test_handle_logout_backchannel_by_sub_legacy_index);
+	tcase_add_test(logout, test_handle_logout_frontchannel_cannot_reach_sub_index);
 	tcase_add_test(logout, test_handle_logout_backchannel_missing_events_claim);
 	tcase_add_test(logout, test_handle_logout_backchannel_nonce_claim_rejected);
 	tcase_add_test(logout, test_handle_logout_op_request_with_id_token_hint);

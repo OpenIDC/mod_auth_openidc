@@ -648,7 +648,7 @@ START_TEST(test_session_sub_index_survives_older_session_kill) {
 	ck_assert_int_eq(oidc_session_save(r, z2, OIDC_SESSION_SAVE_NEW), TRUE);
 	oidc_session_free(r, z2);
 
-	ck_assert_int_eq(oidc_cache_get_sid(r, sub, &sub_uuid), TRUE);
+	ck_assert_int_eq(oidc_cache_get_sub(r, sub, &sub_uuid), TRUE);
 	ck_assert_str_eq(sub_uuid, uuid2);
 
 	/* device A's session is killed (logout or expiry): B's index entry must survive */
@@ -661,7 +661,7 @@ START_TEST(test_session_sub_index_survives_older_session_kill) {
 	oidc_session_free(r, z3);
 
 	sub_uuid = NULL;
-	ck_assert_int_eq(oidc_cache_get_sid(r, sub, &sub_uuid), TRUE);
+	ck_assert_int_eq(oidc_cache_get_sub(r, sub, &sub_uuid), TRUE);
 	ck_assert_ptr_nonnull(sub_uuid);
 	ck_assert_str_eq(sub_uuid, uuid2);
 
@@ -675,7 +675,7 @@ START_TEST(test_session_sub_index_survives_older_session_kill) {
 	oidc_session_free(r, z4);
 
 	sub_uuid = NULL;
-	oidc_cache_get_sid(r, sub, &sub_uuid);
+	oidc_cache_get_sub(r, sub, &sub_uuid);
 	ck_assert_ptr_null(sub_uuid);
 }
 END_TEST

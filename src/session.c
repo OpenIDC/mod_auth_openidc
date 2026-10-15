@@ -333,9 +333,9 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oid
 			oidc_session_set(r, z, OIDC_SESSION_SID_KEY, z->sid);
 		}
 
-		/* secondary "sub"-based logout index (shares the sid cache namespace, distinct key) */
+		/* "sub"-based logout index, in a cache section of its own so that no sid can address it */
 		if (z->sub != NULL) {
-			oidc_cache_set_sid(r, z->sub, z->uuid, z->expiry);
+			oidc_cache_set_sub(r, z->sub, z->uuid, z->expiry);
 			oidc_session_set(r, z, OIDC_SESSION_SUB_KEY, z->sub);
 		}
 
@@ -358,9 +358,9 @@ static apr_byte_t oidc_session_save_cache(request_rec *r, oidc_session_t *z, oid
 		if (z->sub != NULL) {
 			/* Delete the shared sub index only when it still points to this session. */
 			char *sub_uuid = NULL;
-			oidc_cache_get_sid(r, z->sub, &sub_uuid);
+			oidc_cache_get_sub(r, z->sub, &sub_uuid);
 			if ((sub_uuid == NULL) || (_oidc_strcmp(sub_uuid, z->uuid) == 0))
-				oidc_cache_set_sid(r, z->sub, NULL, 0);
+				oidc_cache_set_sub(r, z->sub, NULL, 0);
 		}
 
 		/* clear the cookie */

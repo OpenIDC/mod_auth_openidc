@@ -3,6 +3,12 @@
   binding, the cookie domain and discovery/request URI suffix checks) and the names of HTTP
   response headers byte for byte, folding ASCII case only; apr_strnatcasecmp() skips whitespace
   anywhere in its input, so e.g. "www.exam ple.com" matched "www.example.com"
+- security: an unauthenticated front-channel logout request could terminate another user's session
+  by passing that user's (often guessable) "sub" as the "sid" parameter, when the OP supports
+  back-channel logout or the ID token carried no "sid": the "sub" logout index shared its cache keys
+  with the "sid" index; it now has a cache section of its own that only back-channel logout tokens
+  without a "sid" consult, and a "sid" is no longer derived from the "sub"; sessions created by an
+  earlier version stay reachable that way until they expire
 
 10/14/2026
 - add OIDCRefreshAccessTokenInterval <seconds> [logout_on_error|authenticate_on_error|502_on_error]

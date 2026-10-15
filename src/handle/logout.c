@@ -132,7 +132,27 @@ out:
 	oidc_debug(r, "leave");
 }
 
-static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg_t *cfg,
+/*
+ * find the session uuid in the sid index or, for a back-channel logout token without a sid, in the sub index;
+ * returns the cache section of the index entry
+ */
+static const char *oidc_logout_session_uuid(request_rec *r, const char *key, apr_byte_t by_sub, char **uuid) {
+	if (by_sub == FALSE) {
+		oidc_cache_get_sid(r, key, uuid);
+		return OIDC_CACHE_SECTION_SID;
+	}
+	oidc_cache_get_sub(r, key, uuid);
+	if (*uuid != NULL)
+		return OIDC_CACHE_SECTION_SUB;
+	/* sessions created by an earlier version kept their sub index entry in the sid section */
+	oidc_cache_get_sid(r, key, uuid);
+	return OIDC_CACHE_SECTION_SID;
+}
+
+/*
+ * clear the session named by sid or, when sid is NULL (a back-channel logout token without one), by sub
+ */
+static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, const char *sid, const char *sub, oidc_cfg_t *cfg,
 					     const oidc_provider_t *provider, apr_byte_t revoke_tokens) {
 
 	char *uuid = NULL;
@@ -144,18 +164,18 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 	 * login, eviction) and extract must then see a NULL state, not indeterminate stack memory */
 	_oidc_memset(&session, 0, sizeof(oidc_session_t));
 
-	oidc_debug(r, "enter (sid=%s,iss=%s)", sid, oidc_cfg_provider_issuer_get(provider));
-
 	/* A sub-based logout may span hosts that share both the cache and OIDCCryptoPassphrase. */
 
-	sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
-	oidc_cache_get_sid(r, sid, &uuid);
+	const char *key = oidc_response_make_sid_iss_unique(r, sid ? sid : sub, oidc_cfg_provider_issuer_get(provider));
+	oidc_debug(r, "enter (%s=%s)", sid ? "sid" : "sub", key);
+
+	const char *section = oidc_logout_session_uuid(r, key, sid == NULL, &uuid);
 	if (uuid == NULL) {
 		// this may happen when we are the caller
 		oidc_warn(
 		    r,
 		    "could not (or no longer) find a session based on sid/sub provided in logout token / parameter: %s",
-		    sid);
+		    key);
 		r->user = "";
 		return TRUE;
 	}
@@ -170,12 +190,12 @@ static apr_byte_t oidc_logout_cleanup_by_sid(request_rec *r, char *sid, oidc_cfg
 		oidc_logout_revoke_tokens(r, cfg, &session);
 
 	// clear the session and both its sid/sub cache index entries (it may have been located via either)
-	oidc_cache_set_sid(r, sid, NULL, 0);
+	oidc_cache_set(r, section, key, NULL, 0);
 	if (loaded == TRUE) {
 		if (session.sid != NULL)
 			oidc_cache_set_sid(r, session.sid, NULL, 0);
 		if (session.sub != NULL)
-			oidc_cache_set_sid(r, session.sub, NULL, 0);
+			oidc_cache_set_sub(r, session.sub, NULL, 0);
 		oidc_session_free(r, &session);
 	}
 	oidc_cache_set_session(r, uuid, NULL, 0);
@@ -232,7 +252,7 @@ static int oidc_logout_request_front_channel(request_rec *r, oidc_cfg_t *c, cons
 		char *sid = NULL;
 		const oidc_provider_t *provider = oidc_logout_request_front_channel_provider(r, c, &sid);
 		if (provider != NULL)
-			oidc_logout_cleanup_by_sid(r, sid, c, provider, FALSE);
+			oidc_logout_cleanup_by_sid(r, sid, NULL, c, provider, FALSE);
 		else if (sid != NULL)
 			oidc_info(r, "No provider for front channel logout found");
 	}
@@ -431,8 +451,8 @@ static int oidc_logout_backchannel_check_jti_replay(request_rec *r, const oidc_p
 	return OK;
 }
 
-static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_provider_t *provider, oidc_jwt_t *jwt,
-						   char **sid) {
+static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_provider_t *provider,
+						   const oidc_jwt_t *jwt, char **sid) {
 	char *nonce = NULL;
 	const oidc_json_t *events = NULL;
 	const oidc_json_t *blogout = NULL;
@@ -461,14 +481,11 @@ static int oidc_logout_backchannel_validate_claims(request_rec *r, const oidc_pr
 		return rc;
 
 	/*
-	 * With back-channel logout enabled, a distinct sub gets an additional index; when sid equals
-	 * sub, the sid index already uses it. A sub-only token can then resolve the session, but not when
-	 * a distinct sid was stored without back-channel support.
+	 * A token without a sid resolves the session through the sub index, which exists when back-channel
+	 * logout is enabled or the ID token carried no sid; not when a sid was stored without back-channel support.
 	 */
 	oidc_json_object_get_string(r->pool, jwt->payload.value.json, OIDC_CLAIM_SID, sid, NULL);
-	if (*sid == NULL)
-		*sid = jwt->payload.sub;
-	if (*sid == NULL) {
+	if ((*sid == NULL) && (jwt->payload.sub == NULL)) {
 		oidc_error(r, "no \"sub\" and no \"sid\" claim found in logout token");
 		return HTTP_BAD_REQUEST;
 	}
@@ -512,7 +529,7 @@ static int oidc_logout_backchannel(request_rec *r, oidc_cfg_t *cfg) {
 		goto out;
 
 	// a backchannel logout comes from the provider, so no need to revoke the tokens
-	oidc_logout_cleanup_by_sid(r, sid, cfg, provider, FALSE);
+	oidc_logout_cleanup_by_sid(r, sid, jwt->payload.sub, cfg, provider, FALSE);
 
 	rc = OK;
 

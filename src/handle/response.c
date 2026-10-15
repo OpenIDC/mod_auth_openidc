@@ -321,19 +321,22 @@ apr_byte_t oidc_response_save_in_session(request_rec *r, const oidc_cfg_t *c, oi
 					   : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(c)));
 
 	char *sid = NULL;
-	char *sub = id_token_jwt->payload.sub;
+	const char *sub = id_token_jwt->payload.sub;
+	const char *issuer = oidc_cfg_provider_issuer_get(provider);
 	oidc_debug(r, "provider->backchannel_logout_supported=%d",
 		   oidc_cfg_provider_backchannel_logout_supported_get(provider));
 	/* Store sid even without back-channel support because front-channel logout may supply it. */
 	oidc_jose_get_string(r->pool, id_token_jwt->payload.value.json, OIDC_CLAIM_SID, FALSE, &sid, NULL);
-	if (sid == NULL)
-		sid = sub;
-	session->sid = oidc_response_make_sid_iss_unique(r, sid, oidc_cfg_provider_issuer_get(provider));
+	if (sid != NULL)
+		session->sid = oidc_response_make_sid_iss_unique(r, sid, issuer);
 
-	/* Index by sub when back-channel logout may identify the session without sid. */
-	if ((oidc_cfg_provider_backchannel_logout_supported_get(provider)) && (sub != NULL) &&
-	    (_oidc_strcmp(sid, sub) != 0))
-		session->sub = oidc_response_make_sid_iss_unique(r, sub, oidc_cfg_provider_issuer_get(provider));
+	/*
+	 * Index by sub, in a cache section of its own, for back-channel logout tokens without a sid; the
+	 * unauthenticated front-channel logout supplies a sid and must not reach a session by its often
+	 * guessable sub. Without a sid claim this is the only index, so keep it regardless of back-channel support.
+	 */
+	if ((sub != NULL) && ((sid == NULL) || (oidc_cfg_provider_backchannel_logout_supported_get(provider))))
+		session->sub = oidc_response_make_sid_iss_unique(r, sub, issuer);
 
 	/* indicate that this is a newly created session */
 	oidc_session_set_session_new(r, session, 1);
