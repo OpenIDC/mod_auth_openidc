@@ -42,6 +42,7 @@
  */
 
 #include "session.h"
+#include "util/jwt_compat.h"
 #include "cfg/dir.h"
 #include "jose.h"
 #include "metrics.h"
@@ -130,8 +131,11 @@ static apr_byte_t oidc_session_decode(request_rec *r, const oidc_cfg_t *c, oidc_
 	}
 
 	if (oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), s_json, &s_payload) == FALSE) {
-		oidc_error(r, "could not verify secure JWT: cache value possibly corrupted");
-		return FALSE;
+		if (oidc_jwt_compat_verify(r, oidc_cfg_crypto_passphrase_get(c), s_json,
+					   &s_payload, &z->needs_rewrite) == FALSE) {
+			oidc_error(r, "could not verify secure JWT: cache value possibly corrupted");
+			return FALSE;
+		}
 	}
 
 	if (oidc_json_decode_object(r, s_payload, &z->state) == FALSE)
@@ -528,8 +532,10 @@ apr_byte_t oidc_session_load(request_rec *r, oidc_session_t **zz) {
 
 	if (rc == TRUE) {
 		rc = oidc_session_extract(r, z);
-		if (rc == TRUE)
+		if (rc == TRUE) {
 			oidc_session_id_export(r, z);
+			rc = oidc_jwt_compat_session_loaded(r, z, oidc_session_save_cookie);
+		}
 	}
 
 	oidc_util_set_trace_parent(r, c, z->uuid);

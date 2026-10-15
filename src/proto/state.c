@@ -43,6 +43,7 @@
 #include "proto/proto.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
+#include "util/jwt_compat.h"
 
 #define OIDC_PROTO_STATE_ISSUER "i"
 #define OIDC_PROTO_STATE_ORIGINAL_URL "ou"
@@ -282,7 +283,8 @@ void oidc_proto_state_set_timestamp_now(oidc_proto_state_t *proto_state) {
 oidc_proto_state_t *oidc_proto_state_from_cookie(request_rec *r, const oidc_cfg_t *c, const char *cookieValue) {
 	char *s_payload = NULL;
 	oidc_json_t *result = NULL;
-	oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload);
+	oidc_util_jwt_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload) ||
+	    oidc_jwt_compat_verify(r, oidc_cfg_crypto_passphrase_get(c), cookieValue, &s_payload, NULL);
 	oidc_json_decode_object(r, s_payload, &result);
 	return result;
 }

@@ -718,6 +718,9 @@ OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_state, oidc_samesite_cookie_t, OI
 OIDC_CFG_MEMBER_FUNC_TYPE_GET(cookie_same_site_discovery_csrf, oidc_samesite_cookie_t,
 			      OIDC_DEFAULT_COOKIE_SAME_SITE_CSRF_DISCOVERY)
 
+OIDC_CFG_MEMBER_FUNCS_BOOL(crypto_legacy_read, 0)
+OIDC_CFG_MEMBER_FUNCS_BOOL(crypto_legacy_write, 0)
+
 #define OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE 0
 OIDC_CFG_MEMBER_FUNCS_BOOL(session_cache_fallback_to_cookie, OIDC_DEFAULT_SESSION_FALLBACK_TO_COOKIE)
 

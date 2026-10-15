@@ -148,6 +148,8 @@ struct oidc_cfg_cache_t {
 	INT(session_type)                                                                                              \
 	/* whether secrets/tokens are masked in the debug log */                                                       \
 	INT(debug_mask_secrets)                                                                                        \
+	INT(crypto_legacy_read)                                                                                        \
+	INT(crypto_legacy_write)                                                                                       \
 	INT(session_cache_fallback_to_cookie)                                                                          \
 	/* session cookie or persistent cookie */                                                                      \
 	INT(persistent_session_cookie)                                                                                 \

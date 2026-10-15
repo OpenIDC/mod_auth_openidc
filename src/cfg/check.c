@@ -250,6 +250,10 @@ static int oidc_check_config_oauth(apr_pool_t *pool, server_rec *s, const oidc_c
  */
 static int oidc_config_ensure_crypto_passphrase(server_rec *s, oidc_cfg_t *cfg, apr_byte_t auto_generate,
 						apr_hash_t *kdf_cache) {
+	if (oidc_cfg_crypto_legacy_write_get(cfg) && !oidc_cfg_crypto_legacy_read_get(cfg)) {
+		oidc_check_serror(s, "OIDCCryptoLegacyWrite On requires OIDCCryptoLegacyRead On");
+		return HTTP_INTERNAL_SERVER_ERROR;
+	}
 	if (oidc_cfg_crypto_passphrase_secret1_get(cfg) == NULL) {
 		if (!auto_generate)
 			return OK;

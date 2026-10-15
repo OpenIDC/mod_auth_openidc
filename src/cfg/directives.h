@@ -92,6 +92,8 @@
 #define OIDCMetricsCacheJsonMax "OIDCMetricsCacheJsonMax"
 #define OIDCWhiteListedClaims "OIDCWhiteListedClaims"
 #define OIDCCryptoPassphrase "OIDCCryptoPassphrase"
+#define OIDCCryptoLegacyRead "OIDCCryptoLegacyRead"
+#define OIDCCryptoLegacyWrite "OIDCCryptoLegacyWrite"
 
 /*
  * provider (see oidc_provider_t in cfg/provider.c)

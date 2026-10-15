@@ -51,8 +51,11 @@
 #include "cfg/dir.h"
 #include "check_util.h"
 #include "session.h"
+#include "proto/proto.h"
 #include "util.h"
 #include "util/util.h"
+#include "util/util_cfg.h"
+#include "util/jwt_compat.h"
 #include <jansson.h> /* json_pack for claim fixtures */
 
 /* copy every Set-Cookie written during a save into the request Cookie header so
@@ -247,6 +250,303 @@ START_TEST(test_session_cookie_roundtrip) {
 
 	oidc_session_free(r, z);
 	oidc_session_free(r, z2);
+}
+END_TEST
+
+/* Emit the pre-b032c117 key derivation and optionally its default stripped
+ * representation, independently of the production compatibility adapters. */
+static char *legacy_session_cookie(request_rec *r, oidc_cfg_t *c, const char *payload, int stripped) {
+	/* Same key constructor and encryption algorithm as the pre-PBKDF2 writer. */
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_util_key_symmetric_create(r, c->crypto_passphrase.secret1, 0,
+						     OIDC_JOSE_ALG_SHA256, FALSE, &jwk), TRUE);
+	oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, FALSE);
+	jwe->header.alg = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ENC_A256GCM);
+	char *compressed = NULL;
+	int compressed_len = 0;
+	oidc_jose_error_t err;
+	ck_assert_int_eq(oidc_jose_compress(r->pool, payload, (int)_oidc_strlen(payload),
+					 &compressed, &compressed_len, &err), TRUE);
+	char *token = NULL;
+	ck_assert_int_eq(oidc_jwt_encrypt(r->pool, jwe, jwk, compressed, compressed_len, &token, &err), TRUE);
+	oidc_jwt_destroy(jwe);
+	oidc_jwk_destroy(jwk);
+	char *decoded = NULL;
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &c->crypto_passphrase, token, &decoded), FALSE);
+	return stripped ? strstr(token, "..") + 2 : token;
+}
+
+static apr_byte_t legacy_cookie_decode(request_rec *r, const oidc_cfg_t *c, const char *token, char **payload) {
+	oidc_jwk_t *jwk = NULL;
+	if (!oidc_util_key_symmetric_create(r, c->crypto_passphrase.secret1, 0, OIDC_JOSE_ALG_SHA256, FALSE, &jwk))
+		return FALSE;
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_hash_set(keys, "1", APR_HASH_KEY_STRING, jwk);
+	oidc_jose_error_t err;
+	char *plain = NULL;
+	int plain_len = 0, payload_len = 0;
+	apr_byte_t ok = oidc_jwe_decrypt(r->pool, token, keys, &plain, &plain_len, &err, TRUE);
+	if (ok)
+		ok = oidc_jose_uncompress(r->pool, plain, plain_len, payload, &payload_len, &err);
+	if (ok)
+		*payload = apr_pstrndup(r->pool, *payload, payload_len);
+	oidc_jwk_destroy(jwk);
+	return ok;
+}
+
+static int compat_persist_calls;
+static apr_byte_t compat_persist_result;
+static apr_byte_t compat_test_persist(request_rec *r, const oidc_session_t *z, oidc_session_save_t first_time) {
+	(void)r;
+	(void)z;
+	ck_assert_int_eq(first_time, OIDC_SESSION_SAVE_UPDATE);
+	compat_persist_calls++;
+	return compat_persist_result;
+}
+
+START_TEST(test_session_crypto_compat_persist_hook) {
+	request_rec *r = oidc_test_request_get();
+	oidc_session_t z = {0};
+	compat_persist_calls = 0;
+	compat_persist_result = TRUE;
+	/* Ordinary sessions do not cause a write. */
+	ck_assert_int_eq(oidc_jwt_compat_session_loaded(r, &z, compat_test_persist), TRUE);
+	ck_assert_int_eq(compat_persist_calls, 0);
+	/* Failed persistence propagates failure and leaves the rewrite pending. */
+	z.needs_rewrite = TRUE;
+	compat_persist_result = FALSE;
+	ck_assert_int_eq(oidc_jwt_compat_session_loaded(r, &z, compat_test_persist), FALSE);
+	ck_assert_int_eq(compat_persist_calls, 1);
+	ck_assert_int_eq(z.needs_rewrite, TRUE);
+	/* Success clears the flag, preventing a repeated write. */
+	compat_persist_result = TRUE;
+	ck_assert_int_eq(oidc_jwt_compat_session_loaded(r, &z, compat_test_persist), TRUE);
+	ck_assert_int_eq(compat_persist_calls, 2);
+	ck_assert_int_eq(z.needs_rewrite, FALSE);
+	ck_assert_int_eq(oidc_jwt_compat_session_loaded(r, &z, compat_test_persist), TRUE);
+	ck_assert_int_eq(compat_persist_calls, 2);
+}
+END_TEST
+
+START_TEST(test_session_crypto_compat_hook_contract) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_jwk_t *jwk = NULL;
+	/* Disabled hooks do not select a key or accept an unsupported token. */
+	ck_assert_int_eq(oidc_jwt_compat_create_key(r, &c->crypto_passphrase, &jwk), OIDC_JWT_COMPAT_DECLINED);
+	ck_assert_ptr_null(jwk);
+	apr_byte_t rewrite = TRUE;
+	char *decoded = NULL;
+	ck_assert_int_eq(oidc_jwt_compat_verify(r, &c->crypto_passphrase, "invalid", &decoded, &rewrite), FALSE);
+	ck_assert_ptr_null(decoded);
+	ck_assert_int_eq(rewrite, FALSE);
+
+	char *old_cookie = legacy_session_cookie(r, c, "{\"hook\":true}", FALSE);
+	c->crypto_legacy_read = TRUE;
+	ck_assert_int_eq(oidc_jwt_compat_verify(r, &c->crypto_passphrase, old_cookie, &decoded, &rewrite), TRUE);
+	ck_assert_str_eq(decoded, "{\"hook\":true}");
+	ck_assert_int_eq(rewrite, TRUE);
+	c->crypto_legacy_write = TRUE;
+	ck_assert_int_eq(oidc_jwt_compat_verify(r, &c->crypto_passphrase, old_cookie, &decoded, &rewrite), TRUE);
+	ck_assert_int_eq(rewrite, FALSE);
+	ck_assert_int_eq(oidc_jwt_compat_create_key(r, &c->crypto_passphrase, &jwk), OIDC_JWT_COMPAT_HANDLED);
+	ck_assert_ptr_nonnull(jwk);
+	oidc_jwk_destroy(jwk);
+	/* A requested compatibility write that fails must not fall through to PBKDF2. */
+	oidc_crypto_passphrase_t invalid = c->crypto_passphrase;
+	invalid.secret1 = "";
+	jwk = NULL;
+	ck_assert_int_eq(oidc_jwt_compat_create_key(r, &invalid, &jwk), OIDC_JWT_COMPAT_ERROR);
+	ck_assert_ptr_null(jwk);
+	char *token = NULL;
+	ck_assert_int_eq(oidc_util_jwt_create(r, &invalid, "payload", &token), FALSE);
+	ck_assert_ptr_null(token);
+}
+END_TEST
+
+START_TEST(test_session_crypto_rolling_upgrade) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->session_type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
+	c->crypto_legacy_read = TRUE;
+	c->crypto_legacy_write = TRUE;
+	const char *payload = "{\"r\":\"rolling-user\",\"i\":\"rolling-id\",\"e\":4102444800}";
+	char *old_cookie = legacy_session_cookie(r, c, payload, FALSE);
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), old_cookie));
+	apr_table_clear(r->err_headers_out);
+	oidc_session_t *z = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
+	/* No premature rewrite during the mixed old/new-server deployment. */
+	ck_assert_ptr_null(apr_table_get(r->err_headers_out, "Set-Cookie"));
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_UPDATE), TRUE);
+	replay_set_cookies(r);
+	const char *compat_cookie = oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r),
+	    oidc_cfg_session_cookie_chunk_size_get(c));
+	char *decoded = NULL;
+	ck_assert_int_eq(legacy_cookie_decode(r, c, compat_cookie, &decoded), TRUE);
+	ck_assert_ptr_nonnull(strstr(decoded, "rolling-user"));
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &c->crypto_passphrase, compat_cookie, &decoded), FALSE);
+	oidc_session_free(r, z);
+
+	/* After all nodes have the patch, change only the write setting and restart. */
+	c->crypto_legacy_write = FALSE;
+	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
+	ck_assert_str_eq(z->uuid, "rolling-id");
+	ck_assert_str_eq(z->remote_user, "rolling-user");
+	ck_assert_ptr_nonnull(apr_table_get(r->err_headers_out, "Set-Cookie"));
+	replay_set_cookies(r);
+	const char *modern_cookie = oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r),
+	    oidc_cfg_session_cookie_chunk_size_get(c));
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &c->crypto_passphrase, modern_cookie, &decoded), TRUE);
+	ck_assert_int_eq(legacy_cookie_decode(r, c, modern_cookie, &decoded), FALSE);
+	oidc_session_free(r, z);
+	/* Another patched node still in legacy-write mode can read the modern cookie. */
+	c->crypto_legacy_write = TRUE;
+	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
+	oidc_session_free(r, z);
+
+	/* Retire compatibility: modern sessions remain valid; old ones are rejected. */
+	c->crypto_legacy_read = FALSE;
+	c->crypto_legacy_write = FALSE;
+	ck_assert_int_eq(oidc_session_load(r, &z), TRUE);
+	oidc_session_free(r, z);
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), old_cookie));
+	ck_assert_int_eq(oidc_session_load(r, &z), FALSE);
+	oidc_session_free(r, z);
+}
+END_TEST
+
+START_TEST(test_session_crypto_state_cache_rolling_upgrade) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->crypto_legacy_read = TRUE;
+	c->crypto_legacy_write = TRUE;
+	c->cache.encrypt = TRUE;
+	oidc_proto_state_t *state = oidc_proto_state_new();
+	oidc_json_object_set_new(state, "rolling", oidc_json_string("state"));
+	char *old_state = oidc_proto_state_to_cookie(r, c, state);
+	char *decoded = NULL;
+	ck_assert_int_eq(legacy_cookie_decode(r, c, old_state, &decoded), TRUE);
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(3600);
+	ck_assert_int_eq(oidc_cache_set(r, "rolling", "key", "old-cache-value", expiry), TRUE);
+	char *hashed = NULL, *raw = NULL;
+	ck_assert_int_eq(oidc_util_hash_string_and_base64url_encode(r, OIDC_JOSE_ALG_SHA256,
+	    apr_psprintf(r->pool, "%s:key", c->crypto_passphrase.secret1), &hashed), TRUE);
+	ck_assert_int_eq(c->cache.impl->get(r, "rolling", hashed, &raw), TRUE);
+	ck_assert_ptr_nonnull(raw);
+	ck_assert_int_eq(legacy_cookie_decode(r, c, raw, &decoded), TRUE);
+	ck_assert_str_eq(decoded, "old-cache-value");
+
+	c->crypto_legacy_write = FALSE;
+	oidc_proto_state_t *read_state = oidc_proto_state_from_cookie(r, c, old_state);
+	ck_assert_ptr_nonnull(read_state);
+	oidc_json_decref(read_state);
+	decoded = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, "rolling", "key", &decoded), TRUE);
+	ck_assert_str_eq(decoded, "old-cache-value");
+	char *modern_state = oidc_proto_state_to_cookie(r, c, state);
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &c->crypto_passphrase, modern_state, &decoded), TRUE);
+	ck_assert_int_eq(legacy_cookie_decode(r, c, modern_state, &decoded), FALSE);
+	ck_assert_int_eq(oidc_cache_set(r, "rolling", "key", "new-cache-value", expiry), TRUE);
+	c->crypto_legacy_write = TRUE;
+	decoded = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, "rolling", "key", &decoded), TRUE);
+	ck_assert_str_eq(decoded, "new-cache-value");
+
+	c->crypto_legacy_write = FALSE;
+	c->crypto_legacy_read = FALSE;
+	ck_assert_ptr_null(oidc_proto_state_from_cookie(r, c, old_state));
+	read_state = oidc_proto_state_from_cookie(r, c, modern_state);
+	ck_assert_ptr_nonnull(read_state);
+	oidc_json_decref(read_state);
+	decoded = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, "rolling", "key", &decoded), TRUE);
+	ck_assert_str_eq(decoded, "new-cache-value");
+	/* An unchanged old cache value is rejected after the read gate is disabled. */
+	ck_assert_int_eq(c->cache.impl->set(r, "rolling", hashed, raw, expiry), TRUE);
+	decoded = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, "rolling", "key", &decoded), FALSE);
+	oidc_json_decref(state);
+}
+END_TEST
+
+START_TEST(test_session_legacy_cookie_migration) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->crypto_legacy_read = TRUE;
+	const char *original_secret = c->crypto_passphrase.secret1;
+	for (int scenario = 0; scenario < 8; scenario++) {
+		int stripped = scenario % 2;
+		c->session_type = scenario >= 6 ? OIDC_SESSION_TYPE_SERVER_CACHE : OIDC_SESSION_TYPE_CLIENT_COOKIE;
+		c->session_cache_fallback_to_cookie = TRUE;
+		c->session_cookie_chunk_size = scenario >= 2 ? 64 : 0;
+		c->persistent_session_cookie = TRUE;
+		c->crypto_passphrase.secret1 = scenario >= 4 ? "replacement-passphrase" : original_secret;
+		c->crypto_passphrase.secret2 = scenario >= 4 ? original_secret : NULL;
+		oidc_test_crypto_passphrase_rederive(c);
+		oidc_cfg_t producer = *c;
+		producer.crypto_passphrase.secret1 = original_secret;
+		producer.crypto_passphrase.secret2 = NULL;
+		apr_time_t expiry = apr_time_from_sec(apr_time_sec(apr_time_now()) + 3600);
+		const char *payload = apr_psprintf(r->pool,
+		    "{\"r\":\"legacy-user\",\"e\":%" APR_INT64_T_FMT ",\"i\":\"legacy-id\",\"at\":\"legacy-token\"}",
+		    (apr_int64_t)apr_time_sec(expiry));
+		char *token = legacy_session_cookie(r, &producer, payload, stripped);
+		apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), token));
+		apr_table_clear(r->err_headers_out);
+		oidc_session_t *z = NULL;
+		ck_assert_msg(oidc_session_load(r, &z) == TRUE, "migration failed: scenario=%d", scenario);
+		ck_assert_str_eq(z->remote_user, "legacy-user");
+		ck_assert_str_eq(z->uuid, "legacy-id");
+		ck_assert(z->expiry == expiry);
+		ck_assert_ptr_nonnull(apr_table_get(r->err_headers_out, "Set-Cookie"));
+		replay_set_cookies(r);
+		const char *replacement = oidc_http_get_chunked_cookie(r, oidc_cfg_dir_cookie_get(r),
+		    oidc_cfg_session_cookie_chunk_size_get(c));
+		ck_assert_str_ne(replacement, token);
+		char *decoded = NULL;
+		/* Current verifier has no legacy fallback: proves the replacement uses PBKDF2. */
+		ck_assert_int_eq(oidc_util_jwt_verify(r, &c->crypto_passphrase, replacement, &decoded), TRUE);
+		oidc_session_t *reloaded = NULL;
+		ck_assert_int_eq(oidc_session_load(r, &reloaded), TRUE);
+		ck_assert_str_eq(reloaded->uuid, z->uuid);
+		ck_assert(reloaded->expiry == expiry);
+		ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(reloaded->state, "at")), "legacy-token");
+		ck_assert_ptr_null(apr_table_get(r->err_headers_out, "Set-Cookie"));
+		oidc_session_free(r, z);
+		oidc_session_free(r, reloaded);
+	}
+}
+END_TEST
+
+START_TEST(test_session_legacy_cookie_rejected) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->crypto_legacy_read = TRUE;
+	c->session_type = OIDC_SESSION_TYPE_CLIENT_COOKIE;
+	const char *payloads[] = {
+	    "{\"r\":\"old\",\"e\":1,\"i\":\"old\"}",
+	    "{\"v\":99,\"r\":\"old\",\"e\":4102444800,\"i\":\"old\"}",
+	    "{\"idc\":[],\"r\":\"old\",\"e\":4102444800,\"i\":\"old\"}"
+	};
+	for (unsigned int i = 0; i < sizeof(payloads)/sizeof(payloads[0]); i++) {
+		char *token = legacy_session_cookie(r, c, payloads[i], TRUE);
+		apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), token));
+		apr_table_clear(r->err_headers_out);
+		oidc_session_t *z = NULL;
+		ck_assert_int_eq(oidc_session_load(r, &z), FALSE);
+		ck_assert_ptr_null(z->remote_user);
+		oidc_session_free(r, z);
+	}
+	char *token = legacy_session_cookie(r, c, "{\"e\":4102444800}", TRUE);
+	token[0] = token[0] == 'A' ? 'B' : 'A';
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), token));
+	apr_table_clear(r->err_headers_out);
+	oidc_session_t *z = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z), FALSE);
+	ck_assert_ptr_null(apr_table_get(r->err_headers_out, "Set-Cookie"));
+	oidc_session_free(r, z);
 }
 END_TEST
 
@@ -777,6 +1077,12 @@ int main(void) {
 	tcase_add_test(c, test_session_id_exported_for_log_correlation);
 	tcase_add_test(c, test_session_reset_starts_a_new_session);
 	tcase_add_test(c, test_session_cookie_roundtrip);
+	tcase_add_test(c, test_session_legacy_cookie_migration);
+	tcase_add_test(c, test_session_crypto_rolling_upgrade);
+	tcase_add_test(c, test_session_crypto_compat_hook_contract);
+	tcase_add_test(c, test_session_crypto_compat_persist_hook);
+	tcase_add_test(c, test_session_crypto_state_cache_rolling_upgrade);
+	tcase_add_test(c, test_session_legacy_cookie_rejected);
 	tcase_add_test(c, test_session_cookie_not_shared_across_vhosts);
 	tcase_add_test(c, test_session_last_refresh_timestamps);
 	tcase_add_test(c, test_session_getter_setter_roundtrip);

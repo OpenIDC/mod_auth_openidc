@@ -54,6 +54,7 @@
 #include "metrics.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
+#include "util/jwt_compat.h"
 
 #ifdef AP_NEED_SET_MUTEX_PERMS
 #include "unixd.h"
@@ -280,7 +281,8 @@ static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *c
 			     OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
 	passphrase.secret2 = NULL;
 	passphrase.derived_key2_set = FALSE;
-	return oidc_util_jwt_verify(r, &passphrase, cache_value, plaintext);
+	return oidc_util_jwt_verify(r, &passphrase, cache_value, plaintext) ||
+	       oidc_jwt_compat_verify(r, &passphrase, cache_value, plaintext, NULL);
 }
 
 /*

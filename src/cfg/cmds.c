@@ -117,6 +117,10 @@ const command_rec oidc_cfg_cmds[] = {
 		OIDCCryptoPassphrase,
 		crypto_passphrase,
 		"Passphrase used for AES crypto on cookies and state."),
+	OIDC_CFG_CMD(AP_INIT_TAKE1, OIDCCryptoLegacyRead, crypto_legacy_read,
+		     "Accept pre-PBKDF2 internal encryption during a rolling upgrade. Defaults to Off."),
+	OIDC_CFG_CMD(AP_INIT_TAKE1, OIDCCryptoLegacyWrite, crypto_legacy_write,
+		     "Write pre-PBKDF2 internal encryption while old servers remain. Requires OIDCCryptoLegacyRead On. Defaults to Off."),
 	OIDC_CFG_CMD(
 		AP_INIT_TAKE1,
 		OIDCClaimDelimiter,

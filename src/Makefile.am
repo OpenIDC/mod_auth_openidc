@@ -82,6 +82,7 @@ libauth_openidc_la_SOURCES = \
 	util/html.c \
 	util/jq.c \
 	util/jwt.c \
+	util/jwt_compat.c \
 	util/key.c \
 	util/pcre_subst.c \
 	util/request_state.c \
@@ -116,6 +117,7 @@ libauth_openidc_la_SOURCES += \
 endif
 
 noinst_HEADERS = \
+	util/jwt_compat.h \
 	cfg/cfg.h \
 	cfg/cfg_int.h \
 	cfg/directives.h \

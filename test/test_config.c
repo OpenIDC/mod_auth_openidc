@@ -110,6 +110,27 @@ static int oidc_test_post_config(apr_pool_t *pool, server_rec *s) {
 	return post_config(pool, pool, pool, s);
 }
 
+START_TEST(test_config_crypto_rolling_controls) {
+	request_rec *r = oidc_test_request_get();
+	apr_pool_t *pool = r->pool;
+	server_rec *s = oidc_test_server_create_openidc(pool, r->server);
+	oidc_cfg_t *cfg = oidc_test_server_cfg(s);
+	ck_assert_int_eq(oidc_cfg_crypto_legacy_read_get(cfg), FALSE);
+	ck_assert_int_eq(oidc_cfg_crypto_legacy_write_get(cfg), FALSE);
+	ck_assert_ptr_null(oidc_cmd_crypto_legacy_write_set(oidc_test_server_cmd(pool, s, OIDCCryptoLegacyWrite), NULL, "On"));
+	ck_assert_int_eq(oidc_test_post_config(pool, s), HTTP_INTERNAL_SERVER_ERROR);
+	cfg->crypto_legacy_write = FALSE;
+	ck_assert_ptr_null(oidc_cmd_crypto_legacy_read_set(oidc_test_server_cmd(pool, s, OIDCCryptoLegacyRead), NULL, "On"));
+	oidc_cfg_t *child = oidc_cfg_server_create(pool, s);
+	oidc_cfg_t *merged = oidc_cfg_server_merge(pool, cfg, child);
+	ck_assert_int_eq(oidc_cfg_crypto_legacy_read_get(merged), TRUE);
+	child->crypto_legacy_read = FALSE;
+	merged = oidc_cfg_server_merge(pool, cfg, child);
+	ck_assert_int_eq(oidc_cfg_crypto_legacy_read_get(merged), FALSE);
+	ck_assert_ptr_nonnull(oidc_cmd_crypto_legacy_read_set(oidc_test_server_cmd(pool, s, OIDCCryptoLegacyRead), NULL, "invalid"));
+}
+END_TEST
+
 START_TEST(test_config_post_config_ok) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	request_rec *r = oidc_test_request_get();
@@ -634,6 +655,8 @@ int main(void) {
 	tcase_add_test(c, test_config_input_filter_propagates_error);
 	tcase_add_test(c, test_config_input_filter_eatcrlf);
 	tcase_add_test(c, test_config_parse_require_line);
+
+	tcase_add_test(c, test_config_crypto_rolling_controls);
 
 	Suite *s = suite_create("config");
 	suite_add_tcase(s, c);

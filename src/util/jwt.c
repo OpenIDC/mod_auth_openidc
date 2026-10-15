@@ -43,6 +43,7 @@
 #include "proto/proto.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
+#include "util/jwt_compat.h"
 
 #define OIDC_JWT_INTERNAL_NO_COMPRESS_ENV_VAR "OIDC_JWT_INTERNAL_NO_COMPRESS"
 
@@ -106,7 +107,10 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 	}
 
-	if (oidc_util_jwt_key_from_derived(r, passphrase->derived_key1, passphrase->derived_key1_set, &jwk) == FALSE)
+	oidc_jwt_compat_result_t compat = oidc_jwt_compat_create_key(r, passphrase, &jwk);
+	if ((compat == OIDC_JWT_COMPAT_ERROR) ||
+	    ((compat == OIDC_JWT_COMPAT_DECLINED) &&
+	     (oidc_util_jwt_key_from_derived(r, passphrase->derived_key1, passphrase->derived_key1_set, &jwk) == FALSE)))
 		goto end;
 
 	if (oidc_util_jwt_internal_compress(r)) {

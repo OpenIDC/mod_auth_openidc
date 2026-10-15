@@ -52,6 +52,7 @@ typedef struct {
 	oidc_json_t *state; /* the state for this session, encoded in a JSON object */
 	apr_time_t expiry;  /* if > 0, the time of expiry of this session */
 	char *sid;
+	apr_byte_t needs_rewrite; /* compatibility hook requested persistence after validation */
 	char *sub; /* secondary "sub"-based logout index, only set when the OP supports back-channel logout */
 } oidc_session_t;
 
