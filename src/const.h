@@ -98,6 +98,22 @@ static inline size_t _oidc_strlen(const char *s) {
 static inline int _oidc_strcmp(const char *a, const char *b) {
 	return ((a && b) ? strcmp(a, b) : -1);
 }
+static inline int _oidc_ascii_tolower(const char c) {
+	return (((c >= 'A') && (c <= 'Z')) ? (c - 'A' + 'a') : (unsigned char)c);
+}
+/*
+ * ASCII case-insensitive but otherwise byte-exact comparison for hostnames, cookie domains and header names;
+ * NULL never compares equal; apr_strnatcmp() skips whitespace anywhere in the input, strcasecmp() depends on
+ * the locale and Visual Studio does not provide it, and ap_cstr_casecmp() requires Apache 2.4.19
+ */
+static inline int _oidc_strcasecmp(const char *a, const char *b) {
+	size_t i = 0;
+	if ((a == NULL) || (b == NULL))
+		return -1;
+	while ((a[i] != '\0') && (_oidc_ascii_tolower(a[i]) == _oidc_ascii_tolower(b[i])))
+		i++;
+	return _oidc_ascii_tolower(a[i]) - _oidc_ascii_tolower(b[i]);
+}
 static inline int _oidc_strnatcasecmp(const char *a, const char *b) {
 	return ((a && b) ? apr_strnatcasecmp(a, b) : -1);
 }

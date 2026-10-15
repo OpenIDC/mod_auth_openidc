@@ -1,3 +1,9 @@
+10/15/2026
+- security: compare hostnames (the same-host check on redirect URLs, the session cookie domain
+  binding, the cookie domain and discovery/request URI suffix checks) and the names of HTTP
+  response headers byte for byte, folding ASCII case only; apr_strnatcasecmp() skips whitespace
+  anywhere in its input, so e.g. "www.exam ple.com" matched "www.example.com"
+
 10/14/2026
 - add OIDCRefreshAccessTokenInterval <seconds> [logout_on_error|authenticate_on_error|502_on_error]
   to refresh the access token once it was obtained or last refreshed more than <seconds> ago,

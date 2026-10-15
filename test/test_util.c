@@ -1810,6 +1810,36 @@ START_TEST(test_util_cookie_domain_dot_prefix) {
 }
 END_TEST
 
+START_TEST(test_util_strcasecmp_byte_exact) {
+	/* ASCII case is folded */
+	ck_assert_int_eq(_oidc_strcasecmp("WWW.Example.COM", "www.example.com"), 0);
+	ck_assert_int_eq(_oidc_strcasecmp("", ""), 0);
+	/* whitespace is significant, unlike in apr_strnatcasecmp() */
+	ck_assert_int_ne(_oidc_strcasecmp("www.exam ple.com", "www.example.com"), 0);
+	ck_assert_int_ne(_oidc_strcasecmp("www.example.com", "www.example.com "), 0);
+	ck_assert_int_ne(_oidc_strcasecmp("www.example.com", "\twww.example.com"), 0);
+	/* digit runs compare byte by byte */
+	ck_assert_int_ne(_oidc_strcasecmp("app01.example.com", "app1.example.com"), 0);
+	/* only ASCII letters are folded: no locale-dependent mapping of other bytes */
+	ck_assert_int_ne(_oidc_strcasecmp("\xc9", "\xe9"), 0);
+	ck_assert_int_ne(_oidc_strcasecmp("@", "`"), 0);
+	ck_assert_int_ne(_oidc_strcasecmp("[", "{"), 0);
+	/* a prefix is not equal and orders first */
+	ck_assert_int_lt(_oidc_strcasecmp("example.co", "EXAMPLE.COM"), 0);
+	ck_assert_int_gt(_oidc_strcasecmp("EXAMPLE.COM", "example.co"), 0);
+	ck_assert_int_lt(_oidc_strcasecmp("A", "b"), 0);
+	/* NULL never compares equal, not even to NULL */
+	ck_assert_int_ne(_oidc_strcasecmp(NULL, NULL), 0);
+	ck_assert_int_ne(_oidc_strcasecmp("a", NULL), 0);
+	ck_assert_int_ne(_oidc_strcasecmp(NULL, "a"), 0);
+
+	/* hostname suffix matching is case-insensitive but does not skip whitespace */
+	ck_assert_int_eq(oidc_util_hostname_endswith("WWW.Example.com", "example.COM"), TRUE);
+	ck_assert_int_eq(oidc_util_hostname_endswith("exa mple.com", "examp le.com"), FALSE);
+	ck_assert_int_eq(oidc_util_hostname_endswith("www.exa mple.com", "examp le.com"), FALSE);
+}
+END_TEST
+
 START_TEST(test_util_issuer_match_trailing_slash) {
 	/* trailing slash in either argument must be ignored */
 	ck_assert_msg(oidc_util_issuer_match("https://id.example.com/", "https://id.example.com") == TRUE,
@@ -1973,6 +2003,7 @@ int main(void) {
 	tcase_add_test(c, test_util_hex_and_hash);
 	tcase_add_test(c, test_util_cookie_domain_and_issuer);
 	tcase_add_test(c, test_util_cookie_domain_dot_prefix);
+	tcase_add_test(c, test_util_strcasecmp_byte_exact);
 	tcase_add_test(c, test_util_issuer_match_trailing_slash);
 	tcase_add_test(c, test_util_issuer_match_empty_and_null);
 	tcase_add_test(c, test_util_set_trace_parent_flags);

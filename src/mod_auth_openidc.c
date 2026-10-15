@@ -471,7 +471,7 @@ apr_byte_t oidc_check_cookie_domain(request_rec *r, const oidc_cfg_t *cfg, const
 					  ? oidc_cfg_cookie_domain_get(cfg)
 					  : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
 	const char *s_cookie_domain = oidc_session_get_cookie_domain(r, session);
-	if ((s_cookie_domain == NULL) || (_oidc_strnatcasecmp(c_cookie_domain, s_cookie_domain) != 0)) {
+	if ((s_cookie_domain == NULL) || (_oidc_strcasecmp(c_cookie_domain, s_cookie_domain) != 0)) {
 		oidc_warn(r,
 			  "aborting: detected attempt to play cookie against a different domain/host than issued for! "
 			  "(issued=%s, current=%s)",
@@ -810,7 +810,7 @@ static apr_byte_t oidc_validate_redirect_url_host(request_rec *r, const oidc_cfg
 	/* IPv6 literals need to be wrapped in brackets to compare with the current hostname */
 	const char *url_ipv6_aware =
 	    strchr(uri->hostname, ':') ? apr_pstrcat(r->pool, "[", uri->hostname, "]", NULL) : uri->hostname;
-	if (_oidc_strnatcasecmp(c_host, url_ipv6_aware) == 0)
+	if (_oidc_strcasecmp(c_host, url_ipv6_aware) == 0)
 		return TRUE;
 	return oidc_validate_redirect_url_fail(
 	    r, err_str, err_desc, "Invalid Request",

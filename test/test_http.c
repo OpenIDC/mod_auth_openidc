@@ -765,6 +765,24 @@ START_TEST(test_response_header_empty_value) {
 }
 END_TEST
 
+START_TEST(test_response_header_name_match) {
+	request_rec *r = oidc_test_request_get();
+	apr_hash_t *hdrs = apr_hash_make(r->pool);
+	apr_hash_set(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING, "");
+	oidc_curl_resp_hdr_ctx_t ctx = {r, hdrs};
+
+	/* a header name that differs from the requested one only by whitespace is a different header */
+	const char *wire1 = "DPoP -Nonce: spoofed\r\n";
+	oidc_http_response_header((char *)wire1, 1, _oidc_strlen(wire1), &ctx);
+	ck_assert_str_eq(apr_hash_get(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING), "");
+
+	/* header names are case-insensitive, e.g. lowercase over HTTP/2 */
+	const char *wire2 = "dpop-nonce: abc123\r\n";
+	oidc_http_response_header((char *)wire2, 1, _oidc_strlen(wire2), &ctx);
+	ck_assert_str_eq(apr_hash_get(hdrs, OIDC_HTTP_HDR_DPOP_NONCE, APR_HASH_KEY_STRING), "abc123");
+}
+END_TEST
+
 START_TEST(test_response_header_no_wanted_headers) {
 	request_rec *r = oidc_test_request_get();
 	oidc_curl_resp_hdr_ctx_t ctx_null = {r, NULL};
@@ -1490,6 +1508,7 @@ int main(void) {
 	tcase_add_test(curl_helpers, test_response_data_rejects_oversize);
 	tcase_add_test(curl_helpers, test_response_header_captures_requested_only);
 	tcase_add_test(curl_helpers, test_response_header_empty_value);
+	tcase_add_test(curl_helpers, test_response_header_name_match);
 	tcase_add_test(curl_helpers, test_response_header_no_wanted_headers);
 	tcase_add_test(curl_helpers, test_build_header_list_bearer_and_content_type);
 	tcase_add_test(curl_helpers, test_build_header_list_dpop_switches_scheme_and_adds_header);

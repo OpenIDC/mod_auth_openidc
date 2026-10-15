@@ -542,7 +542,7 @@ apr_byte_t oidc_util_hostname_endswith(const char *hostname, const char *suffix)
 	if ((slen == 0) || (hlen < slen))
 		return FALSE;
 	tail = hostname + (hlen - slen);
-	if (_oidc_strnatcasecmp(tail, suffix) != 0)
+	if (_oidc_strcasecmp(tail, suffix) != 0)
 		return FALSE;
 	return ((tail == hostname) || (*(tail - 1) == '.')) ? TRUE : FALSE;
 }

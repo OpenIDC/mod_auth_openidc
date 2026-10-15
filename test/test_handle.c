@@ -3528,6 +3528,10 @@ START_TEST(test_handle_legacy_open_redirect) {
 	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://evil.example.com/somewhere",
 						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
 			 FALSE);
+	/* a hostname that differs from the current one only by whitespace is a different host */
+	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "https://www.exam ple.com/somewhere",
+						    OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
+			 FALSE);
 
 	/* a same-host URL with a scheme other than http(s) is not, in any case */
 	ck_assert_int_eq(oidc_validate_redirect_url(r, c, "HTTPS://www.example.com/somewhere",
@@ -3801,6 +3805,12 @@ START_TEST(test_handle_mod_check_cookie_domain_mismatch) {
 	/* session cookie issued for another host must be rejected */
 	oidc_session_set_cookie_domain(r, session, "other-host.example.com");
 	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), FALSE);
+
+	/* as must one issued for a host that differs from the current one only by whitespace */
+	oidc_session_set_cookie_domain(r, session, "www.exam ple.com");
+	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), FALSE);
+	oidc_session_set_cookie_domain(r, session, "WWW.Example.COM");
+	ck_assert_int_eq(oidc_check_cookie_domain(r, c, session), TRUE);
 
 	/* and a NULL session cookie domain must also fail (the OR-clause guard) */
 	oidc_session_set_cookie_domain(r, session, NULL);

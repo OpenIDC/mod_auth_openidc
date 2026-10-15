@@ -544,7 +544,7 @@ size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems,
 	/* check if the caller is interested in the value of the current response header */
 	for (apr_hash_index_t *hi = apr_hash_first(NULL, ctx->hdrs); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&h_name, &h_len, NULL);
-		if (_oidc_strnatcasecmp(hdr, h_name) == 0) {
+		if (_oidc_strcasecmp(hdr, h_name) == 0) {
 			oidc_debug(ctx->r, "returning response header: %s: %s", h_name, value);
 			apr_hash_set(ctx->hdrs, h_name, APR_HASH_KEY_STRING, apr_pstrdup(ctx->r->pool, value));
 			break;
