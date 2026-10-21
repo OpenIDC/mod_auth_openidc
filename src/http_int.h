@@ -68,6 +68,8 @@ typedef struct oidc_curl_resp_data_ctx_t {
 	request_rec *r;
 	char *memory;
 	size_t size;
+	/* allocated size of memory, including the space for the terminating NUL */
+	size_t capacity;
 } oidc_curl_resp_data_ctx_t;
 
 /* hash of header names whose values curl should collect from the response */

@@ -690,7 +690,7 @@ END_TEST
 
 START_TEST(test_response_data_accumulates) {
 	request_rec *r = oidc_test_request_get();
-	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0};
+	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0, 0};
 
 	const char *part1 = "hello ";
 	const char *part2 = "world";
@@ -710,7 +710,7 @@ END_TEST
 
 START_TEST(test_response_data_rejects_oversize) {
 	request_rec *r = oidc_test_request_get();
-	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0};
+	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0, 0};
 
 	/* claim a chunk bigger than the cap without actually allocating it; the callback
 	 * must reject based on the advertised size before reading from contents */
@@ -719,6 +719,61 @@ START_TEST(test_response_data_rejects_oversize) {
 	size_t rv = oidc_http_response_data(&tiny, 1, huge, &ctx);
 	ck_assert_msg(rv == 0, "oversize response rejected (returns 0)");
 	ck_assert_msg(ctx.size == 0, "context size unchanged on rejection");
+}
+END_TEST
+
+START_TEST(test_response_data_grows_geometrically) {
+	request_rec *r = oidc_test_request_get();
+	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0, 0};
+	const size_t chunk = 1024;
+	const int n = 1024;
+	char *buf = apr_palloc(r->pool, chunk);
+
+	/* every buffer allocated from the request pool stays allocated until the request ends, so the
+	 * number of reallocations must grow with the log of the number of chunks, not linearly */
+	int allocations = 0;
+	for (int i = 0; i < n; i++) {
+		const char *prev = ctx.memory;
+		memset(buf, 'a' + (i % 26), chunk);
+		ck_assert_msg(oidc_http_response_data(buf, 1, chunk, &ctx) == chunk, "chunk %d consumed entirely", i);
+		if (ctx.memory != prev)
+			allocations++;
+	}
+	/* an exact-size first buffer followed by 10 doublings holds 1024 chunks of 1024 bytes */
+	ck_assert_msg(allocations <= 11, "buffer reallocated %d times for %d chunks", allocations, n);
+	ck_assert_msg(ctx.size == chunk * n, "size accumulates over all chunks");
+	ck_assert_msg(ctx.capacity <= 2 * (ctx.size + 1), "capacity %lu stays within twice the size %lu",
+		      (unsigned long)ctx.capacity, (unsigned long)ctx.size);
+
+	for (int i = 0; i < n; i++) {
+		ck_assert_msg(ctx.memory[i * chunk] == 'a' + (i % 26), "first byte of chunk %d preserved", i);
+		ck_assert_msg(ctx.memory[(i + 1) * chunk - 1] == 'a' + (i % 26), "last byte of chunk %d preserved", i);
+	}
+	ck_assert_msg(ctx.memory[ctx.size] == '\0', "memory NUL-terminated");
+}
+END_TEST
+
+START_TEST(test_response_data_accumulates_up_to_max) {
+	request_rec *r = oidc_test_request_get();
+	oidc_curl_resp_data_ctx_t ctx = {r, NULL, 0, 0};
+	const size_t chunk = 64 * 1024;
+	char *buf = apr_palloc(r->pool, chunk);
+	memset(buf, 'x', chunk);
+
+	/* the response may grow to exactly the maximum size in chunks; the doubled capacity is clamped
+	 * to what that maximum needs */
+	while (ctx.size < OIDC_CURL_RESPONSE_DATA_SIZE_MAX)
+		ck_assert_msg(oidc_http_response_data(buf, 1, chunk, &ctx) == chunk, "chunk at %lu consumed",
+			      (unsigned long)ctx.size);
+	ck_assert_msg(ctx.size == OIDC_CURL_RESPONSE_DATA_SIZE_MAX, "size reaches the maximum exactly");
+	ck_assert_msg(ctx.capacity == OIDC_CURL_RESPONSE_DATA_SIZE_MAX + 1, "capacity clamped to %d + 1, got %lu",
+		      OIDC_CURL_RESPONSE_DATA_SIZE_MAX, (unsigned long)ctx.capacity);
+
+	/* a single byte more is rejected and leaves the data intact */
+	ck_assert_msg(oidc_http_response_data(buf, 1, 1, &ctx) == 0, "byte beyond the maximum rejected");
+	ck_assert_msg(ctx.size == OIDC_CURL_RESPONSE_DATA_SIZE_MAX, "size unchanged on rejection");
+	ck_assert_msg(ctx.memory[ctx.size - 1] == 'x', "data preserved on rejection");
+	ck_assert_msg(ctx.memory[ctx.size] == '\0', "memory NUL-terminated");
 }
 END_TEST
 
@@ -1506,6 +1561,8 @@ int main(void) {
 	tcase_add_checked_fixture(curl_helpers, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(curl_helpers, test_response_data_accumulates);
 	tcase_add_test(curl_helpers, test_response_data_rejects_oversize);
+	tcase_add_test(curl_helpers, test_response_data_grows_geometrically);
+	tcase_add_test(curl_helpers, test_response_data_accumulates_up_to_max);
 	tcase_add_test(curl_helpers, test_response_header_captures_requested_only);
 	tcase_add_test(curl_helpers, test_response_header_empty_value);
 	tcase_add_test(curl_helpers, test_response_header_name_match);

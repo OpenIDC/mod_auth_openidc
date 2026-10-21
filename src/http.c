@@ -484,19 +484,33 @@ size_t oidc_http_response_data(void *contents, size_t size, size_t nmemb, void *
 		return 0;
 	}
 
-	/* allocate the new buffer for the current + new response bytes */
-	char *newptr = apr_palloc(mem->r->pool, mem->size + realsize + 1);
-	if (newptr == NULL) {
-		oidc_error(mem->r, "memory allocation for new buffer of %ld bytes failed",
-			   (long)(mem->size + realsize + 1));
-		return 0;
+	/* grow the buffer geometrically: pool memory is only released when the request ends, so allocating a new
+	 * buffer of the exact size for every chunk would keep all earlier copies around and use memory quadratic
+	 * in the response size */
+	const size_t needed = mem->size + realsize + 1;
+	if (needed > mem->capacity) {
+		size_t capacity = mem->capacity * 2;
+		if (capacity > OIDC_CURL_RESPONSE_DATA_SIZE_MAX + 1)
+			capacity = OIDC_CURL_RESPONSE_DATA_SIZE_MAX + 1;
+		if (capacity < needed)
+			capacity = needed;
+
+		char *newptr = apr_palloc(mem->r->pool, capacity);
+		if (newptr == NULL) {
+			oidc_error(mem->r, "memory allocation for new buffer of %ld bytes failed", (long)capacity);
+			return 0;
+		}
+
+		/* copy over the data from current memory */
+		if (mem->size > 0)
+			_oidc_memcpy(newptr, mem->memory, mem->size);
+		mem->memory = newptr;
+		mem->capacity = capacity;
 	}
 
-	/* copy over the data from current memory plus the cURL buffer */
-	_oidc_memcpy(newptr, mem->memory, mem->size);
-	_oidc_memcpy(&(newptr[mem->size]), contents, realsize);
+	/* append the cURL buffer */
+	_oidc_memcpy(&(mem->memory[mem->size]), contents, realsize);
 	mem->size += realsize;
-	mem->memory = newptr;
 	mem->memory[mem->size] = 0;
 
 	return realsize;
@@ -1062,7 +1076,7 @@ static apr_byte_t oidc_http_request(request_rec *r, const char *url, const char 
 	CURL *curl = NULL;
 	CURLcode code = CURLE_OK;
 	char curl_err[CURL_ERROR_SIZE];
-	oidc_curl_resp_data_ctx_t d_buf = {r, NULL, 0};
+	oidc_curl_resp_data_ctx_t d_buf = {r, NULL, 0, 0};
 	oidc_curl_resp_hdr_ctx_t h_buf = {r, response_hdrs};
 	struct curl_slist *h_list = NULL;
 	long http_code = 0;

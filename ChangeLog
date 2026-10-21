@@ -1,3 +1,10 @@
+10/21/2026
+- http: grow the buffer that collects an HTTP response geometrically instead of re-allocating it to the
+  exact size for every chunk that libcurl delivers; pool memory is only released at the end of the request,
+  so memory use was quadratic in the response size: a 10 MB response (the maximum) took 3 GB, more when
+  delivered in smaller chunks, and a client can make the server fetch from a host of its choosing through
+  dynamic discovery when OIDCDiscoverIssuersAllowed is not set
+
 10/15/2026
 - security: compare hostnames (the same-host check on redirect URLs, the session cookie domain
   binding, the cookie domain and discovery/request URI suffix checks) and the names of HTTP
