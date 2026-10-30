@@ -50,6 +50,45 @@ jobs:
     - name: Test
       run: make check || (cat test/test-suite.log && exit -1)
 
+  cjose-0.8:
+    # every other job builds against the runner's libcjose-dev (0.6.2.x), whose public
+    # headers include <openssl/rsa.h> and with it OPENSSL_VERSION_NUMBER. cjose 0.8.0
+    # dropped OpenSSL from its public headers, and that is what FreeBSD, OSS-Fuzz and
+    # anyone building cjose from source now compile against: a translation unit that
+    # tests an OpenSSL version macro without including an OpenSSL header of its own
+    # then silently compiles the guarded code out - which is how ES256/384/512
+    # signature verification vanished from jose/jws.c (#1400) with every other job
+    # green. Build and test against a source-built cjose 0.8.1 as well; the
+    # deliberately unguarded test_jose_alg2kty is what fails when it happens again.
+    runs-on: ubuntu-latest
+    env:
+      CJOSE_VERSION: 0.8.1
+    steps:
+    - uses: actions/checkout@v5
+    - name: Dependencies
+      # no libcjose-dev: the cjose step below provides it
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apache2-dev libssl-dev check pkg-config
+        sudo apt-get install -y libjansson-dev libcurl4-openssl-dev libhiredis-dev libpcre2-dev libjq-dev check
+    - name: cjose ${{ env.CJOSE_VERSION }}
+      run: |
+        curl -fsSL "https://github.com/cisco/cjose/archive/refs/tags/${CJOSE_VERSION}.tar.gz" | tar xz -C "$RUNNER_TEMP"
+        cd "$RUNNER_TEMP/cjose-${CJOSE_VERSION}"
+        ./configure --prefix=/usr/local
+        make
+        sudo make install
+        sudo ldconfig
+        test "$(pkg-config --modversion cjose)" = "${CJOSE_VERSION}"
+    - name: Configure
+      run: |
+        ./autogen.sh
+        ./configure --with-jq
+    - name: Make
+      run: make
+    - name: Test
+      run: make check || (cat test/test-suite.log && exit 1)
+
   valgrind:
     runs-on: ubuntu-latest
     # `make valgrind` defaults OIDC_TEST_REDIS_SERVER/OIDC_TEST_MEMCACHE_SERVER

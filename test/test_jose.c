@@ -48,6 +48,7 @@
 #include "util/util.h"
 #include <cjose/cjose.h> /* this JOSE-layer test exercises the cjose API directly (no longer pulled in via jose.h) */
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
+#include <openssl/bio.h> /* this test reads PEM fixtures through a BIO (cjose >= 0.8.0 no longer pulls it in) */
 
 /* shared helper: parse a JWK from a JSON string into the supplied outparam */
 static void _jose_test_jwk_parse(apr_pool_t *pool, const char *s, oidc_jwk_t **jwk, oidc_jose_error_t *err) {
@@ -79,6 +80,26 @@ START_TEST(test_jose_jws_algorithm_is_supported) {
 	rv = oidc_jose_jws_algorithm_is_supported(oidc_test_pool_get(), "ES256");
 	ck_assert_msg(rv == TRUE, "algorithm ES256 is not supported");
 #endif
+}
+END_TEST
+
+/*
+ * deliberately not guarded by OIDC_JOSE_EC_SUPPORT: that macro tests OPENSSL_VERSION_NUMBER, which
+ * reads as 0 in a translation unit that sees no OpenSSL header - as happened to jose/jws.c when built
+ * against cjose >= 0.8.0, whose public headers no longer include OpenSSL - and a guard here would
+ * then skip the very assertions that catch it
+ */
+START_TEST(test_jose_alg2kty) {
+	ck_assert_int_eq(oidc_alg2kty("RS256"), OIDC_JOSE_JWK_KTY_RSA);
+	ck_assert_int_eq(oidc_alg2kty("PS256"), OIDC_JOSE_JWK_KTY_RSA);
+	ck_assert_int_eq(oidc_alg2kty("ES256"), OIDC_JOSE_JWK_KTY_EC);
+	ck_assert_int_eq(oidc_alg2kty("ES384"), OIDC_JOSE_JWK_KTY_EC);
+	ck_assert_int_eq(oidc_alg2kty("ES512"), OIDC_JOSE_JWK_KTY_EC);
+	ck_assert_int_eq(oidc_alg2kty("HS256"), OIDC_JOSE_JWK_KTY_OCT);
+	ck_assert_int_eq(oidc_alg2kty("dir"), OIDC_JOSE_JWK_KTY_OCT);
+	ck_assert_int_eq(oidc_alg2kty("A256KW"), OIDC_JOSE_JWK_KTY_OCT);
+	ck_assert_int_eq(oidc_alg2kty("RSA-OAEP"), OIDC_JOSE_JWK_KTY_RSA);
+	ck_assert_int_eq(oidc_alg2kty("none"), -1);
 }
 END_TEST
 
@@ -1795,6 +1816,7 @@ int main(void) {
 
 	tcase_add_test(sup, test_jose_jws_supported_algorithms);
 	tcase_add_test(sup, test_jose_jws_algorithm_is_supported);
+	tcase_add_test(sup, test_jose_alg2kty);
 	tcase_add_test(sup, test_jose_jwe_supported_algorithms);
 	tcase_add_test(sup, test_jose_jwe_algorithm_is_supported);
 	tcase_add_test(sup, test_jose_jwe_supported_encryptions);

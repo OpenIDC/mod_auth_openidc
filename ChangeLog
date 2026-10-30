@@ -3,6 +3,9 @@
   headers no longer include OpenSSL: OPENSSL_VERSION_NUMBER was then undefined in jose/jws.c, so the
   "ES" to EC key type mapping was compiled out and every EC key was skipped ("could not find key with
   kid"); regression since 2.4.20; see #1400; thanks @cyrilst
+- ci: also build and test against cjose 0.8.1; test_jose.c now includes the OpenSSL BIO header it uses
+  instead of relying on cjose to pull it in (it did not link against cjose 0.8.x), and tests the algorithm
+  to key type mapping without the OIDC_JOSE_EC_SUPPORT guard that silently dropped the EC tests there
 
 10/21/2026
 - http: grow the buffer that collects an HTTP response geometrically instead of re-allocating it to the
