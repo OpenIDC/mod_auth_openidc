@@ -1,3 +1,9 @@
+10/31/2026
+- jose: fix verification of ES256/ES384/ES512 signed JWTs when built against cjose >= 0.8.0, whose public
+  headers no longer include OpenSSL: OPENSSL_VERSION_NUMBER was then undefined in jose/jws.c, so the
+  "ES" to EC key type mapping was compiled out and every EC key was skipped ("could not find key with
+  kid"); regression since 2.4.20; see #1400; thanks @cyrilst
+
 10/21/2026
 - http: grow the buffer that collects an HTTP response geometrically instead of re-allocating it to the
   exact size for every chunk that libcurl delivers; pool memory is only released at the end of the request,
