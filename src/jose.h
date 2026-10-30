@@ -55,6 +55,11 @@
 
 #include "json.h"
 
+/* the OIDC_JOSE_*_SUPPORT macros below evaluate OPENSSL_VERSION_NUMBER in #if
+ * directives, where the preprocessor treats an undefined identifier as 0; the
+ * OpenSSL version must therefore be known before they are defined */
+#include <openssl/opensslv.h>
+
 /* opaque forward declaration of the OpenSSL BIO type used in the oidc_jwk_pem_bio_to_jwk() prototype below */
 typedef struct bio_st BIO;
 
