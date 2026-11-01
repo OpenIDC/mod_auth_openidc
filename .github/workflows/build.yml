@@ -50,7 +50,10 @@ jobs:
     - name: Test
       run: make check || (cat test/test-suite.log && exit -1)
 
-  cjose-0.8:
+  # a job id may only hold [A-Za-z0-9_-]: a '.' makes GitHub reject the whole file at
+  # parse time, so not a single job runs; the dotted form goes in the display name
+  cjose-0_8:
+    name: cjose-0.8
     # every other job builds against the runner's libcjose-dev (0.6.2.x), whose public
     # headers include <openssl/rsa.h> and with it OPENSSL_VERSION_NUMBER. cjose 0.8.0
     # dropped OpenSSL from its public headers, and that is what FreeBSD, OSS-Fuzz and
