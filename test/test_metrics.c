@@ -167,6 +167,41 @@ START_TEST(test_metrics_handle_request_format_internal) {
 }
 END_TEST
 
+/*
+ * the child pool going away stops the flush thread, which flushes on its way out: at exit that has to happen
+ * before apr_terminate() destroys the local collection pool the thread clears after every flush, so it cannot
+ * be left to oidc_metrics_cleanup(), a pconf cleanup that only runs after that pool is gone
+ */
+START_TEST(test_metrics_child_pool_cleanup_stops_and_flushes) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	apr_pool_t *pchild = NULL;
+
+	/* an interval long enough that no periodic flush can land within the test */
+	oidc_test_setenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL", "600000");
+	enable_metrics_hook_data(r);
+	ck_assert_int_eq(oidc_metrics_post_config(r->server->process->pconf, r->server), TRUE);
+	ck_assert_int_eq(apr_pool_create(&pchild, r->server->process->pconf), APR_SUCCESS);
+	ck_assert_int_eq(oidc_metrics_child_init(pchild, r->server), APR_SUCCESS);
+
+	/* NB: a class that enable_metrics_hook_data enabled, or nothing is recorded and there is nothing to flush */
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_HTTP_RESPONSE_CODE, "200");
+	r->args = "format=internal&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), HTTP_NOT_FOUND);
+
+	/* no wait: the thread is stopped, and has flushed, by the time the child pool is gone, also when
+	 * that happens while it is still in its initial random sleep */
+	apr_pool_destroy(pchild);
+	r->args = "format=internal&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_msg((body != NULL) && (_oidc_strstr(body, "\"200\"") != NULL), "flushed: [%.300s]", body);
+
+	metrics_subsystem_teardown(r);
+	oidc_test_unsetenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL");
+}
+END_TEST
+
 START_TEST(test_metrics_handle_request_format_status) {
 	request_rec *r = oidc_test_request_get();
 	metrics_subsystem_setup(r);
@@ -807,6 +842,7 @@ int main(void) {
 	tcase_add_test(lifecycle, test_metrics_handle_request_no_format_default_prometheus);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_json);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_internal);
+	tcase_add_test(lifecycle, test_metrics_child_pool_cleanup_stops_and_flushes);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_status);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_unknown);
 	tcase_add_test(lifecycle, test_metrics_handle_request_with_samples);

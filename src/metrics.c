@@ -233,22 +233,39 @@ typedef struct oidc_metrics_timing_t {
 } oidc_metrics_timing_t;
 
 /*
+ * forget the local collection pool when it goes away: it is a child of the process pool, and at exit
+ * apr_pool_destroy() of the process pool destroys it before pconf (an older sibling) and so before the pconf
+ * cleanup that runs oidc_metrics_cleanup(), which must then not destroy it a second time
+ */
+static apr_status_t oidc_metrics_local_pool_cleanup(void *data) {
+	_oidc_metrics.pool = NULL;
+	_oidc_metrics.counters = NULL;
+	_oidc_metrics.timings = NULL;
+	return APR_SUCCESS;
+}
+
+/*
  * Reinitialize the per-process collection tables in a dedicated child pool.
  * Clearing this pool after a flush reclaims all nested hashes, keys and values
  * in one operation; the process mutex must be held once request threads exist.
  */
 static apr_byte_t oidc_metrics_local_reset(server_rec *s) {
-	if (_oidc_metrics.pool == NULL) {
-		if (apr_pool_create(&_oidc_metrics.pool, s->process->pool) != APR_SUCCESS) {
+	apr_pool_t *pool = _oidc_metrics.pool;
+
+	if (pool == NULL) {
+		if (apr_pool_create(&pool, s->process->pool) != APR_SUCCESS) {
 			oidc_serror(s, "apr_pool_create failed: cannot initialize local metrics");
 			return FALSE;
 		}
 	} else {
-		apr_pool_clear(_oidc_metrics.pool);
+		/* NB: this runs (and so consumes) oidc_metrics_local_pool_cleanup as well, hence the re-registration */
+		apr_pool_clear(pool);
 	}
+	apr_pool_cleanup_register(pool, NULL, oidc_metrics_local_pool_cleanup, apr_pool_cleanup_null);
 
-	_oidc_metrics.counters = apr_hash_make(_oidc_metrics.pool);
-	_oidc_metrics.timings = apr_hash_make(_oidc_metrics.pool);
+	_oidc_metrics.pool = pool;
+	_oidc_metrics.counters = apr_hash_make(pool);
+	_oidc_metrics.timings = apr_hash_make(pool);
 	return TRUE;
 }
 
@@ -796,18 +813,14 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		tick = interval;
 	int n = (int)(interval / tick);
 
-	/* see if we are asked to exit */
-	while (apr_atomic_read32(&_oidc_metrics_thread_exit) == 0) {
+	/* NB: test for exit only after flushing, because we need to write our local metrics into the cache before
+	 * exiting, also when asked to exit during the random sleep above */
+	do {
 
 		/* break up the sleep interval in short intervals so we can exit timely fashion without confusing Apache
 		 * at shutdown */
-		for (int i = 0; i < n; i++) {
+		for (int i = 0; (i < n) && (apr_atomic_read32(&_oidc_metrics_thread_exit) == 0); i++)
 			apr_sleep(tick);
-			if (apr_atomic_read32(&_oidc_metrics_thread_exit) != 0)
-				break;
-		}
-
-		// NB: no exit here because we need to write our local metrics into the cache before exiting
 
 		/* lock the mutex that protects the locally cached metrics */
 		if (oidc_cache_mutex_lock(s->process->pool, s, _oidc_metrics_process_mutex) == FALSE)
@@ -826,11 +839,40 @@ static void *APR_THREAD_FUNC oidc_metrics_thread_run(apr_thread_t *thread, void 
 		/* unlock the mutex that protects the locally cached metrics */
 		if (oidc_cache_mutex_unlock(s->process->pool, s, _oidc_metrics_process_mutex) == FALSE)
 			break;
-	}
+
+	} while (apr_atomic_read32(&_oidc_metrics_thread_exit) == 0);
 
 	/* NB: don't call apr_thread_exit here because it seems that Apache is cleaning up its own threads */
 
 	return NULL;
+}
+
+/*
+ * stop the flush thread, which writes what it gathered into shared memory one last time on its way out; a handle
+ * inherited over fork() names a thread that does not exist in this process and is just dropped
+ */
+static void oidc_metrics_thread_stop(server_rec *s) {
+	apr_status_t rv = APR_SUCCESS;
+
+	if ((_oidc_metrics_thread != NULL) && (_oidc_metrics_thread_pid == getpid())) {
+		apr_atomic_set32(&_oidc_metrics_thread_exit, 1);
+		if (apr_thread_join(&rv, _oidc_metrics_thread) != APR_SUCCESS)
+			oidc_serror(s, "apr_thread_join failed");
+		apr_atomic_set32(&_oidc_metrics_thread_exit, 0);
+	}
+	_oidc_metrics_thread = NULL;
+	_oidc_metrics_thread_pid = 0;
+}
+
+/*
+ * child pool cleanup: stop the flush thread before the child exits; leaving that to oidc_metrics_cleanup() is too
+ * late, since that is a pconf cleanup which at exit only runs after apr_terminate() has already destroyed the
+ * local collection pool that the thread clears after every flush (see oidc_metrics_local_pool_cleanup), and a
+ * flush landing in between crashes in apr_pool_clear()
+ */
+static apr_status_t oidc_metrics_child_cleanup(void *data) {
+	oidc_metrics_thread_stop((server_rec *)data);
+	return APR_SUCCESS;
 }
 
 /*
@@ -879,10 +921,10 @@ apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
 	if (oidc_cache_mutex_post_config(s->process->pool, s, _oidc_metrics_process_mutex, "metrics-process") == FALSE)
 		return FALSE;
 
-	/* create the thread only after all state that it accesses has been initialized */
-	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
-		return FALSE;
-	_oidc_metrics_thread_pid = getpid();
+	/* NB: no flush thread in the parent: samples are only ever recorded while handling a request, which the parent
+	 * does not do; the processes that do (including a -X single process) start one in oidc_metrics_child_init, and
+	 * a parent thread would race apr_pool_destroy() of the process pool at shutdown, which happens before the pconf
+	 * cleanup that would stop it */
 
 	return TRUE;
 }
@@ -891,7 +933,6 @@ apr_byte_t oidc_metrics_post_config(apr_pool_t *pool, server_rec *s) {
  * NB: global, yet called for each vhost that has metrics enabled!
  */
 apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
-	apr_status_t rv = APR_SUCCESS;
 
 	/* make sure this executes only once per child */
 	if (_oidc_metrics_is_parent == FALSE)
@@ -903,20 +944,19 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
 	if (oidc_cache_mutex_child_init(p, s, _oidc_metrics_process_mutex) != APR_SUCCESS)
 		return APR_EGENERAL;
 
-	/* Stop an existing same-process flush thread; discard inherited handles after a fork. */
-	if (_oidc_metrics_thread != NULL && _oidc_metrics_thread_pid == getpid()) {
-		apr_atomic_set32(&_oidc_metrics_thread_exit, 1);
-		apr_thread_join(&rv, _oidc_metrics_thread);
-		apr_atomic_set32(&_oidc_metrics_thread_exit, 0);
-	}
-	_oidc_metrics_thread = NULL;
+	/* stop an existing same-process flush thread; discard inherited handles after a fork */
+	oidc_metrics_thread_stop(s);
 	if (oidc_metrics_local_reset(s) == FALSE)
 		return APR_EGENERAL;
 
-	/* the metrics flush thread is not inherited from the parent, so re-create it in the child */
+	/* create the thread only after all state that it accesses has been initialized */
 	if (apr_thread_create(&_oidc_metrics_thread, NULL, oidc_metrics_thread_run, s, s->process->pool) != APR_SUCCESS)
 		return APR_EGENERAL;
 	_oidc_metrics_thread_pid = getpid();
+
+	/* stop it again when the child pool goes; registered after the mutex child_init calls above so that, cleanups
+	 * running last-in-first-out, the thread's final flush still finds them initialized */
+	apr_pool_cleanup_register(p, s, oidc_metrics_child_cleanup, apr_pool_cleanup_null);
 
 	/* flag this is a child */
 	_oidc_metrics_is_parent = FALSE;
@@ -928,21 +968,14 @@ apr_status_t oidc_metrics_child_init(apr_pool_t *p, server_rec *s) {
  * NB: global, yet called for each vhost that has metrics enabled!
  */
 apr_status_t oidc_metrics_cleanup(server_rec *s) {
-	apr_status_t rv = APR_SUCCESS;
 
-	/* make sure it gets executed exactly once! */
-	if ((_oidc_metrics_cache == NULL) || (apr_atomic_read32(&_oidc_metrics_thread_exit) != 0) ||
-	    (_oidc_metrics_thread == NULL))
+	/* make sure it gets executed exactly once! NB: not keyed on the flush thread, which the parent does not run
+	 * and a child has already stopped in oidc_metrics_child_cleanup by the time it gets here */
+	if (_oidc_metrics_cache == NULL)
 		return APR_SUCCESS;
 
-	/* signal the collector thread to exit */
-	apr_atomic_set32(&_oidc_metrics_thread_exit, 1);
-	apr_thread_join(&rv, _oidc_metrics_thread);
-	if (rv != APR_SUCCESS)
-		oidc_serror(s, "apr_thread_join failed");
-	apr_atomic_set32(&_oidc_metrics_thread_exit, 0);
-	_oidc_metrics_thread = NULL;
-	_oidc_metrics_thread_pid = 0;
+	/* stop the collector thread, if it still runs */
+	oidc_metrics_thread_stop(s);
 
 	/* delete the shared memory segment if we are in the parent process */
 	if (_oidc_metrics_is_parent == TRUE)
