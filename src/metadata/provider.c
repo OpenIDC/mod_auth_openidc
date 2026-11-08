@@ -350,21 +350,24 @@ apr_byte_t oidc_metadata_provider_parse(request_rec *r, oidc_cfg_t *cfg, const o
 	/* NB: the token endpoint authentication method is resolved before the endpoints because the
 	 *     RFC 8705 mutual-TLS endpoint selection below depends on it */
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) == NULL) {
-		/* the secret/certificate interplay that decides on RFC 8705 mutual-TLS is
-		 * documented at oidc_metadata_endpoint_auth_select; the secret and certificate
+		/* the secret/certificate interplay that decides on RFC 8705 mutual-TLS, and the
+		 * restrictions of the provider's profile, are documented at
+		 * oidc_proto_profile_token_endpoint_auth_policy; the secret and certificate
 		 * may be configured on this provider or globally */
 		apr_byte_t b_secret = (oidc_cfg_provider_client_secret_get(provider) != NULL) ||
 				      (oidc_cfg_provider_client_secret_get(oidc_cfg_provider_get(cfg)) != NULL);
 		apr_byte_t b_cert =
 		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL) ||
 		    (oidc_cfg_provider_token_endpoint_tls_client_cert_get(oidc_cfg_provider_get(cfg)) != NULL);
+		oidc_proto_endpoint_auth_policy_t policy =
+		    oidc_proto_profile_token_endpoint_auth_policy(cfg, provider, b_secret, b_cert);
 		if (oidc_metadata_endpoint_auth_select(r, cfg, j_provider,
-						       OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED, b_secret,
-						       b_cert, &value) != NULL) {
+						       OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED, &policy,
+						       &value) != NULL) {
 			oidc_error(r,
-				   "could not find a supported token endpoint authentication method in provider"
-				   "metadata (%s) for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED
-				   "\"",
+				   "could not find a token endpoint authentication method in provider metadata (%s) "
+				   "for entry \"" OIDC_METADATA_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED
+				   "\" that is usable with the configured client credentials and " OIDCProfile,
 				   oidc_cfg_provider_issuer_get(provider));
 			return FALSE;
 		}

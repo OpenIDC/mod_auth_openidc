@@ -136,15 +136,29 @@ apr_byte_t oidc_metadata_is_valid_uri(request_rec *r, const char *type, const ch
 }
 
 /*
- * try a single array entry against the validator and the preference;
- * returns TRUE when the entry matches the preference and the caller should stop iterating
+ * what an array entry must pass to be selected, and which entry to prefer
+ */
+typedef struct oidc_metadata_array_filter_t {
+	/* the entry must be valid */
+	oidc_valid_function_t valid;
+	/* ... and, unless NULL, permitted */
+	oidc_valid_function_t permitted;
+	/* the entry to select when present, before falling back to the first one that passes; may be NULL */
+	const char *preference;
+} oidc_metadata_array_filter_t;
+
+/*
+ * try a single array entry against the filter; returns TRUE when the entry matches the preference and the
+ * caller should stop iterating
  */
 static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const oidc_json_t *elem,
-						   oidc_valid_function_t valid_function, char **value,
-						   const char *preference, apr_byte_t *found) {
+						   const oidc_metadata_array_filter_t *filter, char **value,
+						   apr_byte_t *found) {
 	if (!oidc_json_is_string(elem))
 		return FALSE;
-	if (valid_function(pool, oidc_json_string_value(elem)) != NULL)
+	if (filter->valid(pool, oidc_json_string_value(elem)) != NULL)
+		return FALSE;
+	if ((filter->permitted != NULL) && (filter->permitted(pool, oidc_json_string_value(elem)) != NULL))
 		return FALSE;
 
 	*found = TRUE;
@@ -152,7 +166,7 @@ static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const oidc_
 	if (value == NULL)
 		return FALSE;
 
-	if ((preference != NULL) && (_oidc_strcmp(oidc_json_string_value(elem), preference) == 0)) {
+	if ((filter->preference != NULL) && (_oidc_strcmp(oidc_json_string_value(elem), filter->preference) == 0)) {
 		*value = apr_pstrdup(pool, oidc_json_string_value(elem));
 		return TRUE;
 	}
@@ -164,11 +178,11 @@ static apr_byte_t oidc_metadata_array_string_apply(apr_pool_t *pool, const oidc_
 }
 
 /*
- * check if there's a valid entry in a string of arrays, with a preference
+ * check if there's an entry in a string of arrays that passes the filter, with its preference
  */
-const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_json_t *json, const char *key,
-						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
-						const char *preference) {
+static const char *oidc_metadata_valid_string_in_array_impl(apr_pool_t *pool, const oidc_json_t *json, const char *key,
+							    const oidc_metadata_array_filter_t *filter, char **value,
+							    apr_byte_t optional) {
 	if (value)
 		*value = NULL;
 
@@ -181,8 +195,7 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 
 	apr_byte_t found = FALSE;
 	for (size_t i = 0; i < oidc_json_array_size(json_arr); i++) {
-		if (oidc_metadata_array_string_apply(pool, oidc_json_array_get(json_arr, i), valid_function, value,
-						     preference, &found))
+		if (oidc_metadata_array_string_apply(pool, oidc_json_array_get(json_arr, i), filter, value, &found))
 			break;
 	}
 
@@ -193,15 +206,26 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 }
 
 /*
- * Prefer RFC 8705 mTLS authentication only when a certificate is present without a client
- * secret. With a secret, the certificate may be intended only for token binding.
+ * check if there's a valid entry in a string of arrays, with a preference
+ */
+const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_json_t *json, const char *key,
+						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
+						const char *preference) {
+	const oidc_metadata_array_filter_t filter = {valid_function, NULL, preference};
+	return oidc_metadata_valid_string_in_array_impl(pool, json, key, &filter, value, optional);
+}
+
+/*
+ * select an endpoint authentication method from the methods advertised in the metadata under a selection policy,
+ * as obtained from oidc_proto_profile_token_endpoint_auth_policy; only the methods the configured credentials can
+ * perform are candidates
  */
 const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
-					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value) {
-	apr_byte_t b_mtls = (b_secret == FALSE) && (b_cert == TRUE);
-	return oidc_metadata_valid_string_in_array(
-	    r->pool, j_provider, key, oidc_cfg_get_valid_endpoint_auth_function(cfg, b_mtls), value, TRUE,
-	    b_mtls ? OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH : OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC);
+					       const char *key, const oidc_proto_endpoint_auth_policy_t *policy,
+					       char **value) {
+	const oidc_metadata_array_filter_t filter = {oidc_cfg_get_valid_endpoint_auth_function(cfg, policy->allow_mtls),
+						     policy->permitted, policy->preference};
+	return oidc_metadata_valid_string_in_array_impl(r->pool, j_provider, key, &filter, value, TRUE);
 }
 
 /*

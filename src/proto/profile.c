@@ -58,6 +58,9 @@ typedef struct oidc_proto_profile_ops_t {
 	oidc_cert_bound_tokens_t (*cert_bound_tokens)(const oidc_provider_t *provider);
 	int (*response_require_iss)(const oidc_provider_t *provider);
 	const char *(*request_uri_scope)(const oidc_provider_t *provider);
+	oidc_proto_endpoint_auth_policy_t (*token_endpoint_auth_policy)(apr_byte_t b_secret, apr_byte_t b_cert,
+									apr_byte_t b_key);
+	const char *(*token_endpoint_auth)(const oidc_cfg_t *cfg, const oidc_provider_t *provider);
 } oidc_proto_profile_ops_t;
 
 /*
@@ -118,6 +121,24 @@ static const char *oidc_profile_oidc10_request_uri_scope(const oidc_provider_t *
 	return OIDC_PROTO_SCOPE_OPENID;
 }
 
+static oidc_proto_endpoint_auth_policy_t
+oidc_profile_oidc10_token_endpoint_auth_policy(apr_byte_t b_secret, apr_byte_t b_cert, apr_byte_t b_key) {
+	// RFC 8705 mutual-TLS client authentication is selected only when a certificate is configured without a
+	// client secret: with a secret, the certificate may be there for (section 3) token binding only
+	oidc_proto_endpoint_auth_policy_t policy = {FALSE, NULL, OIDC_ENDPOINT_AUTH_CLIENT_SECRET_BASIC};
+	if ((b_secret == FALSE) && (b_cert == TRUE)) {
+		policy.allow_mtls = TRUE;
+		policy.preference = OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH;
+	}
+	return policy;
+}
+
+static const char *oidc_profile_oidc10_token_endpoint_auth(const oidc_cfg_t *cfg, const oidc_provider_t *provider) {
+	// NULL makes oidc_proto_token_endpoint_auth use client_secret_basic when a client secret is configured,
+	// or no client authentication at all (a public client) when it is not
+	return oidc_cfg_provider_token_endpoint_auth_get(provider);
+}
+
 static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_token_endpoint_auth_aud,
     oidc_profile_oidc10_revocation_endpoint_auth_aud,
@@ -128,6 +149,8 @@ static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_cert_bound_tokens,
     oidc_profile_oidc10_response_require_iss,
     oidc_profile_oidc10_request_uri_scope,
+    oidc_profile_oidc10_token_endpoint_auth_policy,
+    oidc_profile_oidc10_token_endpoint_auth,
 };
 
 /*
@@ -206,6 +229,57 @@ static const char *oidc_profile_fapi20_request_uri_scope(const oidc_provider_t *
 	return NULL;
 }
 
+/*
+ * FAPI 2.0 Security Profile section 5.3.3.1 item 2: the client authenticates with RFC 8705 mutual-TLS or with
+ * private_key_jwt, i.e. never with a client secret and never as a public client
+ */
+static const char *oidc_profile_fapi20_valid_token_endpoint_auth(apr_pool_t *pool, const char *arg) {
+	static const char *options[] = {OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT, OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH,
+					OIDC_ENDPOINT_AUTH_SELF_SIGNED_TLS_CLIENT_AUTH, NULL};
+	return oidc_cfg_parse_is_valid_option(pool, arg, options);
+}
+
+/*
+ * the FAPI 2.0 client authentication method that the configured credentials can perform: a certificate
+ * configured without a client secret keeps meaning mutual-TLS, as it does for OIDC10, so that it is only the
+ * selections that FAPI 2.0 does not permit that change; otherwise a signing key means private_key_jwt and a
+ * certificate next to a (useless under FAPI 2.0) client secret still means mutual-TLS
+ */
+static const char *oidc_profile_fapi20_token_endpoint_auth_preference(apr_byte_t b_secret, apr_byte_t b_cert,
+								      apr_byte_t b_key) {
+	if ((b_cert == TRUE) && (b_secret == FALSE))
+		return OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH;
+	if (b_key == TRUE)
+		return OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT;
+	if (b_cert == TRUE)
+		return OIDC_ENDPOINT_AUTH_TLS_CLIENT_AUTH;
+	return NULL;
+}
+
+static oidc_proto_endpoint_auth_policy_t
+oidc_profile_fapi20_token_endpoint_auth_policy(apr_byte_t b_secret, apr_byte_t b_cert, apr_byte_t b_key) {
+	// a client secret cannot be used for authentication here, so it does not stop a configured certificate from
+	// making the mutual-TLS methods candidates
+	oidc_proto_endpoint_auth_policy_t policy = {
+	    b_cert, oidc_profile_fapi20_valid_token_endpoint_auth,
+	    oidc_profile_fapi20_token_endpoint_auth_preference(b_secret, b_cert, b_key)};
+	return policy;
+}
+
+static const char *oidc_profile_fapi20_token_endpoint_auth(const oidc_cfg_t *cfg, const oidc_provider_t *provider) {
+	// a configured (or, from Provider metadata, selected) method applies as-is: unlike the other settings it
+	// cannot be overridden, since it depends on credentials and on a client registration at the Provider
+	const char *auth = oidc_cfg_provider_token_endpoint_auth_get(provider);
+	if (auth != NULL)
+		return auth;
+	// none is set when the Provider's endpoints are all configured by hand, i.e. when there is no
+	// "token_endpoint_auth_methods_supported" to select from; decide on the configured credentials alone
+	return oidc_profile_fapi20_token_endpoint_auth_preference(
+	    oidc_cfg_provider_client_secret_get(provider) != NULL,
+	    oidc_cfg_provider_token_endpoint_tls_client_cert_get(provider) != NULL,
+	    oidc_cfg_private_keys_get(cfg) != NULL);
+}
+
 static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_token_endpoint_auth_aud,
     oidc_profile_fapi20_revocation_endpoint_auth_aud,
@@ -216,6 +290,8 @@ static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_cert_bound_tokens,
     oidc_profile_fapi20_response_require_iss,
     oidc_profile_fapi20_request_uri_scope,
+    oidc_profile_fapi20_token_endpoint_auth_policy,
+    oidc_profile_fapi20_token_endpoint_auth,
 };
 
 /*
@@ -312,4 +388,39 @@ int oidc_proto_profile_response_require_iss_get(const oidc_provider_t *provider)
  */
 const char *oidc_proto_profile_request_uri_scope_get(const oidc_provider_t *provider) {
 	return oidc_proto_profile_ops(provider)->request_uri_scope(provider);
+}
+
+/*
+ * returns how to select the token endpoint authentication method from the methods advertised by the Provider,
+ * given whether a client secret and a TLS client certificate are configured for it; a NULL provider (the OAuth 2.0
+ * Resource Server role) applies the plain OpenID Connect 1.0 selection
+ */
+oidc_proto_endpoint_auth_policy_t oidc_proto_profile_token_endpoint_auth_policy(const oidc_cfg_t *cfg,
+										const oidc_provider_t *provider,
+										apr_byte_t b_secret,
+										apr_byte_t b_cert) {
+	const oidc_proto_profile_ops_t *ops =
+	    (provider != NULL) ? oidc_proto_profile_ops(provider) : &_oidc_profile_oidc10_ops;
+	return ops->token_endpoint_auth_policy(b_secret, b_cert, oidc_cfg_private_keys_get(cfg) != NULL);
+}
+
+/*
+ * returns the token endpoint authentication method to use towards the token, pushed authorization request and
+ * revocation endpoints; NULL means client_secret_basic with a client secret and a public client without one
+ */
+const char *oidc_proto_profile_token_endpoint_auth_get(const oidc_cfg_t *cfg, const oidc_provider_t *provider) {
+	return oidc_proto_profile_ops(provider)->token_endpoint_auth(cfg, provider);
+}
+
+/*
+ * returns whether the profile permits a token endpoint authentication method; NULL stands for the default
+ * of oidc_proto_token_endpoint_auth (client_secret_basic, or a public client)
+ */
+apr_byte_t oidc_proto_profile_token_endpoint_auth_permitted(apr_pool_t *pool, const oidc_provider_t *provider,
+							    const char *method) {
+	oidc_valid_function_t permitted =
+	    oidc_proto_profile_ops(provider)->token_endpoint_auth_policy(FALSE, FALSE, FALSE).permitted;
+	if (permitted == NULL)
+		return TRUE;
+	return ((method != NULL) && (permitted(pool, method) == NULL)) ? TRUE : FALSE;
 }

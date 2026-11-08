@@ -146,6 +146,36 @@ static int oidc_check_config_openid_openidc_cookie_domain(server_rec *s, const o
 }
 
 /*
+ * check that the token endpoint authentication method is one that OIDCProfile permits; a configured one is
+ * warned about only, since it may be deliberate, but having none that the configured credentials can perform
+ * is an error, rather than falling back to client_secret_basic or to a public client
+ */
+static int oidc_check_config_openid_openidc_endpoint_auth(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
+	const oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *auth = oidc_proto_profile_token_endpoint_auth_get(c, provider);
+
+	if (oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, auth) == TRUE)
+		return OK;
+
+	if (oidc_cfg_provider_token_endpoint_auth_get(provider) != NULL) {
+		oidc_check_swarn(s,
+				 "'" OIDCProviderTokenEndpointAuth
+				 "' is set to \"%s\", which the configured '" OIDCProfile "' does not permit",
+				 auth);
+		return OK;
+	}
+
+	// the per-provider .conf files may still configure a TLS client certificate
+	if (oidc_cfg_metadata_dir_get(c) != NULL)
+		return OK;
+
+	oidc_check_serror(s, "the configured '" OIDCProfile "' requires private_key_jwt or mutual-TLS client "
+			     "authentication, but neither a signing key ('" OIDCPrivateKeyFiles
+			     "') nor a TLS client certificate ('" OIDCClientTokenEndpointCert "') is configured");
+	return HTTP_INTERNAL_SERVER_ERROR;
+}
+
+/*
  * check the config required for the OpenID Connect RP role
  */
 static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
@@ -178,6 +208,10 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 	}
 
 	rc = oidc_check_config_openid_openidc_cookie_domain(s, c, &r_uri, redirect_uri_is_relative);
+	if (rc != OK)
+		return rc;
+
+	rc = oidc_check_config_openid_openidc_endpoint_auth(pool, s, c);
 	if (rc != OK)
 		return rc;
 

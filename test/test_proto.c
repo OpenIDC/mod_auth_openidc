@@ -660,6 +660,92 @@ START_TEST(test_proto_profile_endpoint_auth_aud_setting) {
 }
 END_TEST
 
+/* OIDCProfile and the token endpoint authentication method */
+START_TEST(test_proto_profile_token_endpoint_auth) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const char *cert = apr_psprintf(pool, "%s/certificate.pem", oidc_test_srcdir());
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+	oidc_proto_endpoint_auth_policy_t policy;
+
+	/* OIDC10: an unset method stays unset, i.e. client_secret_basic with a secret, a public client without */
+	ck_assert_ptr_null(oidc_proto_profile_token_endpoint_auth_get(cfg, provider));
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, NULL), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "client_secret_basic"), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "none"), TRUE);
+
+	/* OIDC10 selection from metadata: client_secret_basic preferred, mutual-TLS only for a certificate without a
+	 * client secret, since next to a secret the certificate may be there for token binding only */
+	policy = oidc_proto_profile_token_endpoint_auth_policy(cfg, provider, TRUE, TRUE);
+	ck_assert_int_eq(policy.allow_mtls, FALSE);
+	ck_assert_ptr_null(policy.permitted);
+	ck_assert_str_eq(policy.preference, "client_secret_basic");
+	policy = oidc_proto_profile_token_endpoint_auth_policy(cfg, provider, FALSE, TRUE);
+	ck_assert_int_eq(policy.allow_mtls, TRUE);
+	ck_assert_str_eq(policy.preference, "tls_client_auth");
+	/* the OAuth 2.0 Resource Server role has no provider and selects the same way */
+	policy = oidc_proto_profile_token_endpoint_auth_policy(cfg, NULL, FALSE, TRUE);
+	ck_assert_int_eq(policy.allow_mtls, TRUE);
+	ck_assert_ptr_null(policy.permitted);
+	ck_assert_str_eq(policy.preference, "tls_client_auth");
+
+	/* FAPI20 permits private_key_jwt and mutual-TLS only: no client secret, no public client */
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, NULL), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "none"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "client_secret_basic"),
+			 FALSE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "client_secret_post"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "client_secret_jwt"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "bearer_access_token"),
+			 FALSE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "private_key_jwt"), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "tls_client_auth"), TRUE);
+	ck_assert_int_eq(
+	    oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, "self_signed_tls_client_auth"), TRUE);
+
+	/* FAPI20 selection from metadata: a certificate makes mutual-TLS a candidate even next to a (useless) secret */
+	policy = oidc_proto_profile_token_endpoint_auth_policy(cfg, provider, TRUE, TRUE);
+	ck_assert_int_eq(policy.allow_mtls, TRUE);
+	ck_assert_ptr_nonnull(policy.permitted);
+	ck_assert_str_eq(policy.preference, "private_key_jwt");
+	policy = oidc_proto_profile_token_endpoint_auth_policy(cfg, provider, FALSE, TRUE);
+	ck_assert_str_eq(policy.preference, "tls_client_auth");
+
+	/* without any credentials there is nothing to fall back to */
+	cfg->private_keys = NULL;
+	ck_assert_ptr_null(oidc_proto_profile_token_endpoint_auth_get(cfg, provider));
+	policy = oidc_proto_profile_token_endpoint_auth_policy(cfg, provider, FALSE, FALSE);
+	ck_assert_ptr_null(policy.preference);
+	/* ... and a client secret alone does not help */
+	oidc_cfg_provider_client_secret_set(pool, provider, "secret");
+	ck_assert_ptr_null(oidc_proto_profile_token_endpoint_auth_get(cfg, provider));
+	/* a certificate next to the secret means mutual-TLS */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(pool, provider, cert));
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_get(cfg, provider), "tls_client_auth");
+	/* ... unless a signing key is configured: the certificate then binds the tokens, as next to a secret
+	 * under OIDC10 */
+	cfg->private_keys = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_get(cfg, provider), "private_key_jwt");
+
+	/* a signing key alone means private_key_jwt */
+	oidc_provider_t *key_only = oidc_cfg_provider_create(pool);
+	oidc_cfg_provider_profile_int_set(key_only, OIDC_PROFILE_FAPI20);
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_get(cfg, key_only), "private_key_jwt");
+
+	/* a certificate without a client secret keeps meaning mutual-TLS, signing key or not */
+	oidc_provider_t *cert_only = oidc_cfg_provider_create(pool);
+	oidc_cfg_provider_profile_int_set(cert_only, OIDC_PROFILE_FAPI20);
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(pool, cert_only, cert));
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_get(cfg, cert_only), "tls_client_auth");
+
+	/* a configured method is used as-is, even one FAPI 2.0 does not permit */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_set(pool, cfg, key_only, "client_secret_post"));
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_get(cfg, key_only), "client_secret_post");
+	ck_assert_int_eq(oidc_proto_profile_token_endpoint_auth_permitted(pool, key_only, "client_secret_post"), FALSE);
+}
+END_TEST
+
 START_TEST(test_proto_pkce_none) {
 	ck_assert_str_eq(oidc_pkce_none.method, OIDC_PKCE_METHOD_NONE);
 	/* by definition there are no callbacks for the "none" method */
@@ -4526,6 +4612,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_profile_id_token_aud_values);
 	tcase_add_test(core, test_proto_profile_revocation_aud_variants);
 	tcase_add_test(core, test_proto_profile_endpoint_auth_aud_setting);
+	tcase_add_test(core, test_proto_profile_token_endpoint_auth);
 	tcase_add_test(core, test_proto_pkce_none);
 	tcase_add_test(core, test_proto_token_endpoint_auth_no_client_id);
 	tcase_add_test(core, test_proto_token_endpoint_auth_basic_and_post);

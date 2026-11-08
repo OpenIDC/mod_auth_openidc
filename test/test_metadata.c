@@ -473,6 +473,106 @@ START_TEST(test_metadata_parse_mtls_aliases_private_key_jwt) {
 }
 END_TEST
 
+/* an OP that, like Keycloak, advertises every client authentication method, the client secret based ones first */
+#define OIDC_TEST_METADATA_ALL_AUTH_METHODS                                                                            \
+	"{"                                                                                                            \
+	"\"issuer\":\"https://idp.example.com\","                                                                      \
+	"\"authorization_endpoint\":\"https://idp.example.com/authorize\","                                            \
+	"\"token_endpoint\":\"https://idp.example.com/token\","                                                        \
+	"\"token_endpoint_auth_methods_supported\":[\"client_secret_basic\",\"client_secret_post\","                   \
+	"\"client_secret_jwt\",\"tls_client_auth\",\"private_key_jwt\"]"                                               \
+	"}"
+
+/* parse the metadata for a fresh provider under a profile, with an optional client secret and certificate */
+static apr_byte_t oidc_test_metadata_auth_parse(request_rec *r, oidc_cfg_t *c, const char *metadata,
+						oidc_profile_t profile, const char *secret, apr_byte_t cert,
+						const char **auth) {
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j = NULL;
+	apr_byte_t rv = FALSE;
+
+	oidc_cfg_provider_profile_int_set(provider, profile);
+	if (secret != NULL)
+		oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+	if (cert == TRUE)
+		ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+		    r->pool, provider, apr_psprintf(r->pool, "%s/certificate.pem", oidc_test_srcdir())));
+
+	ck_assert_int_eq(oidc_json_decode_object(r, metadata, &j), TRUE);
+	rv = oidc_metadata_provider_parse(r, c, j, provider);
+	oidc_json_decref(j);
+	*auth = oidc_cfg_provider_token_endpoint_auth_get(provider);
+	return rv;
+}
+
+/*
+ * OIDCProfile FAPI20 selects private_key_jwt or mutual-TLS from the advertised methods, where OIDC10 prefers
+ * client_secret_basic (even without a client secret, which then sends no client authentication at all)
+ */
+START_TEST(test_metadata_parse_fapi20_token_endpoint_auth) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *auth = NULL;
+
+	/* NB: the fixture's (empty) private_keys array makes private_key_jwt usable */
+	ck_assert_ptr_nonnull(c->private_keys);
+
+	/* OIDC10, a signing key but no client secret: client_secret_basic all the same */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_OIDC10,
+						       NULL, FALSE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "client_secret_basic");
+
+	/* FAPI20: private_key_jwt */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_FAPI20,
+						       NULL, FALSE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "private_key_jwt");
+
+	/* ... also when a client secret is configured */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_FAPI20,
+						       "secret", FALSE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "private_key_jwt");
+
+	/* ... and next to the secret a certificate, which then binds the tokens */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_FAPI20,
+						       "secret", TRUE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "private_key_jwt");
+
+	/* a certificate without a client secret keeps meaning mutual-TLS, as it does under OIDC10 */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_FAPI20,
+						       NULL, TRUE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "tls_client_auth");
+
+	/* without a signing key, a certificate next to a client secret means mutual-TLS as well */
+	c->private_keys = NULL;
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_FAPI20,
+						       "secret", TRUE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "tls_client_auth");
+	/* ... where OIDC10 keeps client_secret_basic */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_OIDC10,
+						       "secret", TRUE, &auth),
+			 TRUE);
+	ck_assert_str_eq(auth, "client_secret_basic");
+
+	/* a client secret alone leaves FAPI20 nothing to select: fail the parse rather than fall back */
+	ck_assert_int_eq(oidc_test_metadata_auth_parse(r, c, OIDC_TEST_METADATA_ALL_AUTH_METHODS, OIDC_PROFILE_FAPI20,
+						       "secret", FALSE, &auth),
+			 FALSE);
+	ck_assert_ptr_null(auth);
+
+	/* as does an OP that advertises client secret based methods only, whatever the credentials */
+	c->private_keys = apr_array_make(r->pool, 1, sizeof(oidc_jwk_t *));
+	ck_assert_int_eq(
+	    oidc_test_metadata_auth_parse(r, c, VALID_METADATA_JSON, OIDC_PROFILE_FAPI20, "secret", TRUE, &auth),
+	    FALSE);
+}
+END_TEST
+
 /*
  * Tests for oidc_metadata_provider_retrieve — drive the HTTP fetch +
  * JSON-decode + is_valid pipeline against the loopback server.
@@ -2548,6 +2648,7 @@ int main(void) {
 	tcase_add_test(parse, test_metadata_parse_cert_bound_tokens_on);
 	tcase_add_test(parse, test_metadata_parse_mtls_explicit_endpoint_wins);
 	tcase_add_test(parse, test_metadata_parse_mtls_aliases_private_key_jwt);
+	tcase_add_test(parse, test_metadata_parse_fapi20_token_endpoint_auth);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse_invalid_urls);
 	tcase_add_test(parse, test_metadata_oauth_provider_parse_no_supported_auth_method);

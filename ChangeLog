@@ -9,6 +9,13 @@
 - type a client assertion whose "aud" is the issuer identifier with "typ": "client-authentication+jwt"
   (RFC 10070); this includes the assertions sent under OIDCProfile FAPI20, which already used the issuer
   identifier; assertions with any other audience are unchanged
+- make OIDCProfile FAPI20 default to a client authentication method that FAPI 2.0 permits when
+  OIDCProviderTokenEndpointAuth is not set: "tls_client_auth" for a TLS client certificate configured without a
+  client secret (as before), otherwise "private_key_jwt" when OIDCPrivateKeyFiles is set, otherwise
+  "tls_client_auth" for a configured certificate; it no longer falls back to "client_secret_basic" (selected from
+  the Provider metadata even without a client secret, which then silently sent no client authentication at all) or
+  to a public client; an explicitly configured method that FAPI 2.0 does not permit is still used but warned about
+  at startup, and a FAPI20 configuration without a signing key or a TLS client certificate fails at startup
 - metrics: fix a segmentation fault at shutdown/restart (in apr_pool_clear called from the flush thread): stop a
   child's flush thread when its child pool is destroyed rather than in the pconf cleanup, which at exit only runs
   after the local collection pool has already been destroyed; do not start a flush thread in the parent, do not

@@ -280,6 +280,34 @@ START_TEST(test_config_openidc_dpop_without_signing_key) {
 END_TEST
 
 /*
+ * OIDCProfile FAPI20 permits private_key_jwt and mutual-TLS client authentication only: no usable method is an
+ * error, a configured one that FAPI 2.0 does not permit only a warning
+ */
+START_TEST(test_config_openidc_fapi20_endpoint_auth) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	server_rec *s = oidc_test_server_create_openidc(pool, r->server);
+	oidc_provider_t *provider = oidc_cfg_provider_get(oidc_test_server_cfg(s));
+
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+
+	/* neither a signing key nor a TLS client certificate: no client secret fallback, refuse to start */
+	oidc_cfg_provider_client_secret_set(pool, provider, "secret");
+	ck_assert_int_eq(oidc_test_post_config(pool, s), HTTP_INTERNAL_SERVER_ERROR);
+
+	/* a TLS client certificate is enough: mutual-TLS client authentication, and the tokens bound to it */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_tls_client_cert_set(
+	    pool, provider, apr_psprintf(pool, "%s/certificate.pem", oidc_test_srcdir())));
+	ck_assert_int_eq(oidc_test_post_config(pool, s), OK);
+
+	/* an explicitly configured client secret based method is warned about but used */
+	ck_assert_ptr_null(
+	    oidc_cfg_provider_token_endpoint_auth_set(pool, oidc_test_server_cfg(s), provider, "client_secret_basic"));
+	ck_assert_int_eq(oidc_test_post_config(pool, s), OK);
+}
+END_TEST
+
+/*
  * the OAuth 2.0 Resource Server checks; the role is only checked at all once one of its
  * directives is set
  */
@@ -619,6 +647,7 @@ int main(void) {
 	tcase_add_test(c, test_config_openidc_relative_redirect_uri_with_cookie_domain);
 	tcase_add_test(c, test_config_openidc_cookie_domain_mismatch);
 	tcase_add_test(c, test_config_openidc_dpop_without_signing_key);
+	tcase_add_test(c, test_config_openidc_fapi20_endpoint_auth);
 	tcase_add_test(c, test_config_oauth_no_verification_method);
 	tcase_add_test(c, test_config_oauth_metadata_url_insecure_warns);
 	tcase_add_test(c, test_config_oauth_local_validation_without_audience);

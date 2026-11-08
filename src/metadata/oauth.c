@@ -62,11 +62,13 @@ apr_byte_t oidc_oauth_metadata_provider_parse(request_rec *r, oidc_cfg_t *c, con
 	}
 
 	/* the secret/certificate interplay that decides on RFC 8705 mutual-TLS is documented at
-	 * oidc_metadata_endpoint_auth_select */
-	if (oidc_metadata_endpoint_auth_select(
-		r, c, j_provider, OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED,
-		oidc_cfg_oauth_client_secret_get(c) != NULL,
-		oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL, &value) != NULL) {
+	 * oidc_proto_profile_token_endpoint_auth_policy; no provider means no profile applies */
+	oidc_proto_endpoint_auth_policy_t policy = oidc_proto_profile_token_endpoint_auth_policy(
+	    c, NULL, oidc_cfg_oauth_client_secret_get(c) != NULL,
+	    oidc_cfg_oauth_introspection_endpoint_tls_client_cert_get(c) != NULL);
+	if (oidc_metadata_endpoint_auth_select(r, c, j_provider,
+					       OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED, &policy,
+					       &value) != NULL) {
 		oidc_error(r,
 			   "could not find a supported token endpoint authentication method in provider metadata (%s) "
 			   "for entry \"" OIDC_METADATA_INTROSPECTON_ENDPOINT_AUTH_METHODS_SUPPORTED "\"",

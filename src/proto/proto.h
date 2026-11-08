@@ -43,6 +43,7 @@
 #ifndef _MOD_AUTH_OPENIDC_PROTO_H_
 #define _MOD_AUTH_OPENIDC_PROTO_H_
 
+#include "cfg/parse.h"
 #include "cfg/provider.h"
 #include "jose.h"
 
@@ -151,6 +152,20 @@ typedef struct oidc_proto_endpoint_auth_aud_t {
 	apr_byte_t is_issuer;
 } oidc_proto_endpoint_auth_aud_t;
 
+/*
+ * how the token endpoint authentication method is selected from the methods advertised by a Provider when none
+ * is configured
+ */
+typedef struct oidc_proto_endpoint_auth_policy_t {
+	/* whether the RFC 8705 mutual-TLS methods are candidates */
+	apr_byte_t allow_mtls;
+	/* restricts the candidates to the methods the profile permits; NULL permits every method */
+	oidc_valid_function_t permitted;
+	/* the candidate to select when the Provider advertises it, before falling back to the first candidate the
+	 * Provider advertises; may be NULL */
+	const char *preference;
+} oidc_proto_endpoint_auth_policy_t;
+
 // profile.c
 oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(const oidc_provider_t *provider);
 oidc_proto_endpoint_auth_aud_t oidc_proto_profile_token_endpoint_auth_aud(const oidc_provider_t *provider);
@@ -162,6 +177,12 @@ oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(const oidc_provider_t *provide
 oidc_cert_bound_tokens_t oidc_proto_profile_cert_bound_tokens_get(const oidc_provider_t *provider);
 int oidc_proto_profile_response_require_iss_get(const oidc_provider_t *provider);
 const char *oidc_proto_profile_request_uri_scope_get(const oidc_provider_t *provider);
+oidc_proto_endpoint_auth_policy_t oidc_proto_profile_token_endpoint_auth_policy(const oidc_cfg_t *cfg,
+										const oidc_provider_t *provider,
+										apr_byte_t b_secret, apr_byte_t b_cert);
+const char *oidc_proto_profile_token_endpoint_auth_get(const oidc_cfg_t *cfg, const oidc_provider_t *provider);
+apr_byte_t oidc_proto_profile_token_endpoint_auth_permitted(apr_pool_t *pool, const oidc_provider_t *provider,
+							    const char *method);
 
 // auth.c
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,

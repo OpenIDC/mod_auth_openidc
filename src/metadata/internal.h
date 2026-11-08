@@ -33,6 +33,7 @@
 #include "cfg/provider.h"
 #include "jose.h"
 #include "metadata.h"
+#include "proto/proto.h"
 
 #include "json.h"
 
@@ -192,7 +193,8 @@ const char *oidc_metadata_valid_string_in_array(apr_pool_t *pool, const oidc_jso
 						oidc_valid_function_t valid_function, char **value, apr_byte_t optional,
 						const char *preference);
 const char *oidc_metadata_endpoint_auth_select(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_provider,
-					       const char *key, apr_byte_t b_secret, apr_byte_t b_cert, char **value);
+					       const char *key, const oidc_proto_endpoint_auth_policy_t *policy,
+					       char **value);
 apr_byte_t oidc_metadata_cert_bound_tokens_enabled(request_rec *r, const oidc_json_t *j_provider,
 						   oidc_cert_bound_tokens_t mode, const char *auth, apr_byte_t b_cert);
 void oidc_metadata_conf_parse_pre_provider(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
