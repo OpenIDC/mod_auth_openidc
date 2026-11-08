@@ -1,3 +1,15 @@
+11/08/2026
+- add OIDCProviderTokenEndpointAuthAud (per-OP .conf key "token_endpoint_auth_aud") to set the "aud" of the
+  client_secret_jwt/private_key_jwt client assertion sent to the token, PAR and revocation endpoints: "issuer"
+  uses the issuer identifier as RFC 10070 requires (it forbids the token endpoint URL), "token" the token endpoint
+  URL everywhere; the default "legacy" keeps the token endpoint URL (the revocation endpoint URL when revoking)
+  and OIDCProfile FAPI20 keeps using the issuer identifier
+- add OIDCOAuthIntrospectionEndpointAuthAud to address the client assertion sent to the introspection endpoint
+  to the issuer identifier of the Authorization Server (RFC 10070) instead of the introspection endpoint URL
+- type a client assertion whose "aud" is the issuer identifier with "typ": "client-authentication+jwt"
+  (RFC 10070); this includes the assertions sent under OIDCProfile FAPI20, which already used the issuer
+  identifier; assertions with any other audience are unchanged
+
 11/01/2026
 - release 2.4.20.4
 

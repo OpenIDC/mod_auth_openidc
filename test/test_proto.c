@@ -54,6 +54,11 @@
 #include "util/util.h"
 #include <jansson.h> /* this test builds JSON fixtures with the backend API directly (no longer pulled in via jose.h) */
 
+/* client assertion audiences passed to oidc_proto_token_endpoint_auth */
+static const oidc_proto_endpoint_auth_aud_t test_aud_none = {NULL, FALSE};
+static const oidc_proto_endpoint_auth_aud_t test_aud_token = {"https://idp.example.com/token", FALSE};
+static const oidc_proto_endpoint_auth_aud_t test_aud_issuer = {"https://idp.example.com", TRUE};
+
 START_TEST(test_proto_validate_access_token) {
 	request_rec *r = oidc_test_request_get();
 
@@ -450,11 +455,11 @@ START_TEST(test_proto_profile_helpers) {
 
 	/* default profile: token_endpoint_auth_aud returns token endpoint */
 	oidc_cfg_provider_token_endpoint_url_set(pool, provider, "https://idp.example.com/token");
-	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider), "https://idp.example.com/token");
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider).value, "https://idp.example.com/token");
 
 	/* revocation: when val=="token" should return token endpoint */
 	oidc_cfg_provider_revocation_endpoint_url_set(pool, provider, "https://idp.example.com/rev");
-	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"),
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token").value,
 			 "https://idp.example.com/token");
 
 	/* the post-PAR redirect carries scope=openid */
@@ -468,7 +473,7 @@ START_TEST(test_proto_profile_helpers) {
 	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
 	/* token endpoint aud should now be issuer */
 	oidc_cfg_provider_issuer_set(pool, provider, "https://idp.example.com");
-	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider), "https://idp.example.com");
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider).value, "https://idp.example.com");
 	/* pkce should be forced to S256 */
 	ck_assert_ptr_eq(oidc_proto_profile_pkce_get(provider), &oidc_pkce_s256);
 	/* DPoP should be required */
@@ -560,22 +565,98 @@ START_TEST(test_proto_profile_revocation_aud_variants) {
 	oidc_cfg_provider_revocation_endpoint_url_set(pool, provider, "https://idp.example.com/rev");
 
 	/* default: revocation endpoint */
-	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL),
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL).value,
 			 "https://idp.example.com/rev");
 
 	/* explicit URL takes precedence */
-	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "https://override.example.com"),
-			 "https://override.example.com");
+	ck_assert_str_eq(
+	    oidc_proto_profile_revocation_endpoint_auth_aud(provider, "https://override.example.com").value,
+	    "https://override.example.com");
 
 	/* "token" sentinel resolves to the token endpoint */
-	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"),
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token").value,
 			 "https://idp.example.com/token");
 
-	/* FAPI20: issuer wins regardless of val */
+	/* none of these is the issuer identifier, so none of them types the assertion */
 	oidc_cfg_provider_issuer_set(pool, provider, "https://idp.example.com");
+	ck_assert_int_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL).is_issuer, FALSE);
+	ck_assert_int_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token").is_issuer, FALSE);
+	/* ...but a literal value that happens to be the issuer identifier does */
+	ck_assert_int_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "https://idp.example.com").is_issuer,
+			 TRUE);
+
+	/* FAPI20: issuer wins regardless of val */
 	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
-	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL), "https://idp.example.com");
-	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token"), "https://idp.example.com");
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL).value,
+			 "https://idp.example.com");
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token").value,
+			 "https://idp.example.com");
+	ck_assert_int_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token").is_issuer, TRUE);
+}
+END_TEST
+
+/* OIDCProviderTokenEndpointAuthAud: the "aud" of client assertions sent to the token/PAR and revocation endpoints */
+START_TEST(test_proto_profile_endpoint_auth_aud_setting) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+	oidc_proto_endpoint_auth_aud_t aud;
+
+	oidc_cfg_provider_issuer_set(pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_token_endpoint_url_set(pool, provider, "https://idp.example.com/token");
+	oidc_cfg_provider_revocation_endpoint_url_set(pool, provider, "https://idp.example.com/rev");
+
+	/* the default is "legacy": token endpoint URL, revocation endpoint URL when revoking; never typed */
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(provider), OIDC_ENDPOINT_AUTH_AUD_LEGACY);
+	aud = oidc_proto_profile_token_endpoint_auth_aud(provider);
+	ck_assert_str_eq(aud.value, "https://idp.example.com/token");
+	ck_assert_int_eq(aud.is_issuer, FALSE);
+	aud = oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL);
+	ck_assert_str_eq(aud.value, "https://idp.example.com/rev");
+	ck_assert_int_eq(aud.is_issuer, FALSE);
+
+	/* "token": the token endpoint URL everywhere */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_aud_set(pool, provider, "token"));
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_aud(provider).value, "https://idp.example.com/token");
+	aud = oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL);
+	ck_assert_str_eq(aud.value, "https://idp.example.com/token");
+	ck_assert_int_eq(aud.is_issuer, FALSE);
+
+	/* "issuer" (RFC 10070): the issuer identifier everywhere, and typed */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_aud_set(pool, provider, "issuer"));
+	aud = oidc_proto_profile_token_endpoint_auth_aud(provider);
+	ck_assert_str_eq(aud.value, "https://idp.example.com");
+	ck_assert_int_eq(aud.is_issuer, TRUE);
+	aud = oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL);
+	ck_assert_str_eq(aud.value, "https://idp.example.com");
+	ck_assert_int_eq(aud.is_issuer, TRUE);
+
+	/* the per-request environment variable still takes precedence when revoking */
+	aud = oidc_proto_profile_revocation_endpoint_auth_aud(provider, "token");
+	ck_assert_str_eq(aud.value, "https://idp.example.com/token");
+	ck_assert_int_eq(aud.is_issuer, FALSE);
+
+	/* "legacy" can be selected explicitly, e.g. to override a global "issuer" for one provider */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_aud_set(pool, provider, "legacy"));
+	ck_assert_str_eq(oidc_proto_profile_revocation_endpoint_auth_aud(provider, NULL).value,
+			 "https://idp.example.com/rev");
+
+	/* an unknown value is rejected and leaves the default in place */
+	ck_assert_ptr_nonnull(oidc_cfg_provider_token_endpoint_auth_aud_set(pool, provider, "endpoint"));
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(provider), OIDC_ENDPOINT_AUTH_AUD_LEGACY);
+
+	/* FAPI20 always uses the issuer identifier, whatever is configured */
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_aud_set(pool, provider, "token"));
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	aud = oidc_proto_profile_token_endpoint_auth_aud(provider);
+	ck_assert_str_eq(aud.value, "https://idp.example.com");
+	ck_assert_int_eq(aud.is_issuer, TRUE);
+
+	/* without an issuer there is nothing to type */
+	oidc_provider_t *no_iss = oidc_cfg_provider_create(pool);
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_aud_set(pool, no_iss, "issuer"));
+	aud = oidc_proto_profile_token_endpoint_auth_aud(no_iss);
+	ck_assert_ptr_null(aud.value);
+	ck_assert_int_eq(aud.is_issuer, FALSE);
 }
 END_TEST
 
@@ -597,7 +678,7 @@ START_TEST(test_proto_token_endpoint_auth_no_client_id) {
 
 	/* no client_id => no auth needed, return TRUE without touching params/strings */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, NULL, "secret",
-							NULL, NULL, params, NULL, &basic, &bearer),
+							NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_ptr_null(basic);
 	ck_assert_ptr_null(bearer);
@@ -615,7 +696,7 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 	/* client_secret_basic: returns "user:pass" in basic_auth_str */
 	params = apr_table_make(r->pool, 1);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient",
-							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
+							"mysecret", NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_ptr_nonnull(basic);
 	ck_assert_str_eq(basic, "myclient:mysecret");
@@ -624,7 +705,7 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 	/* client_secret_basic without a secret: must fail */
 	basic = NULL;
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_BASIC, NULL, "myclient", NULL,
-							NULL, NULL, params, NULL, &basic, &bearer),
+							NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE); /* falls through to "public client" path: no secret + not private_key_jwt */
 	ck_assert_ptr_null(basic);
 	/* the "public client" path sets client_id on the params */
@@ -633,7 +714,7 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 	/* client_secret_post: sets client_id and client_secret on the params */
 	params = apr_table_make(r->pool, 2);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
-							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
+							"mysecret", NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
 	ck_assert_table_str(params, OIDC_PROTO_CLIENT_SECRET, "mysecret");
@@ -641,7 +722,7 @@ START_TEST(test_proto_token_endpoint_auth_basic_and_post) {
 	/* none: only client_id is set */
 	params = apr_table_make(r->pool, 1);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_ENDPOINT_AUTH_NONE, NULL, "myclient",
-							"ignored", NULL, NULL, params, NULL, &basic, &bearer),
+							"ignored", NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_SECRET);
@@ -657,13 +738,14 @@ START_TEST(test_proto_token_endpoint_auth_bearer) {
 
 	/* bearer_access_token without a token: must fail */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient",
-							"secret", NULL, NULL, params, NULL, &basic, &bearer),
+							"secret", NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 FALSE);
 	ck_assert_ptr_null(bearer);
 
 	/* bearer_access_token with a token: must succeed */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_BEARER_ACCESS_TOKEN, NULL, "myclient",
-							"secret", NULL, NULL, params, "the-token", &basic, &bearer),
+							"secret", NULL, test_aud_none, params, "the-token", &basic,
+							&bearer),
 			 TRUE);
 	ck_assert_ptr_nonnull(bearer);
 	ck_assert_str_eq(bearer, "the-token");
@@ -679,8 +761,8 @@ START_TEST(test_proto_token_endpoint_auth_mtls) {
 
 	/* RFC 8705: authentication occurs at the TLS layer: only the client_id goes into the body */
 	params = apr_table_make(r->pool, 1);
-	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "tls_client_auth", NULL, "myclient", NULL, NULL, NULL,
-							params, NULL, &basic, &bearer),
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "tls_client_auth", NULL, "myclient", NULL, NULL,
+							test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_SECRET);
@@ -690,7 +772,7 @@ START_TEST(test_proto_token_endpoint_auth_mtls) {
 	/* a configured client_secret must not leak into the request */
 	params = apr_table_make(r->pool, 1);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "self_signed_tls_client_auth", NULL, "myclient",
-							"mysecret", NULL, NULL, params, NULL, &basic, &bearer),
+							"mysecret", NULL, test_aud_none, params, NULL, &basic, &bearer),
 			 TRUE);
 	ck_assert_table_str(params, OIDC_PROTO_CLIENT_ID, "myclient");
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_SECRET);
@@ -707,7 +789,7 @@ START_TEST(test_proto_token_endpoint_auth_unknown_method) {
 
 	/* unknown method must hit the fall-through error path and return FALSE */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, "totally_bogus_method", NULL, "myclient", "secret", NULL,
-							NULL, params, NULL, &basic, &bearer),
+							test_aud_none, params, NULL, &basic, &bearer),
 			 FALSE);
 }
 END_TEST
@@ -722,8 +804,8 @@ START_TEST(test_proto_token_endpoint_auth_client_secret_jwt) {
 	/* client_secret_jwt: HMAC-SHA256 over a JWT signed with the client_secret;
 	 * the result is added to params as client_assertion + client_assertion_type */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_JWT, NULL, "myclient",
-							"mysecretmysecretmysecretmysecret", NULL,
-							"https://idp.example.com/token", params, NULL, &basic, &bearer),
+							"mysecretmysecretmysecretmysecret", NULL, test_aud_token,
+							params, NULL, &basic, &bearer),
 			 TRUE);
 	const char *assertion_type = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION_TYPE);
 	ck_assert_ptr_nonnull(assertion_type);
@@ -739,6 +821,59 @@ START_TEST(test_proto_token_endpoint_auth_client_secret_jwt) {
 }
 END_TEST
 
+/* RFC 10070: a client assertion addressed to the issuer identifier is explicitly typed, any other is not */
+START_TEST(test_proto_token_endpoint_auth_client_assertion_typ) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	char *basic = NULL;
+	char *bearer = NULL;
+	const char *assertion = NULL;
+
+	/* client_secret_jwt to the token endpoint URL: no "typ", as before */
+	apr_table_t *params = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_CLIENT_SECRET_JWT, NULL, "myclient",
+							"mysecretmysecretmysecretmysecret", NULL, test_aud_token,
+							params, NULL, &basic, &bearer),
+			 TRUE);
+	assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	ck_assert_ptr_null(oidc_test_jwt_part_str_get(r->pool, assertion, 0, OIDC_CLAIM_TYP));
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 1, OIDC_CLAIM_AUD),
+			 "https://idp.example.com/token");
+
+	/* client_secret_jwt to the issuer identifier: typed "client-authentication+jwt" */
+	params = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_CLIENT_SECRET_JWT, NULL, "myclient",
+							"mysecretmysecretmysecretmysecret", NULL, test_aud_issuer,
+							params, NULL, &basic, &bearer),
+			 TRUE);
+	assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 0, OIDC_CLAIM_TYP),
+			 OIDC_PROTO_CLIENT_ASSERTION_JWT_TYP);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 0, "alg"), "HS256");
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 1, OIDC_CLAIM_AUD), "https://idp.example.com");
+
+	/* private_key_jwt to the issuer identifier: typed too, alongside the alg/kid it always carries */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *err = oidc_cmd_private_keys_set(
+	    cmd, NULL, apr_pstrdup(r->pool, apr_psprintf(r->pool, "rsa-1#%s/private.pem", oidc_test_srcdir())));
+	ck_assert_msg(err == NULL, "could not load private key: %s", err);
+	params = apr_table_make(r->pool, 2);
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
+							NULL, test_aud_issuer, params, NULL, &basic, &bearer),
+			 TRUE);
+	assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 0, OIDC_CLAIM_TYP),
+			 OIDC_PROTO_CLIENT_ASSERTION_JWT_TYP);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 0, "alg"), "RS256");
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 0, "kid"), "rsa-1");
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 1, OIDC_CLAIM_AUD), "https://idp.example.com");
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 1, OIDC_CLAIM_ISS), "myclient");
+}
+END_TEST
+
 START_TEST(test_proto_token_endpoint_auth_private_key_jwt_no_keys) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -750,7 +885,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_no_keys) {
 	 * client_secret=NULL also exercises the "no secret + private_key_jwt"
 	 * branch that bypasses the public-client short-circuit */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL, NULL,
-							"https://idp.example.com/token", params, NULL, &basic, &bearer),
+							test_aud_token, params, NULL, &basic, &bearer),
 			 FALSE);
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
 }
@@ -774,8 +909,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key) {
 	/* private_key_jwt with no explicit algorithm: default for RSA is RS256;
 	 * the JWT must land in the params as client_assertion + assertion_type */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
-							NULL, "https://idp.example.com/token", params, NULL, &basic,
-							&bearer),
+							NULL, test_aud_token, params, NULL, &basic, &bearer),
 			 TRUE);
 	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
 	ck_assert_ptr_nonnull(assertion);
@@ -807,8 +941,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
 
 	/* explicit token_endpoint_auth_alg=RS384 must override the key-derived default */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, "RS384", "myclient", NULL,
-							NULL, "https://idp.example.com/token", params, NULL, &basic,
-							&bearer),
+							NULL, test_aud_token, params, NULL, &basic, &bearer),
 			 TRUE);
 	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
 	ck_assert_ptr_nonnull(assertion);
@@ -839,8 +972,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_client_keys) {
 	char *bearer = NULL;
 
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
-							client_keys, "https://idp.example.com/token", params, NULL,
-							&basic, &bearer),
+							client_keys, test_aud_token, params, NULL, &basic, &bearer),
 			 TRUE);
 	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
 	ck_assert_ptr_nonnull(assertion);
@@ -863,7 +995,7 @@ START_TEST(test_proto_token_endpoint_auth_client_secret_jwt_empty_secret) {
 	char *bearer = NULL;
 
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, c, OIDC_PROTO_CLIENT_SECRET_JWT, NULL, "myclient", "", NULL,
-							"https://idp.example.com/token", params, NULL, &basic, &bearer),
+							test_aud_token, params, NULL, &basic, &bearer),
 			 FALSE);
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
 }
@@ -891,8 +1023,7 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_unsupported_key_type) 
 	char *bearer = NULL;
 
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
-							client_keys, "https://idp.example.com/token", params, NULL,
-							&basic, &bearer),
+							client_keys, test_aud_token, params, NULL, &basic, &bearer),
 			 FALSE);
 	ck_assert_table_unset(params, OIDC_PROTO_CLIENT_ASSERTION);
 
@@ -946,15 +1077,13 @@ START_TEST(test_proto_token_endpoint_auth_idempotent) {
 	char *bearer = NULL;
 
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
-							NULL, "https://idp.example.com/token", params, NULL, &basic,
-							&bearer),
+							NULL, test_aud_token, params, NULL, &basic, &bearer),
 			 TRUE);
 	const char *assertion1 = apr_pstrdup(r->pool, apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION));
 	ck_assert_ptr_nonnull(assertion1);
 
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT, NULL, "myclient", NULL,
-							NULL, "https://idp.example.com/token", params, NULL, &basic,
-							&bearer),
+							NULL, test_aud_token, params, NULL, &basic, &bearer),
 			 TRUE);
 	const char *assertion2 = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
 	ck_assert_ptr_nonnull(assertion2);
@@ -970,12 +1099,12 @@ START_TEST(test_proto_token_endpoint_auth_idempotent) {
 
 	/* the same must hold for the client_secret_post credentials */
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
-							"mysecret", NULL, "https://idp.example.com/token", params, NULL,
-							&basic, &bearer),
+							"mysecret", NULL, test_aud_token, params, NULL, &basic,
+							&bearer),
 			 TRUE);
 	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_CLIENT_SECRET_POST, NULL, "myclient",
-							"mysecret", NULL, "https://idp.example.com/token", params, NULL,
-							&basic, &bearer),
+							"mysecret", NULL, test_aud_token, params, NULL, &basic,
+							&bearer),
 			 TRUE);
 	ck_assert_int_eq(e2e_table_count(params, OIDC_PROTO_CLIENT_ID), 1);
 	ck_assert_int_eq(e2e_table_count(params, OIDC_PROTO_CLIENT_SECRET), 1);
@@ -4396,6 +4525,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_profile_auth_request_method);
 	tcase_add_test(core, test_proto_profile_id_token_aud_values);
 	tcase_add_test(core, test_proto_profile_revocation_aud_variants);
+	tcase_add_test(core, test_proto_profile_endpoint_auth_aud_setting);
 	tcase_add_test(core, test_proto_pkce_none);
 	tcase_add_test(core, test_proto_token_endpoint_auth_no_client_id);
 	tcase_add_test(core, test_proto_token_endpoint_auth_basic_and_post);
@@ -4403,6 +4533,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_mtls);
 	tcase_add_test(core, test_proto_token_endpoint_auth_unknown_method);
 	tcase_add_test(core, test_proto_token_endpoint_auth_client_secret_jwt);
+	tcase_add_test(core, test_proto_token_endpoint_auth_client_assertion_typ);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_no_keys);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);

@@ -278,7 +278,7 @@ static void oidc_metadata_conf_parse_client(request_rec *r, oidc_cfg_t *cfg, con
 }
 
 /*
- * apply the token endpoint authentication method
+ * apply the token endpoint authentication method and the "aud" of its client assertions
  */
 static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
 						   oidc_provider_t *provider) {
@@ -298,6 +298,17 @@ static void oidc_metadata_conf_parse_endpoint_auth(request_rec *r, oidc_cfg_t *c
 		rv = oidc_cfg_provider_token_endpoint_auth_set(r->pool, cfg, provider, value);
 		if (rv != NULL)
 			oidc_error(r, "oidc_cfg_provider_token_endpoint_auth_set: %s", rv);
+	}
+
+	value = NULL;
+	oidc_json_object_get_string(r->pool, j_conf, OIDC_METADATA_TOKEN_ENDPOINT_AUTH_AUD, &value, NULL);
+	if (value != NULL) {
+		rv = oidc_cfg_provider_token_endpoint_auth_aud_set(r->pool, provider, value);
+		if (rv != NULL)
+			oidc_error(r, "oidc_cfg_provider_token_endpoint_auth_aud_set: %s", rv);
+	} else {
+		oidc_cfg_provider_token_endpoint_auth_aud_int_set(
+		    provider, oidc_cfg_provider_token_endpoint_auth_aud_get(primary));
 	}
 }
 

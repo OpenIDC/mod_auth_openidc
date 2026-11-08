@@ -87,14 +87,22 @@ static apr_byte_t oidc_proto_endpoint_client_secret_post(request_rec *r, const c
 /*
  * helper function to create a JWT assertion for endpoint authentication
  */
-static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, const char *audience, oidc_jwt_t **out) {
+static apr_byte_t oidc_proto_jwt_create(request_rec *r, const char *client_id, oidc_proto_endpoint_auth_aud_t audience,
+					oidc_jwt_t **out) {
 
 	*out = oidc_jwt_new(r->pool, TRUE, TRUE);
 	oidc_jwt_t *jwt = *out;
 
+	/* RFC 10070 section 4: type the assertion explicitly, but only when its audience is the issuer identifier;
+	 * the "typ" signals that the client follows the tightened audience requirements, so a pre-RFC 10070
+	 * audience such as the token endpoint URL must not carry it */
+	if (audience.is_issuer)
+		oidc_json_object_set_new(jwt->header.value.json, OIDC_CLAIM_TYP,
+					 oidc_json_string(OIDC_PROTO_CLIENT_ASSERTION_JWT_TYP));
+
 	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_ISS, oidc_json_string(client_id));
 	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_SUB, oidc_json_string(client_id));
-	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD, oidc_json_string(audience));
+	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_AUD, oidc_json_string(audience.value));
 	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_JTI, oidc_json_string(oidc_proto_jti_gen(r)));
 	oidc_json_object_set_new(jwt->payload.value.json, OIDC_CLAIM_EXP,
 				 oidc_json_integer(apr_time_sec(apr_time_now()) + 60));
@@ -126,7 +134,8 @@ static apr_byte_t oidc_proto_jwt_sign_and_add(request_rec *r, apr_table_t *param
  * create a JWT assertion signed with the client secret and add it to the HTTP request as endpoint authentication
  */
 static apr_byte_t oidc_proto_endpoint_auth_client_secret_jwt(request_rec *r, const char *client_id,
-							     const char *client_secret, const char *audience,
+							     const char *client_secret,
+							     oidc_proto_endpoint_auth_aud_t audience,
 							     apr_table_t *params) {
 	oidc_jwt_t *jwt = NULL;
 	oidc_jose_error_t err;
@@ -204,7 +213,8 @@ static oidc_jwk_t *oidc_proto_endpoint_auth_pick_signing_key(const oidc_cfg_t *c
  */
 static apr_byte_t oidc_proto_endpoint_auth_private_key_jwt(request_rec *r, const oidc_cfg_t *cfg,
 							   const char *token_endpoint_auth_alg, const char *client_id,
-							   const apr_array_header_t *client_keys, const char *audience,
+							   const apr_array_header_t *client_keys,
+							   oidc_proto_endpoint_auth_aud_t audience,
 							   apr_table_t *params) {
 	apr_byte_t rv = FALSE;
 	oidc_jwt_t *jwt = NULL;
@@ -261,8 +271,9 @@ end:
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *token_endpoint_auth_alg, const char *client_id,
 					  const char *client_secret, const apr_array_header_t *client_keys,
-					  const char *audience, apr_table_t *params, const char *bearer_access_token,
-					  char **basic_auth_str, char **bearer_auth_str) {
+					  oidc_proto_endpoint_auth_aud_t audience, apr_table_t *params,
+					  const char *bearer_access_token, char **basic_auth_str,
+					  char **bearer_auth_str) {
 
 	oidc_debug(r, "token_endpoint_auth=%s", token_endpoint_auth);
 

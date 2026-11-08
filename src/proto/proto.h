@@ -122,6 +122,8 @@
 #define OIDC_PROTO_GRANT_TYPE_REFRESH_TOKEN "refresh_token"
 
 #define OIDC_PROTO_CLIENT_ASSERTION_TYPE_JWT_BEARER "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+/* RFC 10070 section 4: the explicit "typ" of a client authentication JWT */
+#define OIDC_PROTO_CLIENT_ASSERTION_JWT_TYP "client-authentication+jwt"
 
 #define OIDC_PROTO_CLIENT_SECRET_BASIC "client_secret_basic"
 #define OIDC_PROTO_CLIENT_SECRET_POST "client_secret_post"
@@ -137,10 +139,23 @@
 
 typedef oidc_json_t oidc_proto_state_t;
 
+/*
+ * the audience of a client_secret_jwt/private_key_jwt client assertion
+ */
+typedef struct oidc_proto_endpoint_auth_aud_t {
+	/* the "aud" claim value */
+	const char *value;
+	/* RFC 10070: whether value is the authorization server's issuer identifier, the only audience the updated
+	 * RFC 7523 allows for client authentication; only then is the assertion explicitly typed, since that "typ"
+	 * signals that the client follows the tightened audience requirements */
+	apr_byte_t is_issuer;
+} oidc_proto_endpoint_auth_aud_t;
+
 // profile.c
 oidc_auth_request_method_t oidc_proto_profile_auth_request_method_get(const oidc_provider_t *provider);
-const char *oidc_proto_profile_token_endpoint_auth_aud(const oidc_provider_t *provider);
-const char *oidc_proto_profile_revocation_endpoint_auth_aud(const oidc_provider_t *provider, const char *val);
+oidc_proto_endpoint_auth_aud_t oidc_proto_profile_token_endpoint_auth_aud(const oidc_provider_t *provider);
+oidc_proto_endpoint_auth_aud_t oidc_proto_profile_revocation_endpoint_auth_aud(const oidc_provider_t *provider,
+									       const char *val);
 const apr_array_header_t *oidc_proto_profile_id_token_aud_values_get(apr_pool_t *pool, const oidc_provider_t *provider);
 const oidc_proto_pkce_t *oidc_proto_profile_pkce_get(const oidc_provider_t *provider);
 oidc_dpop_mode_t oidc_proto_profile_dpop_mode_get(const oidc_provider_t *provider);
@@ -152,8 +167,9 @@ const char *oidc_proto_profile_request_uri_scope_get(const oidc_provider_t *prov
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *token_endpoint_auth_alg, const char *client_id,
 					  const char *client_secret, const apr_array_header_t *client_keys,
-					  const char *audience, apr_table_t *params, const char *bearer_access_token,
-					  char **basic_auth_str, char **bearer_auth_str);
+					  oidc_proto_endpoint_auth_aud_t audience, apr_table_t *params,
+					  const char *bearer_access_token, char **basic_auth_str,
+					  char **bearer_auth_str);
 
 // discovery.c
 apr_byte_t oidc_proto_discovery_account_based(request_rec *r, oidc_cfg_t *cfg, const char *acct, char **issuer);

@@ -109,6 +109,7 @@
 #define OIDC_METADATA_CERT_BOUND_TOKENS "cert_bound_tokens"
 #define OIDC_METADATA_CLIENT_CONTACT "client_contact"
 #define OIDC_METADATA_TOKEN_ENDPOINT_AUTH "token_endpoint_auth"
+#define OIDC_METADATA_TOKEN_ENDPOINT_AUTH_AUD "token_endpoint_auth_aud"
 #define OIDC_METADATA_REGISTRATION_TOKEN "registration_token"
 #define OIDC_METADATA_REGISTRATION_ENDPOINT_JSON "registration_endpoint_json"
 #define OIDC_METADATA_RESPONSE_TYPE "response_type"

@@ -32,6 +32,7 @@
 #include "http_server.h"
 #include "mod_auth_openidc.h"
 #include "oauth.h"
+#include "proto/proto.h"
 #include "util.h"
 #include "util/util.h"
 
@@ -163,6 +164,58 @@ START_TEST(test_oauth_check_userid_introspection_active) {
 	ck_assert_msg(_oidc_strstr(cap->body, "token=AT-VALID") != NULL, "token sent in form body");
 
 	oidc_test_http_server_stop(srv);
+}
+END_TEST
+
+/* introspect token with client_secret_jwt at a fresh test server; returns the client_assertion it received */
+static const char *e2e_introspection_client_assertion(request_rec *r, oidc_cfg_t *c, const char *token,
+						      const char **endpoint) {
+	oidc_test_http_response_t resp = {
+	    .status_code = 200, .content_type = "application/json", .body = "{\"active\":true,\"sub\":\"alice\"}"};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	*endpoint = oidc_test_http_server_url(srv, r->pool);
+	e2e_set_introspection_endpoint(c, *endpoint);
+
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), OK);
+
+	const oidc_test_http_captured_t *cap = oidc_test_http_server_wait(srv);
+	const char *start = _oidc_strstr(cap->body, OIDC_PROTO_CLIENT_ASSERTION "=");
+	ck_assert_msg(start != NULL, "no client_assertion in: %s", cap->body);
+	start += _oidc_strlen(OIDC_PROTO_CLIENT_ASSERTION "=");
+	const char *end = _oidc_strstr(start, "&");
+	const char *assertion = end ? apr_pstrmemdup(r->pool, start, end - start) : apr_pstrdup(r->pool, start);
+
+	oidc_test_http_server_stop(srv);
+	return assertion;
+}
+
+/* RFC 10070: OIDCOAuthIntrospectionEndpointAuthAud addresses the client assertion to the AS issuer identifier */
+START_TEST(test_oauth_check_userid_introspection_client_assertion_aud) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *endpoint = NULL;
+	const char *assertion = NULL;
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	ck_assert_ptr_null(oidc_cmd_oauth_client_id_set(oidc_test_cmd_get(OIDCOAuthClientID), NULL, "rs-1"));
+	ck_assert_ptr_null(oidc_cmd_oauth_client_secret_set(oidc_test_cmd_get(OIDCOAuthClientSecret), NULL,
+							    "rs-secret-rs-secret-rs-secret-rs-secret"));
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_auth_set(
+	    oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointAuth), NULL, OIDC_PROTO_CLIENT_SECRET_JWT));
+
+	/* not configured: addressed to the introspection endpoint URL and not typed, as before */
+	assertion = e2e_introspection_client_assertion(r, c, "AT-AUD-ENDPOINT", &endpoint);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 1, OIDC_CLAIM_AUD), endpoint);
+	ck_assert_ptr_null(oidc_test_jwt_part_str_get(r->pool, assertion, 0, OIDC_CLAIM_TYP));
+
+	/* configured: addressed to the issuer identifier and typed */
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_auth_aud_set(
+	    oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointAuthAud), NULL, "https://as.example.com"));
+	assertion = e2e_introspection_client_assertion(r, c, "AT-AUD-ISSUER", &endpoint);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 1, OIDC_CLAIM_AUD), "https://as.example.com");
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, assertion, 0, OIDC_CLAIM_TYP),
+			 OIDC_PROTO_CLIENT_ASSERTION_JWT_TYP);
 }
 END_TEST
 
@@ -1528,6 +1581,7 @@ int main(void) {
 	tcase_add_test(introspect, test_oauth_check_userid_no_token);
 	tcase_add_test(introspect, test_oauth_check_userid_options_no_token);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_active);
+	tcase_add_test(introspect, test_oauth_check_userid_introspection_client_assertion_aud);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_inactive);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_error_response);
 	tcase_add_test(introspect, test_oauth_check_userid_introspection_cached);

@@ -306,3 +306,28 @@ void oidc_test_crypto_passphrase_rederive(oidc_cfg_t *cfg) {
 		exit(-1);
 	}
 }
+
+const char *oidc_test_jwt_part_str_get(apr_pool_t *pool, const char *s_jwt, int part, const char *key) {
+	const char *start = s_jwt;
+	const char *end = NULL;
+	char *s_json = NULL;
+	char *s_err = NULL;
+	char *value = NULL;
+	oidc_json_t *json = NULL;
+
+	for (int i = 0; (start != NULL) && (i < part); i++) {
+		start = _oidc_strstr(start, ".");
+		if (start != NULL)
+			start++;
+	}
+	end = (start != NULL) ? _oidc_strstr(start, ".") : NULL;
+	if (end == NULL)
+		return NULL;
+	if (oidc_util_base64url_decode(pool, &s_json, apr_pstrmemdup(pool, start, end - start)) <= 0)
+		return NULL;
+	if (oidc_json_parse(pool, s_json, 0, &json, &s_err) == FALSE)
+		return NULL;
+	oidc_json_object_get_string(pool, json, key, &value, NULL);
+	oidc_json_decref(json);
+	return value;
+}

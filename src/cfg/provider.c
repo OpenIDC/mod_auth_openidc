@@ -99,6 +99,7 @@
 	INT(oidc_userinfo_token_method_t, userinfo_token_method)                                                       \
 	INT(oidc_auth_request_method_t, auth_request_method)                                                           \
 	INT(oidc_profile_t, profile)                                                                                   \
+	INT(oidc_endpoint_auth_aud_t, token_endpoint_auth_aud)                                                         \
 	INT(int, response_require_iss)
 
 #define OIDC_PROVIDER_M_DECL(type, name) type name;
@@ -772,6 +773,21 @@ const char *oidc_cfg_provider_parse_profile(apr_pool_t *pool, const char *arg, o
 }
 #define OIDC_DEFAULT_PROFILE OIDC_PROFILE_OIDC10
 OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(profile, oidc_cfg_provider_parse_profile, oidc_profile_t, OIDC_DEFAULT_PROFILE)
+
+#define OIDC_ENDPOINT_AUTH_AUD_LEGACY_STR "legacy"
+#define OIDC_ENDPOINT_AUTH_AUD_TOKEN_STR "token"
+#define OIDC_ENDPOINT_AUTH_AUD_ISSUER_STR "issuer"
+
+static const char *oidc_cfg_provider_parse_token_endpoint_auth_aud(apr_pool_t *pool, const char *arg,
+								   oidc_endpoint_auth_aud_t *aud) {
+	static const oidc_cfg_option_t options[] = {{OIDC_ENDPOINT_AUTH_AUD_LEGACY, OIDC_ENDPOINT_AUTH_AUD_LEGACY_STR},
+						    {OIDC_ENDPOINT_AUTH_AUD_TOKEN, OIDC_ENDPOINT_AUTH_AUD_TOKEN_STR},
+						    {OIDC_ENDPOINT_AUTH_AUD_ISSUER, OIDC_ENDPOINT_AUTH_AUD_ISSUER_STR}};
+	return oidc_cfg_parse_option(pool, options, OIDC_CFG_OPTIONS_SIZE(options), arg, (int *)aud);
+}
+#define OIDC_DEFAULT_TOKEN_ENDPOINT_AUTH_AUD OIDC_ENDPOINT_AUTH_AUD_LEGACY
+OIDC_PROVIDER_MEMBER_FUNCS_STR_INT(token_endpoint_auth_aud, oidc_cfg_provider_parse_token_endpoint_auth_aud,
+				   oidc_endpoint_auth_aud_t, OIDC_DEFAULT_TOKEN_ENDPOINT_AUTH_AUD)
 
 /*
  * base

@@ -713,6 +713,32 @@ START_TEST(test_cmd_provider_profile) {
 }
 END_TEST
 
+START_TEST(test_cmd_provider_token_endpoint_auth_aud) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
+
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(p), OIDC_ENDPOINT_AUTH_AUD_LEGACY);
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCProviderTokenEndpointAuthAud);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_auth_aud_set(cmd, NULL, "issuer"));
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(p), OIDC_ENDPOINT_AUTH_AUD_ISSUER);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_auth_aud_set(cmd, NULL, "token"));
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(p), OIDC_ENDPOINT_AUTH_AUD_TOKEN);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_auth_aud_set(cmd, NULL, "legacy"));
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(p), OIDC_ENDPOINT_AUTH_AUD_LEGACY);
+	ck_assert_ptr_nonnull(oidc_cmd_provider_token_endpoint_auth_aud_set(cmd, NULL, "https://idp.example.com"));
+}
+END_TEST
+
+START_TEST(test_cmd_oauth_introspection_endpoint_auth_aud) {
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+
+	ck_assert_ptr_null(oidc_cfg_oauth_introspection_endpoint_auth_aud_get(cfg));
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointAuthAud);
+	ck_assert_ptr_null(oidc_cmd_oauth_introspection_endpoint_auth_aud_set(cmd, NULL, "https://as.example.com"));
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_aud_get(cfg), "https://as.example.com");
+}
+END_TEST
+
 START_TEST(test_cmd_provider_response_mode) {
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
 	oidc_provider_t *p = oidc_cfg_provider_get(cfg);
@@ -2634,6 +2660,8 @@ int main(void) {
 	tcase_add_test(provider, test_cmd_provider_userinfo_token_method);
 	tcase_add_test(provider, test_cmd_provider_auth_request_method);
 	tcase_add_test(provider, test_cmd_provider_profile);
+	tcase_add_test(provider, test_cmd_provider_token_endpoint_auth_aud);
+	tcase_add_test(provider, test_cmd_oauth_introspection_endpoint_auth_aud);
 	tcase_add_test(provider, test_cmd_provider_response_mode);
 	tcase_add_test(provider, test_cmd_provider_issuer_client_secret_audvalues);
 	tcase_add_test(provider, test_cmd_provider_endpoint_urls);

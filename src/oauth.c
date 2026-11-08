@@ -154,12 +154,19 @@ static apr_byte_t oidc_oauth_validate_access_token(request_rec *r, oidc_cfg_t *c
 		? token
 		: oidc_cfg_oauth_introspection_client_auth_bearer_token_get(c);
 
+	/* a JWT client assertion is addressed to the configured issuer identifier of the AS (RFC 10070), or else
+	 * to the introspection endpoint URL as before */
+	oidc_proto_endpoint_auth_aud_t aud = {oidc_cfg_oauth_introspection_endpoint_auth_aud_get(c), TRUE};
+	if (aud.value == NULL) {
+		aud.value = oidc_cfg_oauth_introspection_endpoint_url_get(c);
+		aud.is_issuer = FALSE;
+	}
+
 	/* add the token endpoint authentication credentials */
 	if (oidc_proto_token_endpoint_auth(r, c, oidc_cfg_oauth_introspection_endpoint_auth_get(c),
 					   oidc_cfg_oauth_introspection_endpoint_auth_alg_get(c),
 					   oidc_cfg_oauth_client_id_get(c), oidc_cfg_oauth_client_secret_get(c), NULL,
-					   oidc_cfg_oauth_introspection_endpoint_url_get(c), params,
-					   bearer_access_token_auth, &basic_auth, &bearer_auth) == FALSE)
+					   aud, params, bearer_access_token_auth, &basic_auth, &bearer_auth) == FALSE)
 		return FALSE;
 
 	/* call the endpoint with the constructed parameter set and return the resulting response */

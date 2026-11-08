@@ -97,4 +97,7 @@ void oidc_test_exec_line_prime(const char *output);
 /* the first authz_provider the module registered, for driving its parse_require_line */
 const void *oidc_test_authz_provider_get(void);
 
+/* the string member "key" of the header (part 0) or payload (part 1) of an unverified compact JWT, or NULL */
+const char *oidc_test_jwt_part_str_get(apr_pool_t *pool, const char *s_jwt, int part, const char *key);
+
 #endif // _MOD_AUTH_OPENIDC_TEST_UTIL_H_

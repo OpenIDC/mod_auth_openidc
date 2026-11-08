@@ -2168,6 +2168,35 @@ START_TEST(test_metadata_conf_parse_userinfo_token_method) {
 }
 END_TEST
 
+START_TEST(test_metadata_conf_parse_token_endpoint_auth_aud) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* the per-OP key overrides the (default) global setting */
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+	oidc_json_t *j = json_pack("{s:s}", "token_endpoint_auth_aud", "issuer");
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(provider), OIDC_ENDPOINT_AUTH_AUD_ISSUER);
+	oidc_json_decref(j);
+
+	/* an absent key inherits the global OIDCProviderTokenEndpointAuthAud */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCProviderTokenEndpointAuthAud);
+	ck_assert_ptr_null(oidc_cmd_provider_token_endpoint_auth_aud_set(cmd, NULL, "token"));
+	provider = oidc_cfg_provider_create(r->pool);
+	j = json_object();
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(provider), OIDC_ENDPOINT_AUTH_AUD_TOKEN);
+	oidc_json_decref(j);
+
+	/* an invalid value is logged and falls back to the default */
+	provider = oidc_cfg_provider_create(r->pool);
+	j = json_pack("{s:s}", "token_endpoint_auth_aud", "bogus");
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+	ck_assert_int_eq(oidc_cfg_provider_token_endpoint_auth_aud_get(provider), OIDC_ENDPOINT_AUTH_AUD_LEGACY);
+	oidc_json_decref(j);
+}
+END_TEST
+
 /*
  * Tests for the oidc_metadata_client_register POST payload — drive the static
  * helper through the full disk-backed dynamic-registration flow and inspect
@@ -2555,6 +2584,7 @@ int main(void) {
 	tcase_add_test(conf, test_metadata_conf_parse_signed_jwks_key_no_leak);
 	tcase_add_test(conf, test_metadata_conf_parse_dpop_and_auth_request_method);
 	tcase_add_test(conf, test_metadata_conf_parse_userinfo_token_method);
+	tcase_add_test(conf, test_metadata_conf_parse_token_endpoint_auth_aud);
 
 	TCase *disk = tcase_create("disk");
 	tcase_add_checked_fixture(disk, oidc_test_setup, oidc_test_teardown);

@@ -65,19 +65,25 @@ typedef struct oidc_proto_profile_ops_t {
  */
 
 static const char *oidc_profile_oidc10_token_endpoint_auth_aud(const oidc_provider_t *provider) {
+	if (oidc_cfg_provider_token_endpoint_auth_aud_get(provider) == OIDC_ENDPOINT_AUTH_AUD_ISSUER)
+		return oidc_cfg_provider_issuer_get(provider);
+	// "legacy" and "token" both use the token endpoint URL for the token and PAR endpoints
 	return oidc_cfg_provider_token_endpoint_url_get(provider);
 }
 
 static const char *oidc_profile_oidc10_revocation_endpoint_auth_aud(const oidc_provider_t *provider, const char *val) {
-	const char *aud = oidc_cfg_provider_revocation_endpoint_url_get(provider);
-	if (val != NULL) {
-		if (_oidc_strcmp(val, "token") == 0) {
-			aud = oidc_cfg_provider_token_endpoint_url_get(provider);
-		} else {
-			aud = val;
-		}
+	// a per-request value set in the environment takes precedence over the configured one
+	if (val != NULL)
+		return (_oidc_strcmp(val, "token") == 0) ? oidc_cfg_provider_token_endpoint_url_get(provider) : val;
+	switch (oidc_cfg_provider_token_endpoint_auth_aud_get(provider)) {
+	case OIDC_ENDPOINT_AUTH_AUD_ISSUER:
+		return oidc_cfg_provider_issuer_get(provider);
+	case OIDC_ENDPOINT_AUTH_AUD_TOKEN:
+		return oidc_cfg_provider_token_endpoint_url_get(provider);
+	case OIDC_ENDPOINT_AUTH_AUD_LEGACY:
+	default:
+		return oidc_cfg_provider_revocation_endpoint_url_get(provider);
 	}
-	return aud;
 }
 
 static oidc_auth_request_method_t oidc_profile_oidc10_auth_request_method(const oidc_provider_t *provider) {
@@ -226,19 +232,33 @@ static const oidc_proto_profile_ops_t *oidc_proto_profile_ops(const oidc_provide
 }
 
 /*
- * returns the "aud" claim to insert into the JWT used for client
- * authentication towards the token endpoint using private_key_jwt/client_secret_jwt
+ * wrap a client assertion "aud" value, recording whether it is the provider's issuer identifier (RFC 10070)
  */
-const char *oidc_proto_profile_token_endpoint_auth_aud(const oidc_provider_t *provider) {
-	return oidc_proto_profile_ops(provider)->token_endpoint_auth_aud(provider);
+static oidc_proto_endpoint_auth_aud_t oidc_proto_profile_endpoint_auth_aud(const oidc_provider_t *provider,
+									   const char *value) {
+	const char *issuer = oidc_cfg_provider_issuer_get(provider);
+	oidc_proto_endpoint_auth_aud_t aud = {value, FALSE};
+	aud.is_issuer = (value != NULL) && (issuer != NULL) && (_oidc_strcmp(value, issuer) == 0);
+	return aud;
+}
+
+/*
+ * returns the "aud" claim to insert into the JWT used for client authentication towards the token and
+ * pushed authorization request endpoints using private_key_jwt/client_secret_jwt
+ */
+oidc_proto_endpoint_auth_aud_t oidc_proto_profile_token_endpoint_auth_aud(const oidc_provider_t *provider) {
+	return oidc_proto_profile_endpoint_auth_aud(
+	    provider, oidc_proto_profile_ops(provider)->token_endpoint_auth_aud(provider));
 }
 
 /*
  * returns the "aud" claim to insert into the JWT used for client
  * authentication towards the revocation endpoint using private_key_jwt/client_secret_jwt
  */
-const char *oidc_proto_profile_revocation_endpoint_auth_aud(const oidc_provider_t *provider, const char *val) {
-	return oidc_proto_profile_ops(provider)->revocation_endpoint_auth_aud(provider, val);
+oidc_proto_endpoint_auth_aud_t oidc_proto_profile_revocation_endpoint_auth_aud(const oidc_provider_t *provider,
+									       const char *val) {
+	return oidc_proto_profile_endpoint_auth_aud(
+	    provider, oidc_proto_profile_ops(provider)->revocation_endpoint_auth_aud(provider, val));
 }
 
 /*

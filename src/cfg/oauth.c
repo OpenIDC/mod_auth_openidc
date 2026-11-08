@@ -65,6 +65,7 @@
 	PTR(char *, introspection_endpoint_params)                                                                     \
 	PTR(char *, introspection_endpoint_auth)                                                                       \
 	PTR(char *, introspection_endpoint_auth_alg)                                                                   \
+	PTR(char *, introspection_endpoint_auth_aud)                                                                   \
 	PTR(const char *, introspection_client_auth_bearer_token)                                                      \
 	PTR(char *, introspection_endpoint_tls_client_key)                                                             \
 	PTR(char *, introspection_endpoint_tls_client_key_pwd)                                                         \
@@ -182,6 +183,7 @@ OIDC_OAUTH_MEMBER_FUNCS_URL(metadata_url)
 OIDC_OAUTH_MEMBER_FUNCS_STR(client_id)
 OIDC_OAUTH_MEMBER_FUNCS_STR(client_secret)
 OIDC_OAUTH_MEMBER_FUNCS_STR(introspection_endpoint_params)
+OIDC_OAUTH_MEMBER_FUNCS_STR(introspection_endpoint_auth_aud)
 OIDC_OAUTH_MEMBER_FUNCS_FILE(introspection_endpoint_tls_client_cert)
 OIDC_OAUTH_MEMBER_FUNCS_FILE(introspection_endpoint_tls_client_key)
 OIDC_OAUTH_MEMBER_FUNCS_PASSPHRASE(introspection_endpoint_tls_client_key_pwd)

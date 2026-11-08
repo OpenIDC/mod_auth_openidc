@@ -111,6 +111,16 @@ typedef enum {
 	OIDC_PROFILE_FAPI20 = 2,
 } oidc_profile_t;
 
+/* the "aud" value of a client_secret_jwt/private_key_jwt client assertion */
+typedef enum {
+	/* the token endpoint URL, or the revocation endpoint URL when revoking tokens: the pre-RFC 10070 behaviour */
+	OIDC_ENDPOINT_AUTH_AUD_LEGACY = 1,
+	/* the token endpoint URL for every endpoint */
+	OIDC_ENDPOINT_AUTH_AUD_TOKEN = 2,
+	/* RFC 10070: the issuer identifier, for every endpoint */
+	OIDC_ENDPOINT_AUTH_AUD_ISSUER = 3,
+} oidc_endpoint_auth_aud_t;
+
 // NB: the OIDC* directive name strings live in cfg/directives.h; the custom
 //     set-routine declarations below are needed here because cfg/cmds.c
 //     references them when building the oidc_cfg_cmds[] command table
@@ -239,6 +249,7 @@ int oidc_cfg_provider_dpop_supported_get(const oidc_provider_t *provider);
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(userinfo_token_method, oidc_userinfo_token_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(auth_request_method, oidc_auth_request_method_t)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(profile, oidc_profile_t)
+OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(token_endpoint_auth_aud, oidc_endpoint_auth_aud_t)
 
 // types
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_TYPE_DECL(pkce, const oidc_proto_pkce_t *)

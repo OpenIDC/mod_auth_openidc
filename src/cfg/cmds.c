@@ -353,6 +353,11 @@ const command_rec oidc_cfg_cmds[] = {
 		"Specify an authentication method for the OpenID OP Token Endpoint (e.g.: client_secret_basic)"),
 	OIDC_CFG_CMD_PROVIDER(
 		AP_INIT_TAKE1,
+		OIDCProviderTokenEndpointAuthAud,
+		token_endpoint_auth_aud,
+		"Specify the \"aud\" of the client_secret_jwt/private_key_jwt client assertion: one of \"legacy\" (default), \"token\" or \"issuer\" (RFC 10070)"),
+	OIDC_CFG_CMD_PROVIDER(
+		AP_INIT_TAKE1,
 		OIDCProviderTokenEndpointParams,
 		token_endpoint_params,
 		"Define extra parameters that will be posted to the OpenID OP Token Endpoint (e.g.: param1=value1&param2=value2, all urlencoded)."),
@@ -609,6 +614,11 @@ const command_rec oidc_cfg_cmds[] = {
 		OIDCOAuthIntrospectionEndpointAuth,
 		introspection_endpoint_auth,
 		"Specify an authentication method for the OAuth AS Introspection Endpoint (e.g.: client_secret_basic)"),
+	OIDC_CFG_CMD_OAUTH(
+		AP_INIT_TAKE1,
+		OIDCOAuthIntrospectionEndpointAuthAud,
+		introspection_endpoint_auth_aud,
+		"Specify the OAuth AS issuer identifier to use as the \"aud\" of the client_secret_jwt/private_key_jwt client assertion (RFC 10070); the introspection endpoint URL is used when not set"),
 	OIDC_CFG_CMD_OAUTH(
 		AP_INIT_RAW_ARGS,
 		OIDCOAuthIntrospectionClientAuthBearerToken,
