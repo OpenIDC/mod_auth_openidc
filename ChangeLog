@@ -9,6 +9,7 @@
 - type a client assertion whose "aud" is the issuer identifier with "typ": "client-authentication+jwt"
   (RFC 10070); this includes the assertions sent under OIDCProfile FAPI20, which already used the issuer
   identifier; assertions with any other audience are unchanged
+- bump to 2.4.20.5
 
 11/01/2026
 - release 2.4.20.4
