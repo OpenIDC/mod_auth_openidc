@@ -146,6 +146,60 @@ static int oidc_check_config_openid_openidc_cookie_domain(server_rec *s, const o
 }
 
 /*
+ * warn about a private_key_jwt signing algorithm that OIDCProfile does not permit, whether configured or derived
+ * from the signing key
+ */
+static void oidc_check_config_openid_openidc_endpoint_auth_alg(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c,
+							       const char *auth) {
+	const oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	if ((auth == NULL) || (_oidc_strcmp(auth, OIDC_ENDPOINT_AUTH_PRIVATE_KEY_JWT) != 0))
+		return;
+
+	// NULL means no usable signing key, which fails at runtime and, when there is no TLS client certificate
+	// either, already failed the startup check on the method
+	const char *alg = oidc_proto_profile_token_endpoint_auth_alg_get(c, provider);
+	if ((alg == NULL) || (oidc_proto_profile_jws_alg_permitted(pool, provider, alg) == TRUE))
+		return;
+
+	// like a method that the profile does not permit, the algorithm is still used: the Provider may accept it
+	if (oidc_cfg_provider_token_endpoint_auth_alg_get(provider) != NULL)
+		oidc_check_swarn(
+		    s,
+		    "'" OIDCProviderTokenEndpointAuth
+		    "' sets the private_key_jwt signing algorithm to \"%s\", which the configured '" OIDCProfile
+		    "' does not permit",
+		    alg);
+	else
+		oidc_check_swarn(s,
+				 "the private_key_jwt signing key ('" OIDCPrivateKeyFiles
+				 "') signs with \"%s\", which the configured '" OIDCProfile
+				 "' does not permit; use an RSA key or a P-256 Elliptic Curve key",
+				 alg);
+}
+
+/*
+ * warn about a DPoP proof signing algorithm, derived from the signing key, that OIDCProfile does not permit; like the
+ * private_key_jwt one, it is still used
+ */
+static void oidc_check_config_openid_openidc_dpop_alg(apr_pool_t *pool, server_rec *s, oidc_cfg_t *c) {
+	const oidc_provider_t *provider = oidc_cfg_provider_get(c);
+
+	if (oidc_proto_profile_dpop_mode_get(provider) == OIDC_DPOP_MODE_OFF)
+		return;
+
+	const char *alg = oidc_proto_dpop_signing_alg(c);
+	if ((alg == NULL) || (oidc_proto_profile_jws_alg_permitted(pool, provider, alg) == TRUE))
+		return;
+
+	oidc_check_swarn(s,
+			 "the DPoP signing key ('" OIDCPrivateKeyFiles
+			 "') signs with \"%s\", which the configured '" OIDCProfile
+			 "' does not permit; use an RSA key or a P-256 Elliptic Curve key",
+			 alg);
+}
+
+/*
  * check that the token endpoint authentication method is one that OIDCProfile permits; a configured one is
  * warned about only, since it may be deliberate, but having none that the configured credentials can perform
  * is an error, rather than falling back to client_secret_basic or to a public client
@@ -154,8 +208,10 @@ static int oidc_check_config_openid_openidc_endpoint_auth(apr_pool_t *pool, serv
 	const oidc_provider_t *provider = oidc_cfg_provider_get(c);
 	const char *auth = oidc_proto_profile_token_endpoint_auth_get(c, provider);
 
-	if (oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, auth) == TRUE)
+	if (oidc_proto_profile_token_endpoint_auth_permitted(pool, provider, auth) == TRUE) {
+		oidc_check_config_openid_openidc_endpoint_auth_alg(pool, s, c, auth);
 		return OK;
+	}
 
 	if (oidc_cfg_provider_token_endpoint_auth_get(provider) != NULL) {
 		oidc_check_swarn(s,
@@ -221,6 +277,8 @@ static int oidc_check_config_openid_openidc(apr_pool_t *pool, server_rec *s, oid
 				     "provided in '" OIDCPrivateKeyFiles "'/'" OIDCPublicKeyFiles "'");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
+
+	oidc_check_config_openid_openidc_dpop_alg(pool, s, c);
 
 	return OK;
 }

@@ -304,6 +304,16 @@ char *oidc_proto_jwt_header_peek(request_rec *r, const char *compact_encoded_jwt
 	return result;
 }
 
+/*
+ * returns the JWS algorithm to sign with a key: ES256, ES384 or ES512 for an Elliptic Curve key on P-256, P-384 or
+ * P-521, and RS256 for an RSA key, or PS256 when asked for; NULL for no key or an unsupported one
+ */
+const char *oidc_proto_jwt_alg_for_key(const oidc_jwk_t *jwk, apr_byte_t use_psa_for_rsa) {
+	if ((jwk != NULL) && (jwk->kty == OIDC_JOSE_JWK_KTY_RSA) && (use_psa_for_rsa == TRUE))
+		return OIDC_JOSE_HDR_ALG_PS256;
+	return oidc_jwk_default_jws_alg(jwk);
+}
+
 apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, const oidc_cfg_t *cfg, oidc_jwk_t **jwk,
 						 oidc_jwt_t **jwt, apr_byte_t use_psa_for_rsa) {
 	apr_byte_t rv = FALSE;
@@ -322,15 +332,12 @@ apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, const oidc_cfg_
 
 	(*jwt)->header.kid = apr_pstrdup(r->pool, (*jwk)->kid);
 
-	if ((*jwk)->kty == OIDC_JOSE_JWK_KTY_RSA)
-		(*jwt)->header.alg =
-		    apr_pstrdup(r->pool, use_psa_for_rsa ? OIDC_JOSE_HDR_ALG_PS256 : OIDC_JOSE_HDR_ALG_RS256);
-	else if ((*jwk)->kty == OIDC_JOSE_JWK_KTY_EC)
-		(*jwt)->header.alg = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ALG_ES256);
-	else {
+	const char *alg = oidc_proto_jwt_alg_for_key(*jwk, use_psa_for_rsa);
+	if (alg == NULL) {
 		oidc_error(r, "no usable RSA/EC signing keys has been configured (in " OIDCPrivateKeyFiles ")");
 		goto end;
 	}
+	(*jwt)->header.alg = apr_pstrdup(r->pool, alg);
 
 	rv = TRUE;
 

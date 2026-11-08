@@ -128,7 +128,7 @@ static apr_byte_t oidc_proto_token_endpoint_request_auth(request_rec *r, oidc_cf
 
 	return oidc_proto_token_endpoint_auth(
 	    r, cfg, oidc_proto_profile_token_endpoint_auth_get(cfg, provider),
-	    oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
+	    oidc_proto_profile_token_endpoint_auth_alg_get(cfg, provider), oidc_cfg_provider_client_id_get(provider),
 	    oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
 	    oidc_proto_profile_token_endpoint_auth_aud(provider), params, NULL, basic_auth, bearer_auth);
 }

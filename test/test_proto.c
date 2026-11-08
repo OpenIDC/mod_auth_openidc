@@ -1037,6 +1037,84 @@ START_TEST(test_proto_token_endpoint_auth_private_key_jwt_explicit_alg) {
 }
 END_TEST
 
+/*
+ * FAPI 2.0 Security Profile section 5.4.1 item 1.2 permits PS256, ES256 and EdDSA only: under FAPI20 an RSA
+ * private_key_jwt key signs with PS256 instead of the RS256 it defaults to, and a configured algorithm still wins
+ */
+START_TEST(test_proto_profile_token_endpoint_auth_alg) {
+	request_rec *r = oidc_test_request_get();
+	apr_pool_t *pool = r->pool;
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(pool);
+	const char *dir = oidc_test_srcdir();
+	oidc_jose_error_t err;
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *rv = oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(pool, "rsa-1#%s/private.pem", dir));
+	ck_assert_msg(rv == NULL, "could not load private key: %s", rv);
+
+	/* OIDC10 leaves the algorithm to the key and permits any */
+	ck_assert_ptr_null(oidc_proto_profile_token_endpoint_auth_alg_get(cfg, provider));
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "RS256"), TRUE);
+
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_alg_get(cfg, provider), "PS256");
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "PS256"), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "ES256"), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "EdDSA"), TRUE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "RS256"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "PS384"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "ES384"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "HS256"), FALSE);
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, NULL), FALSE);
+
+	/* the assertion is signed with PS256 and verifies with the key */
+	apr_table_t *params = apr_table_make(pool, 2);
+	char *basic = NULL;
+	char *bearer = NULL;
+	ck_assert_int_eq(oidc_proto_token_endpoint_auth(r, cfg, OIDC_PROTO_PRIVATE_KEY_JWT,
+							oidc_proto_profile_token_endpoint_auth_alg_get(cfg, provider),
+							"myclient", NULL, NULL, test_aud_token, params, NULL, &basic,
+							&bearer),
+			 TRUE);
+	const char *assertion = apr_table_get(params, OIDC_PROTO_CLIENT_ASSERTION);
+	ck_assert_ptr_nonnull(assertion);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(pool, assertion, 0, "alg"), "PS256");
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_msg(oidc_jwt_parse(pool, assertion, &jwt, NULL, FALSE, &err) == TRUE, "oidc_jwt_parse failed: %s",
+		      oidc_jose_e2s(pool, err));
+	oidc_jwk_t *rsa = APR_ARRAY_IDX(oidc_cfg_private_keys_get(cfg), 0, oidc_jwk_t *);
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, rsa->kid, APR_HASH_KEY_STRING, rsa);
+	ck_assert_msg(oidc_jwt_verify(pool, jwt, keys, &err) == TRUE, "oidc_jwt_verify failed: %s",
+		      oidc_jose_e2s(pool, err));
+	oidc_jwt_destroy(jwt);
+
+	/* a configured algorithm is used as-is, even one FAPI 2.0 does not permit */
+	oidc_provider_t *configured = oidc_cfg_provider_create(pool);
+	oidc_cfg_provider_profile_int_set(configured, OIDC_PROFILE_FAPI20);
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_set(pool, cfg, configured, "private_key_jwt:RS256"));
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_alg_get(cfg, configured), "RS256");
+
+	/* an Elliptic Curve key keeps the algorithm of its curve: ES512 for the P-521 test key, which no permitted
+	 * algorithm can be used with */
+	oidc_jwk_t *ec = NULL;
+	ck_assert_msg(
+	    oidc_jwk_parse_pem_private_key(pool, "ec-1", apr_psprintf(pool, "%s/ecpriv.key", dir), &ec, &err) == TRUE,
+	    "could not load EC key: %s", oidc_jose_e2s(pool, err));
+	oidc_jwk_list_destroy(cfg->private_keys);
+	cfg->private_keys = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
+	APR_ARRAY_PUSH(cfg->private_keys, oidc_jwk_t *) = ec;
+	ck_assert_str_eq(oidc_proto_profile_token_endpoint_auth_alg_get(cfg, provider), "ES512");
+	ck_assert_int_eq(oidc_proto_profile_jws_alg_permitted(pool, provider, "ES512"), FALSE);
+
+	/* without a signing key there is nothing to derive the algorithm from */
+	oidc_jwk_list_destroy(cfg->private_keys);
+	cfg->private_keys = NULL;
+	ck_assert_ptr_null(oidc_proto_profile_token_endpoint_auth_alg_get(cfg, provider));
+}
+END_TEST
+
 /* a per-client signing key (client_keys) takes precedence over the module-wide configured
  * private keys (oidc_proto_endpoint_auth_pick_signing_key's client_keys != empty branch) */
 START_TEST(test_proto_token_endpoint_auth_private_key_jwt_client_keys) {
@@ -1678,6 +1756,8 @@ START_TEST(test_proto_dpop_create_embeds_public_key_only) {
 	    oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "some-access-token", NULL, &dpop),
 	    TRUE);
 	ck_assert_ptr_nonnull(dpop);
+	/* an RSA key signs DPoP proofs with PS256 */
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, dpop, 0, "alg"), "PS256");
 
 	/* decode and JSON-parse the protected header (first compact segment) instead of substring-matching the
 	 * serialized JSON, whose whitespace varies by cjose version */
@@ -1699,6 +1779,69 @@ START_TEST(test_proto_dpop_create_embeds_public_key_only) {
 	ck_assert_ptr_null(oidc_json_object_get(jwk, "q"));
 
 	oidc_json_decref(header);
+}
+END_TEST
+
+/*
+ * a DPoP proof signed with an Elliptic Curve key carries the algorithm of the key's curve: ES512 for the P-521 test
+ * key, where it used to say ES256 for any curve, and the proof verifies with that key
+ */
+START_TEST(test_proto_dpop_create_ec_key_alg) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_jose_error_t err;
+	char *dpop = NULL;
+
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCPrivateKeyFiles);
+	const char *kerr =
+	    oidc_cmd_private_keys_set(cmd, NULL, apr_psprintf(r->pool, "ec-1#%s/ecpriv.key", oidc_test_srcdir()));
+	ck_assert_msg(kerr == NULL, "could not load private key: %s", kerr);
+
+	ck_assert_int_eq(
+	    oidc_proto_dpop_create(r, c, "https://idp.example.com/token", "POST", "some-access-token", NULL, &dpop),
+	    TRUE);
+	ck_assert_ptr_nonnull(dpop);
+	ck_assert_str_eq(oidc_test_jwt_part_str_get(r->pool, dpop, 0, "alg"), "ES512");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_msg(oidc_jwt_parse(r->pool, dpop, &jwt, NULL, FALSE, &err) == TRUE, "oidc_jwt_parse failed: %s",
+		      oidc_jose_e2s(r->pool, err));
+	oidc_jwk_t *ec = APR_ARRAY_IDX(oidc_cfg_private_keys_get(c), 0, oidc_jwk_t *);
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_hash_set(keys, ec->kid, APR_HASH_KEY_STRING, ec);
+	ck_assert_msg(oidc_jwt_verify(r->pool, jwt, keys, &err) == TRUE, "oidc_jwt_verify failed: %s",
+		      oidc_jose_e2s(r->pool, err));
+	oidc_jwt_destroy(jwt);
+
+	/* the startup check derives the same algorithm */
+	ck_assert_str_eq(oidc_proto_dpop_signing_alg(c), "ES512");
+}
+END_TEST
+
+/* the key -> JWS algorithm rule shared by the DPoP proofs, signed_jwt and the FAPI20 private_key_jwt default */
+START_TEST(test_proto_jwt_alg_for_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *rsa = NULL;
+	oidc_jwk_t *ec = NULL;
+
+	ck_assert_msg(oidc_jwk_parse_pem_private_key(r->pool, "rsa-1",
+						     apr_psprintf(r->pool, "%s/private.pem", oidc_test_srcdir()), &rsa,
+						     &err) == TRUE,
+		      "could not load RSA key: %s", oidc_jose_e2s(r->pool, err));
+	ck_assert_msg(oidc_jwk_parse_pem_private_key(r->pool, "ec-1",
+						     apr_psprintf(r->pool, "%s/ecpriv.key", oidc_test_srcdir()), &ec,
+						     &err) == TRUE,
+		      "could not load EC key: %s", oidc_jose_e2s(r->pool, err));
+
+	ck_assert_str_eq(oidc_proto_jwt_alg_for_key(rsa, FALSE), "RS256");
+	ck_assert_str_eq(oidc_proto_jwt_alg_for_key(rsa, TRUE), "PS256");
+	ck_assert_str_eq(oidc_proto_jwt_alg_for_key(ec, FALSE), "ES512");
+	ck_assert_str_eq(oidc_proto_jwt_alg_for_key(ec, TRUE), "ES512");
+	ck_assert_ptr_null(oidc_proto_jwt_alg_for_key(NULL, TRUE));
+
+	oidc_jwk_destroy(rsa);
+	oidc_jwk_destroy(ec);
 }
 END_TEST
 
@@ -4624,6 +4767,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_no_keys);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_with_rsa_key);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_explicit_alg);
+	tcase_add_test(core, test_proto_profile_token_endpoint_auth_alg);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_client_keys);
 	tcase_add_test(core, test_proto_token_endpoint_auth_client_secret_jwt_empty_secret);
 	tcase_add_test(core, test_proto_token_endpoint_auth_private_key_jwt_unsupported_key_type);
@@ -4639,6 +4783,8 @@ int main(void) {
 	tcase_add_test(core, test_proto_flow_unsupported);
 	tcase_add_test(core, test_proto_dpop_create_without_private_keys);
 	tcase_add_test(core, test_proto_dpop_create_embeds_public_key_only);
+	tcase_add_test(core, test_proto_dpop_create_ec_key_alg);
+	tcase_add_test(core, test_proto_jwt_alg_for_key);
 	tcase_add_test(core, test_proto_jwt_header_peek);
 	tcase_add_test(core, test_proto_response_is_post_and_redirect);
 	tcase_add_test(core, test_proto_return_www_authenticate_header);

@@ -115,7 +115,7 @@ static void oidc_logout_revoke_tokens(request_rec *r, oidc_cfg_t *c, const oidc_
 	// add the token endpoint authentication credentials to the revocation endpoint call...
 	if (oidc_proto_token_endpoint_auth(
 		r, c, oidc_proto_profile_token_endpoint_auth_get(c, provider),
-		oidc_cfg_provider_token_endpoint_auth_alg_get(provider), oidc_cfg_provider_client_id_get(provider),
+		oidc_proto_profile_token_endpoint_auth_alg_get(c, provider), oidc_cfg_provider_client_id_get(provider),
 		oidc_cfg_provider_client_secret_get(provider), oidc_cfg_provider_client_keys_get(provider),
 		oidc_proto_profile_revocation_endpoint_auth_aud(
 		    provider, apr_table_get(r->subprocess_env, OIDC_TOKEN_REVOCATION_AUD_ENV_VAR)),

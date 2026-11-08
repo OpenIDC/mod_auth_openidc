@@ -1,4 +1,10 @@
 11/08/2026
+- fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic
+  Curve key: a key on P-384 or P-521 now signs with ES384 or ES512, as RFC 7518 ties ES256 to P-256
+- make OIDCProfile FAPI20 sign the private_key_jwt client assertion with PS256 rather than RS256 for an RSA key
+  when OIDCProviderTokenEndpointAuth sets no algorithm, as FAPI 2.0 section 5.4.1 permits PS256, ES256 and EdDSA
+  only; warn at startup about a configured algorithm it does not permit and about an Elliptic Curve key on another
+  curve than P-256 for private_key_jwt or for the DPoP proofs, all of which are still used
 - add OIDCProviderTokenEndpointAuthAud (per-OP .conf key "token_endpoint_auth_aud") to set the "aud" of the
   client_secret_jwt/private_key_jwt client assertion sent to the token, PAR and revocation endpoints: "issuer"
   uses the issuer identifier as RFC 10070 requires (it forbids the token endpoint URL), "token" the token endpoint

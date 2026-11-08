@@ -183,8 +183,12 @@ oidc_proto_endpoint_auth_policy_t oidc_proto_profile_token_endpoint_auth_policy(
 const char *oidc_proto_profile_token_endpoint_auth_get(const oidc_cfg_t *cfg, const oidc_provider_t *provider);
 apr_byte_t oidc_proto_profile_token_endpoint_auth_permitted(apr_pool_t *pool, const oidc_provider_t *provider,
 							    const char *method);
+const char *oidc_proto_profile_token_endpoint_auth_alg_get(const oidc_cfg_t *cfg, const oidc_provider_t *provider);
+apr_byte_t oidc_proto_profile_jws_alg_permitted(apr_pool_t *pool, const oidc_provider_t *provider, const char *alg);
 
 // auth.c
+oidc_jwk_t *oidc_proto_endpoint_auth_pick_signing_key(const oidc_cfg_t *cfg, const apr_array_header_t *client_keys,
+						      const char **x5t);
 apr_byte_t oidc_proto_token_endpoint_auth(request_rec *r, oidc_cfg_t *cfg, const char *token_endpoint_auth,
 					  const char *token_endpoint_auth_alg, const char *client_id,
 					  const char *client_secret, const apr_array_header_t *client_keys,
@@ -197,6 +201,7 @@ apr_byte_t oidc_proto_discovery_account_based(request_rec *r, oidc_cfg_t *cfg, c
 apr_byte_t oidc_proto_discovery_url_based(request_rec *r, oidc_cfg_t *cfg, const char *url, char **issuer);
 
 // dpop.c
+const char *oidc_proto_dpop_signing_alg(const oidc_cfg_t *cfg);
 apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const char *url, const char *method,
 				  const char *access_token, const char *nonce, char **dpop);
 apr_byte_t oidc_proto_dpop_use_nonce(request_rec *r, const oidc_cfg_t *cfg, const oidc_json_t *j_result,
@@ -226,6 +231,7 @@ apr_byte_t oidc_proto_jwt_verify(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jw
 apr_byte_t oidc_proto_jwt_validate(request_rec *r, oidc_jwt_t *jwt, const char *iss, apr_byte_t exp_is_mandatory,
 				   apr_byte_t iat_is_mandatory, int iat_slack);
 char *oidc_proto_jwt_header_peek(request_rec *r, const char *jwt, char **alg, char **enc, char **kid);
+const char *oidc_proto_jwt_alg_for_key(const oidc_jwk_t *jwk, apr_byte_t use_psa_for_rsa);
 apr_byte_t oidc_proto_jwt_create_from_first_pkey(request_rec *r, const oidc_cfg_t *cfg, oidc_jwk_t **jwk,
 						 oidc_jwt_t **jwt, apr_byte_t use_psa_for_rsa);
 apr_byte_t oidc_proto_jwt_sign_and_serialize(request_rec *r, const oidc_jwk_t *jwk, oidc_jwt_t *jwt, char **cser);

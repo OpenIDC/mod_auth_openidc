@@ -308,6 +308,27 @@ START_TEST(test_config_openidc_fapi20_endpoint_auth) {
 END_TEST
 
 /*
+ * a private_key_jwt signing algorithm that FAPI 2.0 does not permit, configured or implied by an Elliptic Curve key
+ * on another curve than P-256, is warned about at startup but does not stop the server
+ */
+START_TEST(test_config_openidc_fapi20_endpoint_auth_alg) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	request_rec *r = oidc_test_request_get();
+	server_rec *s = oidc_test_server_create_openidc(pool, r->server);
+	oidc_cfg_t *cfg = oidc_test_server_cfg(s);
+	oidc_provider_t *provider = oidc_cfg_provider_get(cfg);
+
+	oidc_cfg_provider_profile_int_set(provider, OIDC_PROFILE_FAPI20);
+	ck_assert_ptr_null(oidc_cmd_private_keys_set(oidc_test_server_cmd(pool, s, OIDCPrivateKeyFiles), NULL,
+						     apr_psprintf(pool, "%s/ecpriv.key", oidc_test_srcdir())));
+	ck_assert_int_eq(oidc_test_post_config(pool, s), OK);
+
+	ck_assert_ptr_null(oidc_cfg_provider_token_endpoint_auth_set(pool, cfg, provider, "private_key_jwt:RS256"));
+	ck_assert_int_eq(oidc_test_post_config(pool, s), OK);
+}
+END_TEST
+
+/*
  * the OAuth 2.0 Resource Server checks; the role is only checked at all once one of its
  * directives is set
  */
@@ -648,6 +669,7 @@ int main(void) {
 	tcase_add_test(c, test_config_openidc_cookie_domain_mismatch);
 	tcase_add_test(c, test_config_openidc_dpop_without_signing_key);
 	tcase_add_test(c, test_config_openidc_fapi20_endpoint_auth);
+	tcase_add_test(c, test_config_openidc_fapi20_endpoint_auth_alg);
 	tcase_add_test(c, test_config_oauth_no_verification_method);
 	tcase_add_test(c, test_config_oauth_metadata_url_insecure_warns);
 	tcase_add_test(c, test_config_oauth_local_validation_without_audience);

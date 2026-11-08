@@ -61,6 +61,9 @@ typedef struct oidc_proto_profile_ops_t {
 	oidc_proto_endpoint_auth_policy_t (*token_endpoint_auth_policy)(apr_byte_t b_secret, apr_byte_t b_cert,
 									apr_byte_t b_key);
 	const char *(*token_endpoint_auth)(const oidc_cfg_t *cfg, const oidc_provider_t *provider);
+	const char *(*token_endpoint_auth_alg)(const oidc_cfg_t *cfg, const oidc_provider_t *provider);
+	/* the JWS algorithms the profile permits for the JWTs the client creates; NULL permits every algorithm */
+	oidc_valid_function_t jws_alg_permitted;
 } oidc_proto_profile_ops_t;
 
 /*
@@ -139,6 +142,12 @@ static const char *oidc_profile_oidc10_token_endpoint_auth(const oidc_cfg_t *cfg
 	return oidc_cfg_provider_token_endpoint_auth_get(provider);
 }
 
+static const char *oidc_profile_oidc10_token_endpoint_auth_alg(const oidc_cfg_t *cfg, const oidc_provider_t *provider) {
+	// NULL makes oidc_proto_token_endpoint_auth derive the algorithm from the signing key, i.e. RS256 for an
+	// RSA key (see oidc_jwk_default_jws_alg)
+	return oidc_cfg_provider_token_endpoint_auth_alg_get(provider);
+}
+
 static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_token_endpoint_auth_aud,
     oidc_profile_oidc10_revocation_endpoint_auth_aud,
@@ -151,6 +160,8 @@ static const oidc_proto_profile_ops_t _oidc_profile_oidc10_ops = {
     oidc_profile_oidc10_request_uri_scope,
     oidc_profile_oidc10_token_endpoint_auth_policy,
     oidc_profile_oidc10_token_endpoint_auth,
+    oidc_profile_oidc10_token_endpoint_auth_alg,
+    NULL,
 };
 
 /*
@@ -280,6 +291,30 @@ static const char *oidc_profile_fapi20_token_endpoint_auth(const oidc_cfg_t *cfg
 	    oidc_cfg_private_keys_get(cfg) != NULL);
 }
 
+/*
+ * FAPI 2.0 Security Profile section 5.4.1 item 1.2: JWTs are created and processed with PS256, ES256 or EdDSA
+ * (the Ed25519 variant) only
+ */
+static const char *oidc_profile_fapi20_valid_jws_alg(apr_pool_t *pool, const char *arg) {
+	static const char *options[] = {OIDC_JOSE_HDR_ALG_PS256, OIDC_JOSE_HDR_ALG_ES256, OIDC_JOSE_HDR_ALG_EDDSA,
+					NULL};
+	return oidc_cfg_parse_is_valid_option(pool, arg, options);
+}
+
+static const char *oidc_profile_fapi20_token_endpoint_auth_alg(const oidc_cfg_t *cfg, const oidc_provider_t *provider) {
+	// a configured algorithm applies as-is, as a configured method does (see
+	// oidc_profile_fapi20_token_endpoint_auth); a startup warning reports one that FAPI 2.0 does not permit
+	const char *alg = oidc_cfg_provider_token_endpoint_auth_alg_get(provider);
+	if (alg != NULL)
+		return alg;
+	// section 5.4.1 item 1.2 rules out the RS256 that is the default for an RSA key, so use PS256 as the DPoP
+	// proofs do; an Elliptic Curve key keeps the algorithm for its curve, which is ES256 on P-256, the only curve
+	// that a permitted algorithm can be used with
+	const char *x5t = NULL;
+	return oidc_proto_jwt_alg_for_key(
+	    oidc_proto_endpoint_auth_pick_signing_key(cfg, oidc_cfg_provider_client_keys_get(provider), &x5t), TRUE);
+}
+
 static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_token_endpoint_auth_aud,
     oidc_profile_fapi20_revocation_endpoint_auth_aud,
@@ -292,6 +327,8 @@ static const oidc_proto_profile_ops_t _oidc_profile_fapi20_ops = {
     oidc_profile_fapi20_request_uri_scope,
     oidc_profile_fapi20_token_endpoint_auth_policy,
     oidc_profile_fapi20_token_endpoint_auth,
+    oidc_profile_fapi20_token_endpoint_auth_alg,
+    oidc_profile_fapi20_valid_jws_alg,
 };
 
 /*
@@ -423,4 +460,22 @@ apr_byte_t oidc_proto_profile_token_endpoint_auth_permitted(apr_pool_t *pool, co
 	if (permitted == NULL)
 		return TRUE;
 	return ((method != NULL) && (permitted(pool, method) == NULL)) ? TRUE : FALSE;
+}
+
+/*
+ * returns the JWS algorithm to sign the private_key_jwt client assertion with towards the token, pushed
+ * authorization request and revocation endpoints; NULL derives it from the signing key
+ */
+const char *oidc_proto_profile_token_endpoint_auth_alg_get(const oidc_cfg_t *cfg, const oidc_provider_t *provider) {
+	return oidc_proto_profile_ops(provider)->token_endpoint_auth_alg(cfg, provider);
+}
+
+/*
+ * returns whether the profile permits a JWS algorithm for a JWT that the client creates
+ */
+apr_byte_t oidc_proto_profile_jws_alg_permitted(apr_pool_t *pool, const oidc_provider_t *provider, const char *alg) {
+	oidc_valid_function_t permitted = oidc_proto_profile_ops(provider)->jws_alg_permitted;
+	if (permitted == NULL)
+		return TRUE;
+	return ((alg != NULL) && (permitted(pool, alg) == NULL)) ? TRUE : FALSE;
 }

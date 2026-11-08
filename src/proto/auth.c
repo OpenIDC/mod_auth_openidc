@@ -185,8 +185,8 @@ static apr_byte_t oidc_proto_endpoint_access_token_bearer(request_rec *r, oidc_c
  * pick the private signing key (and its accompanying x5t when available) used to sign a private_key_jwt
  * assertion: client-specific keys take precedence over the module-wide configured private keys
  */
-static oidc_jwk_t *oidc_proto_endpoint_auth_pick_signing_key(const oidc_cfg_t *cfg,
-							     const apr_array_header_t *client_keys, const char **x5t) {
+oidc_jwk_t *oidc_proto_endpoint_auth_pick_signing_key(const oidc_cfg_t *cfg, const apr_array_header_t *client_keys,
+						      const char **x5t) {
 	const oidc_jwk_t *jwk_pub = NULL;
 	oidc_jwk_t *jwk = NULL;
 

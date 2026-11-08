@@ -78,6 +78,18 @@ end:
 	return rv;
 }
 
+/* DPoP proofs are signed with PS256 rather than RS256 when the signing key is an RSA key */
+#define OIDC_PROTO_DPOP_USE_PSA_FOR_RSA TRUE
+
+/*
+ * returns the JWS algorithm that the DPoP proofs are signed with, NULL when no usable signing key is configured
+ */
+const char *oidc_proto_dpop_signing_alg(const oidc_cfg_t *cfg) {
+	return oidc_proto_jwt_alg_for_key(
+	    oidc_util_key_list_first(oidc_cfg_private_keys_get(cfg), -1, OIDC_JOSE_JWK_SIG_STR),
+	    OIDC_PROTO_DPOP_USE_PSA_FOR_RSA);
+}
+
 /*
  * generate a DPoP proof for the specified URL/method/access_token
  */
@@ -92,7 +104,7 @@ apr_byte_t oidc_proto_dpop_create(request_rec *r, const oidc_cfg_t *cfg, const c
 
 	oidc_debug(r, "enter");
 
-	if (oidc_proto_jwt_create_from_first_pkey(r, cfg, &jwk, &jwt, TRUE) == FALSE)
+	if (oidc_proto_jwt_create_from_first_pkey(r, cfg, &jwk, &jwt, OIDC_PROTO_DPOP_USE_PSA_FOR_RSA) == FALSE)
 		goto end;
 
 	oidc_json_object_set_new(jwt->header.value.json, OIDC_CLAIM_TYP, oidc_json_string(OIDC_PROTO_DPOP_JWT_TYP));
