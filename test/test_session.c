@@ -435,6 +435,43 @@ START_TEST(test_session_cookie_samesite_variants) {
 }
 END_TEST
 
+/* with OIDCSessionCacheFallbackToCookie, a session value read from an encrypted cache, by someone who can read
+ * the cache but does not know the passphrase, is not accepted as a self-contained session cookie */
+START_TEST(test_session_load_cache_value_as_cookie) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	c->session_cache_fallback_to_cookie = 1;
+	c->cache.encrypt = 1;
+
+	oidc_session_t *z = NULL;
+	oidc_session_load(r, &z);
+	z->remote_user = apr_pstrdup(r->pool, "victim");
+	z->expiry = apr_time_now() + apr_time_from_sec(3600);
+	oidc_session_set_issuer(r, z, "https://idp.example.com");
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
+
+	char *s_key = NULL;
+	ck_assert_int_eq(oidc_util_hash_string_and_base64url_encode(
+			     r, OIDC_JOSE_ALG_SHA256,
+			     apr_psprintf(r->pool, "%s:%s", oidc_cfg_crypto_passphrase_secret1_get(c), z->uuid),
+			     &s_key),
+			 TRUE);
+	char *value = NULL;
+	ck_assert_int_eq(c->cache.impl->get(r, OIDC_CACHE_SECTION_SESSION, s_key, &value), TRUE);
+	ck_assert_ptr_nonnull(value);
+
+	/* the value misses the cache as a key and is then tried as a self-contained session */
+	apr_table_unset(r->err_headers_out, "Set-Cookie");
+	apr_table_set(r->headers_in, "Cookie", apr_psprintf(r->pool, "%s=%s", oidc_cfg_dir_cookie_get(r), value));
+	oidc_session_t *z2 = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z2), FALSE);
+	ck_assert_ptr_null(z2->remote_user);
+
+	oidc_session_free(r, z);
+	oidc_session_free(r, z2);
+}
+END_TEST
+
 /* with OIDCSessionCacheFallbackToCookie a cookie that misses the cache is
  * treated as a (potential) self-contained session instead of being deleted */
 START_TEST(test_session_load_cache_fallback_to_cookie) {
@@ -783,6 +820,7 @@ int main(void) {
 	tcase_add_test(c, test_session_cookie_no_crypto_passphrase);
 	tcase_add_test(c, test_session_cookie_samesite_variants);
 	tcase_add_test(c, test_session_load_cache_fallback_to_cookie);
+	tcase_add_test(c, test_session_load_cache_value_as_cookie);
 	tcase_add_test(c, test_session_cache_corruption);
 	tcase_add_test(c, test_session_format_version);
 	tcase_add_test(c, test_session_load_mutate_reload);

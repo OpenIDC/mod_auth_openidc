@@ -70,8 +70,7 @@ void _oidc_jose_error_set(oidc_jose_error_t *error, const char *source, const in
 /* return the key type for an algorithm */
 /* oidc_alg2kty() is declared in the public jose.h */
 
-/* set a header value in a JWT */
-void oidc_jwt_hdr_set(oidc_jwt_t *jwt, const char *key, const char *value);
+/* oidc_jwt_hdr_set() is declared in the public jose.h */
 
 /* whether the cjose version in use is deprecated */
 apr_byte_t oidc_jose_version_deprecated(apr_pool_t *pool);

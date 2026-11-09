@@ -223,6 +223,57 @@ START_TEST(test_cache_status2str_success) {
 }
 END_TEST
 
+/* the storage key name of an encrypted cache entry, as oidc_cache_get_key() derives it */
+static char *test_cache_encrypted_key(request_rec *r, const oidc_cfg_t *cfg, const char *key) {
+	char *s_key = NULL;
+	ck_assert_int_eq(oidc_util_hash_string_and_base64url_encode(
+			     r, OIDC_JOSE_ALG_SHA256,
+			     apr_psprintf(r->pool, "%s:%s", oidc_cfg_crypto_passphrase_secret1_get(cfg), key), &s_key),
+			 TRUE);
+	return s_key;
+}
+
+/* an encrypted value copied to another cache entry, by someone who can write the cache but does not know the
+ * passphrase, is not accepted for that entry */
+START_TEST(test_cache_encrypted_value_bound_to_entry) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+	int old_encrypt = cfg->cache.encrypt;
+	char *raw = NULL;
+	char *value = NULL;
+
+	cfg->cache.encrypt = 1;
+	ck_assert_int_eq(
+	    oidc_cache_set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, "admin-token", "{\"sub\":\"admin\"}", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, "user-token", "{\"sub\":\"user\"}", expiry),
+			 TRUE);
+
+	ck_assert_int_eq(cfg->cache.impl->get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN,
+					      test_cache_encrypted_key(r, cfg, "admin-token"), &raw),
+			 TRUE);
+	ck_assert_ptr_nonnull(raw);
+
+	/* overwrite another entry, in the same and in another section, with it */
+	ck_assert_int_eq(cfg->cache.impl->set(r, OIDC_CACHE_SECTION_ACCESS_TOKEN,
+					      test_cache_encrypted_key(r, cfg, "user-token"), raw, expiry),
+			 TRUE);
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, "user-token", &value), FALSE);
+	ck_assert_ptr_null(value);
+	ck_assert_int_eq(cfg->cache.impl->set(r, OIDC_CACHE_SECTION_REFRESH_TOKEN,
+					      test_cache_encrypted_key(r, cfg, "admin-token"), raw, expiry),
+			 TRUE);
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_REFRESH_TOKEN, "admin-token", &value), FALSE);
+	ck_assert_ptr_null(value);
+
+	/* the original entry still reads */
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_ACCESS_TOKEN, "admin-token", &value), TRUE);
+	ck_assert_str_eq(value, "{\"sub\":\"admin\"}");
+
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
 START_TEST(test_cache_second_passphrase_retry) {
 	request_rec *r = oidc_test_request_get();
 	char *value = NULL;
@@ -2444,6 +2495,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_long_key_and_prefix);
 	tcase_add_test(core, test_cache_mutex_global_and_child_init);
 	tcase_add_test(core, test_cache_encrypt_no_secret);
+	tcase_add_test(core, test_cache_encrypted_value_bound_to_entry);
 	tcase_add_test(core, test_cache_status2str_success);
 	tcase_add_test(core, test_cache_second_passphrase_retry);
 	tcase_add_test(core, test_cache_shm_eviction_and_delete);

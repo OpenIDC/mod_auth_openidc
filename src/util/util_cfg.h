@@ -73,6 +73,10 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 				char **compact_encoded_jwt);
 apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
 				const char *compact_encoded_jwt, char **s_payload);
+apr_byte_t oidc_util_jwt_create_bound(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
+				      const char *binding, char **compact_encoded_jwt);
+apr_byte_t oidc_util_jwt_verify_bound(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
+				      const char *compact_encoded_jwt, const char *binding, char **s_payload);
 
 // url.c
 const char *oidc_util_url_cur_host(request_rec *r, oidc_hdr_x_forwarded_t x_forwarded_headers);

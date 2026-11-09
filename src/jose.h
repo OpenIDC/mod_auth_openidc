@@ -313,6 +313,8 @@ void oidc_jwt_destroy(oidc_jwt_t *);
 
 /* get a header value from a JWT */
 const char *oidc_jwt_hdr_get(oidc_jwt_t *jwt, const char *key);
+/* set a JWT header member to a string value */
+void oidc_jwt_hdr_set(oidc_jwt_t *jwt, const char *key, const char *value);
 /* set a JWT header member to a raw (pre-serialized) JSON value */
 apr_byte_t oidc_jwt_hdr_set_json(oidc_jwt_t *jwt, const char *key, const char *raw_json, oidc_jose_error_t *err);
 /* return the key type of a JWT */

@@ -88,10 +88,18 @@ static apr_byte_t oidc_util_jwt_key_from_derived(request_rec *r, const unsigned 
 }
 
 /*
- * create an encrypted JWT for internal purposes (i.e. state cookie, session cookie, or encrypted cache value)
+ * the protected header member that binds an encrypted cache value to the cache entry it was stored under: the
+ * cookies and the cache values are encrypted with the same key, so without it a value read from the cache would
+ * be accepted as a (client-cookie) session cookie, and a value moved to another cache entry would be accepted
+ * for that entry; the header is authenticated by the A256GCM tag
  */
-apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
-				char **compact_encoded_jwt) {
+#define OIDC_UTIL_JWT_HDR_BINDING "ck"
+
+/*
+ * create an encrypted JWT for internal purposes, bound to a cache entry when binding is not NULL
+ */
+static apr_byte_t oidc_util_jwt_create_impl(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
+					    const char *s_payload, const char *binding, char **compact_encoded_jwt) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -130,6 +138,8 @@ apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *
 	jwe->header.enc = apr_pstrdup(r->pool, OIDC_JOSE_HDR_ENC_A256GCM);
 	if (passphrase->secret2 != NULL)
 		jwe->header.kid = apr_pstrdup(r->pool, "1");
+	if (binding != NULL)
+		oidc_jwt_hdr_set(jwe, OIDC_UTIL_JWT_HDR_BINDING, binding);
 
 	if (oidc_jwt_encrypt(r->pool, jwe, jwk, cser, cser_len, compact_encoded_jwt, &err) == FALSE) {
 		oidc_error(r, "encrypting JWT failed: %s", oidc_jose_e2s(r->pool, err));
@@ -149,10 +159,52 @@ end:
 }
 
 /*
- * verify an encrypted JWT for internal purposes
+ * create an encrypted JWT for internal purposes (i.e. state cookie or session cookie)
  */
-apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
-				const char *compact_encoded_jwt, char **s_payload) {
+apr_byte_t oidc_util_jwt_create(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
+				char **compact_encoded_jwt) {
+	return oidc_util_jwt_create_impl(r, passphrase, s_payload, NULL, compact_encoded_jwt);
+}
+
+/*
+ * create an encrypted JWT for a cache value, bound to the cache entry identified by binding
+ */
+apr_byte_t oidc_util_jwt_create_bound(request_rec *r, const oidc_crypto_passphrase_t *passphrase, const char *s_payload,
+				      const char *binding, char **compact_encoded_jwt) {
+	return oidc_util_jwt_create_impl(r, passphrase, s_payload, binding, compact_encoded_jwt);
+}
+
+/*
+ * check the cache entry binding in the (authenticated) protected header: without an expected binding, i.e. for
+ * a cookie, there must be none; with one, it must match, or be absent in a value written by an earlier version
+ */
+static apr_byte_t oidc_util_jwt_binding_check(request_rec *r, const char *s_header, const char *binding) {
+	oidc_json_t *header = NULL;
+	apr_byte_t rv = FALSE;
+
+	if (oidc_json_decode_object(r, s_header, &header) == FALSE)
+		return FALSE;
+
+	const oidc_json_t *j_value = oidc_json_object_get(header, OIDC_UTIL_JWT_HDR_BINDING);
+	const char *value = oidc_json_string_value(j_value);
+	if (j_value == NULL)
+		rv = TRUE;
+	else if (binding == NULL)
+		oidc_error(r, "refusing an encrypted cache value where a cookie was expected");
+	else if ((value != NULL) && (_oidc_strcmp(value, binding) == 0))
+		rv = TRUE;
+	else
+		oidc_error(r, "refusing an encrypted cache value that was stored under another cache entry");
+
+	oidc_json_decref(header);
+	return rv;
+}
+
+/*
+ * verify an encrypted JWT for internal purposes, bound to a cache entry when binding is not NULL
+ */
+static apr_byte_t oidc_util_jwt_verify_impl(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
+					    const char *compact_encoded_jwt, const char *binding, char **s_payload) {
 
 	apr_byte_t rv = FALSE;
 	oidc_jose_error_t err;
@@ -166,7 +218,7 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 	char *enc = NULL;
 	char *kid = NULL;
 
-	oidc_proto_jwt_header_peek(r, compact_encoded_jwt, &alg, &enc, &kid);
+	const char *s_header = oidc_proto_jwt_header_peek(r, compact_encoded_jwt, &alg, &enc, &kid);
 	if ((_oidc_strcmp(alg, OIDC_JOSE_HDR_ALG_DIR) != 0) || (_oidc_strcmp(enc, OIDC_JOSE_HDR_ENC_A256GCM) != 0)) {
 		oidc_error(r, "corrupted JWE header, alg=\"%s\" enc=\"%s\"", alg, enc);
 		goto end;
@@ -191,6 +243,10 @@ apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *
 		goto end;
 	}
 
+	/* the protected header is authenticated now that decryption succeeded */
+	if (oidc_util_jwt_binding_check(r, s_header, binding) == FALSE)
+		goto end;
+
 	/* Always detect on read; OIDC_JWT_INTERNAL_NO_COMPRESS controls only future writes. */
 	if (oidc_jose_uncompress(r->pool, plaintext, plaintext_len, &payload, &payload_len, &err) == FALSE) {
 		oidc_error(r, "oidc_jose_uncompress failed: %s", oidc_jose_e2s(r->pool, err));
@@ -207,4 +263,20 @@ end:
 		oidc_jwk_destroy(jwk);
 
 	return rv;
+}
+
+/*
+ * verify an encrypted JWT for internal purposes (i.e. state cookie or session cookie), refusing a cache value
+ */
+apr_byte_t oidc_util_jwt_verify(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
+				const char *compact_encoded_jwt, char **s_payload) {
+	return oidc_util_jwt_verify_impl(r, passphrase, compact_encoded_jwt, NULL, s_payload);
+}
+
+/*
+ * verify an encrypted cache value, refusing one that is bound to another cache entry than binding
+ */
+apr_byte_t oidc_util_jwt_verify_bound(request_rec *r, const oidc_crypto_passphrase_t *passphrase,
+				      const char *compact_encoded_jwt, const char *binding, char **s_payload) {
+	return oidc_util_jwt_verify_impl(r, passphrase, compact_encoded_jwt, binding, s_payload);
 }

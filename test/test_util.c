@@ -887,6 +887,35 @@ START_TEST(test_util_jwt) {
 }
 END_TEST
 
+/* a cache value is bound to its cache entry and is no cookie; an unbound value predates the binding */
+START_TEST(test_util_jwt_bound) {
+	request_rec *r = oidc_test_request_get();
+	oidc_crypto_passphrase_t passphrase = {"secret1", NULL};
+	const char *str = "{ \"key\": \"value\" }";
+	char *cser = NULL;
+	char *payload = NULL;
+
+	ck_assert_int_eq(oidc_crypto_passphrase_derive_keys(&passphrase), TRUE);
+
+	ck_assert_int_eq(oidc_util_jwt_create_bound(r, &passphrase, str, "s:entry1", &cser), TRUE);
+	ck_assert_int_eq(oidc_util_jwt_verify_bound(r, &passphrase, cser, "s:entry1", &payload), TRUE);
+	ck_assert_str_eq(payload, str);
+
+	/* moved to another cache entry */
+	payload = NULL;
+	ck_assert_int_eq(oidc_util_jwt_verify_bound(r, &passphrase, cser, "s:entry2", &payload), FALSE);
+	ck_assert_int_eq(oidc_util_jwt_verify_bound(r, &passphrase, cser, "a:entry1", &payload), FALSE);
+	/* presented as a session or state cookie */
+	ck_assert_int_eq(oidc_util_jwt_verify(r, &passphrase, cser, &payload), FALSE);
+	ck_assert_ptr_null(payload);
+
+	/* a cache value written before values were bound is still read */
+	ck_assert_int_eq(oidc_util_jwt_create(r, &passphrase, str, &cser), TRUE);
+	ck_assert_int_eq(oidc_util_jwt_verify_bound(r, &passphrase, cser, "s:entry1", &payload), TRUE);
+	ck_assert_str_eq(payload, str);
+}
+END_TEST
+
 /* Verify rotation between current and previous OIDCCryptoPassphrase keys selected by kid. */
 START_TEST(test_util_jwt_passphrase_rotation) {
 	request_rec *r = oidc_test_request_get();
@@ -1967,6 +1996,7 @@ int main(void) {
 	c = tcase_create("jwt");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(c, test_util_jwt);
+	tcase_add_test(c, test_util_jwt_bound);
 	tcase_add_test(c, test_util_jwt_passphrase_rotation);
 	tcase_add_test(c, test_util_jwt_without_derived_keys);
 	tcase_add_test(c, test_util_jwt_without_subprocess_env);

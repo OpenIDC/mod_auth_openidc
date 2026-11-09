@@ -259,17 +259,18 @@ apr_byte_t oidc_cache_mutex_destroy(server_rec *s, oidc_cache_mutex_t *m) {
 }
 
 /*
- * AES GCM encrypt using the crypto passphrase as symmetric key
+ * AES GCM encrypt using the crypto passphrase as symmetric key, bound to the cache entry it is stored under
  */
 static inline apr_byte_t oidc_cache_crypto_encrypt(request_rec *r, const char *plaintext,
-						   const oidc_crypto_passphrase_t *passphrase, char **result) {
-	return oidc_util_jwt_create(r, passphrase, plaintext, result);
+						   const oidc_crypto_passphrase_t *passphrase, const char *binding,
+						   char **result) {
+	return oidc_util_jwt_create_bound(r, passphrase, plaintext, binding, result);
 }
 
 /* AES-GCM decrypt with the current or previous passphrase's precomputed key. */
 static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *cache_value,
 						   const oidc_crypto_passphrase_t *cfg_passphrase,
-						   apr_byte_t use_secondary, char **plaintext) {
+						   apr_byte_t use_secondary, const char *binding, char **plaintext) {
 	oidc_crypto_passphrase_t passphrase;
 	passphrase.secret1 = use_secondary ? cfg_passphrase->secret2 : cfg_passphrase->secret1;
 	passphrase.derived_key1_set =
@@ -280,7 +281,7 @@ static inline apr_byte_t oidc_cache_crypto_decrypt(request_rec *r, const char *c
 			     OIDC_CRYPTO_PASSPHRASE_DERIVED_KEY_LEN);
 	passphrase.secret2 = NULL;
 	passphrase.derived_key2_set = FALSE;
-	return oidc_util_jwt_verify(r, &passphrase, cache_value, plaintext);
+	return oidc_util_jwt_verify_bound(r, &passphrase, cache_value, binding, plaintext);
 }
 
 /*
@@ -385,7 +386,8 @@ apr_byte_t oidc_cache_get(request_rec *r, const char *section, const char *key, 
 		goto end;
 	}
 
-	rc = oidc_cache_crypto_decrypt(r, cache_value, oidc_cfg_crypto_passphrase_get(cfg), use_secondary, value);
+	rc = oidc_cache_crypto_decrypt(r, cache_value, oidc_cfg_crypto_passphrase_get(cfg), use_secondary,
+				       oidc_cache_section_key(r->pool, s_section, s_key), value);
 
 end:
 
@@ -431,7 +433,8 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 
 	/* see if we need to encrypt */
 	if ((encrypted == 1) && (value != NULL)) {
-		if (oidc_cache_crypto_encrypt(r, value, oidc_cfg_crypto_passphrase_get(cfg), &encoded) == FALSE)
+		if (oidc_cache_crypto_encrypt(r, value, oidc_cfg_crypto_passphrase_get(cfg),
+					      oidc_cache_section_key(r->pool, s_section, s_key), &encoded) == FALSE)
 			goto end;
 		value = encoded;
 	}
