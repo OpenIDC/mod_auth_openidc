@@ -4347,6 +4347,127 @@ START_TEST(test_proto_jwks_uri_keys_no_match_after_refresh) {
 }
 END_TEST
 
+/* key rollover: a kid that is not in the cached JWKs makes the next lookup refresh them from the jwks_uri */
+START_TEST(test_proto_jwks_uri_keys_rollover_refresh) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *k1 = "{\"kty\":\"oct\",\"kid\":\"k1\",\"use\":\"sig\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"}";
+	const char *k2 = "{\"kty\":\"oct\",\"kid\":\"k2\",\"use\":\"sig\",\"k\":\"EBEPDg0MCwoJCAcGBQQDAgEA\"}";
+	oidc_test_http_response_t resps[2] = {
+	    {.status_code = 200, .content_type = "application/json", .body = apr_psprintf(r->pool, "{\"keys\":[%s]}", k1)},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = apr_psprintf(r->pool, "{\"keys\":[%s,%s]}", k1, k2)}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resps, 2);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 3600;
+
+	/* the first lookup downloads and caches the JWKs that hold k1 only */
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k1");
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = FALSE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "k1", APR_HASH_KEY_STRING));
+	/* a cold cache is a fresh download, reported as such */
+	ck_assert_int_eq(force_refresh, TRUE);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+
+	/* in a later request the OP has rolled over to k2, which the cached JWKs do not have: they are refreshed
+	 * well before their refresh interval is up, and k2 is found in the new set */
+	jwt = e2e_make_jwt_for_kid(r->pool, "HS256", "k2");
+	keys = apr_hash_make(r->pool);
+	force_refresh = FALSE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(force_refresh, TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 1);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "k2", APR_HASH_KEY_STRING));
+
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
+/* the public JWK of test/public.pem, optionally with its modulus altered so that it is another RSA key */
+static const char *e2e_rsa_public_jwk_json(request_rec *r, apr_byte_t altered) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	char *s_json = NULL;
+	ck_assert_int_eq(oidc_jwk_parse_pem_public_key(r->pool, NULL, apr_psprintf(r->pool, "%s/public.pem", oidc_test_srcdir()),
+						       &jwk, &err),
+			 TRUE);
+	ck_assert_int_eq(oidc_jwk_to_json(r->pool, jwk, &s_json, &err), TRUE);
+	oidc_jwk_destroy(jwk);
+	if (altered) {
+		char *n = strstr(s_json, "\"n\":\"");
+		ck_assert_ptr_nonnull(n);
+		n += 5 + 16;
+		*n = (*n == 'A') ? 'B' : 'A';
+	}
+	return s_json;
+}
+
+/* an RS256 JWT without a kid, signed with the private key of test/private.pem */
+static oidc_jwt_t *e2e_rs256_jwt_without_kid(request_rec *r) {
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	ck_assert_int_eq(oidc_jwk_parse_pem_private_key(r->pool, NULL,
+							apr_psprintf(r->pool, "%s/private.pem", oidc_test_srcdir()),
+							&jwk, &err),
+			 TRUE);
+	oidc_jwt_t *jwt = oidc_jwt_new(r->pool, TRUE, TRUE);
+	jwt->header.alg = apr_pstrdup(r->pool, "RS256");
+	oidc_json_object_set_new(jwt->payload.value.json, "sub", oidc_json_string("alice"));
+	ck_assert_int_eq(oidc_jwt_sign(r->pool, jwt, jwk, FALSE, &err), TRUE);
+	char *cser = oidc_jose_jwt_serialize(r->pool, jwt, &err);
+	ck_assert_ptr_nonnull(cser);
+	oidc_jwk_destroy(jwk);
+	oidc_jwt_destroy(jwt);
+
+	jwt = NULL;
+	ck_assert_jwt_parses(r->pool, cser, jwt, NULL, err);
+	ck_assert_ptr_null(jwt->header.kid);
+	return jwt;
+}
+
+/*
+ * key rollover without a kid: when the signature does not verify with any of the cached keys, the verifier
+ * refreshes the JWKs from the jwks_uri once and verifies again with the new set
+ */
+START_TEST(test_proto_jwt_verify_no_kid_rollover_refresh) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	/* first another RSA key, as before a rollover, then the signing key */
+	oidc_test_http_response_t resps[2] = {
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = apr_psprintf(r->pool, "{\"keys\":[%s]}", e2e_rsa_public_jwk_json(r, TRUE))},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = apr_psprintf(r->pool, "{\"keys\":[%s]}", e2e_rsa_public_jwk_json(r, FALSE))}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resps, 2);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t jwks_uri = {0};
+	jwks_uri.uri = oidc_test_http_server_url(srv, r->pool);
+	jwks_uri.refresh_interval = 3600;
+
+	oidc_jwt_t *jwt = e2e_rs256_jwt_without_kid(r);
+	ck_assert_int_eq(oidc_proto_jwt_verify(r, c, jwt, &jwks_uri, 0, NULL, NULL), TRUE);
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+}
+END_TEST
+
 START_TEST(test_proto_jwks_uri_keys_http_failure) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -5022,6 +5143,8 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_selection_cached);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_include_matching_kty);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_match_after_refresh);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_rollover_refresh);
+	tcase_add_test(e2e, test_proto_jwt_verify_no_kid_rollover_refresh);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_http_failure);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_no_kid_field);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_malformed_entry_skipped);
