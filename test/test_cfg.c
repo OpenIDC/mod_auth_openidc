@@ -2418,6 +2418,79 @@ START_TEST(test_cfg_oauth_merge) {
 }
 END_TEST
 
+/* apply the introspection auth, token expiry claim and remote user claim directives to `cfg` (NULL: leave unset) */
+static void test_cfg_oauth_merge_set(server_rec *s, oidc_cfg_t *cfg, const char *auth, const char *expiry_claim,
+				     const char *expiry_format, const char *expiry_required, const char *claim,
+				     const char *reg_exp, const char *replace) {
+	ap_set_module_config(s->module_config, &auth_openidc_module, cfg);
+	const char *rv = NULL;
+	if (auth != NULL) {
+		rv = oidc_cmd_oauth_introspection_endpoint_auth_set(oidc_test_cmd_get(OIDCOAuthIntrospectionEndpointAuth),
+								    NULL, auth);
+		ck_assert_msg(rv == NULL, "%s: %s", OIDCOAuthIntrospectionEndpointAuth, rv);
+	}
+	if (expiry_claim != NULL) {
+		rv = oidc_cmd_oauth_token_expiry_claim_set(oidc_test_cmd_get(OIDCOAuthTokenExpiryClaim), NULL,
+							   expiry_claim, expiry_format, expiry_required);
+		ck_assert_msg(rv == NULL, "%s: %s", OIDCOAuthTokenExpiryClaim, rv);
+	}
+	if (claim != NULL) {
+		rv = oidc_cmd_oauth_remote_user_claim_set(oidc_test_cmd_get(OIDCOAuthRemoteUserClaim), NULL, claim,
+							  reg_exp, replace);
+		ck_assert_msg(rv == NULL, "%s: %s", OIDCOAuthRemoteUserClaim, rv);
+	}
+}
+
+/*
+ * the introspection auth method and its algorithm, the token expiry claim with its format and requirement, and the
+ * remote user claim with its expression each merge as a unit: a vhost that leaves the setting unset inherits all of
+ * it, and one that sets it takes none of the base server's parts
+ */
+START_TEST(test_cfg_oauth_merge_units) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	server_rec *s = oidc_test_request_get()->server;
+	oidc_cfg_t *base = oidc_cfg_server_create(pool, s);
+	/* an algorithm can only be given for private_key_jwt, which requires private keys */
+	base->private_keys = oidc_test_cfg_get()->private_keys;
+	test_cfg_oauth_merge_set(s, base, "private_key_jwt:PS256", "exp", "absolute", "optional", "username",
+				 "^(.*)@example.com$", "$1");
+
+	/* inherit */
+	oidc_cfg_t *add = oidc_cfg_server_create(pool, s);
+	const oidc_cfg_t *merged = oidc_cfg_server_merge(pool, base, add);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(merged), "private_key_jwt");
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_alg_get(merged), "PS256");
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_token_expiry_claim_name_get(merged), "exp");
+	ck_assert_int_eq(oidc_cfg_oauth_introspection_token_expiry_claim_format_get(merged),
+			 OIDC_TOKEN_EXPIRY_CLAIM_FORMAT_ABSOLUTE);
+	ck_assert_int_eq(oidc_cfg_oauth_introspection_token_expiry_claim_required_get(merged),
+			 OIDC_TOKEN_EXPIRY_CLAIM_REQUIRED_OPTIONAL);
+	const oidc_remote_user_claim_t *claim = oidc_cfg_oauth_remote_user_claim_get(merged);
+	ck_assert_str_eq(claim->claim_name, "username");
+	ck_assert_str_eq(claim->reg_exp, "^(.*)@example.com$");
+	ck_assert_str_eq(claim->replace, "$1");
+
+	/* override */
+	add = oidc_cfg_server_create(pool, s);
+	test_cfg_oauth_merge_set(s, add, "client_secret_basic", "expires_in", NULL, NULL, "sub", NULL, NULL);
+	merged = oidc_cfg_server_merge(pool, base, add);
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_endpoint_auth_get(merged), "client_secret_basic");
+	ck_assert_ptr_null(oidc_cfg_oauth_introspection_endpoint_auth_alg_get(merged));
+	ck_assert_str_eq(oidc_cfg_oauth_introspection_token_expiry_claim_name_get(merged), "expires_in");
+	ck_assert_int_eq(oidc_cfg_oauth_introspection_token_expiry_claim_format_get(merged),
+			 OIDC_TOKEN_EXPIRY_CLAIM_FORMAT_RELATIVE);
+	ck_assert_int_eq(oidc_cfg_oauth_introspection_token_expiry_claim_required_get(merged),
+			 OIDC_TOKEN_EXPIRY_CLAIM_REQUIRED_MANDATORY);
+	claim = oidc_cfg_oauth_remote_user_claim_get(merged);
+	ck_assert_str_eq(claim->claim_name, "sub");
+	ck_assert_ptr_null(claim->reg_exp);
+	ck_assert_ptr_null(claim->replace);
+
+	/* restore the original cfg so test teardown sees the same fixture */
+	ap_set_module_config(s->module_config, &auth_openidc_module, oidc_test_cfg_get());
+}
+END_TEST
+
 /*
  * Tests for cfg/provider.c uncovered setters.
  */
@@ -2709,6 +2782,7 @@ int main(void) {
 	tcase_add_test(oauth, test_cmd_oauth_remote_user_claim);
 	tcase_add_test(oauth, test_cmd_oauth_verify_public_keys);
 	tcase_add_test(oauth, test_cfg_oauth_merge);
+	tcase_add_test(oauth, test_cfg_oauth_merge_units);
 
 	Suite *s = suite_create("cfg");
 	suite_add_tcase(s, core);
