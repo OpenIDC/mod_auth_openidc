@@ -72,9 +72,23 @@
 #include <apr_portable.h>
 
 /*
+ * is the header name equivalent to one of the names that need scrubbing; the names are compared
+ * as environment variable names, i.e. case-insensitive and with '-' and '_' (and any other
+ * non-alphanumeric character) equal, because that is how the application may see them: an
+ * exact lookup only matches the configured spelling, which leaves "x-remote-user" (HTTP/2
+ * lowercases every header name) or "X_Remote_User" for "X-Remote-User" in place
+ */
+static int oidc_scrub_header_matches(const char *k, const apr_array_header_t *scrub) {
+	for (int i = 0; (k != NULL) && (scrub != NULL) && (i < scrub->nelts); i++)
+		if (oidc_util_strnenvcmp(k, APR_ARRAY_IDX(scrub, i, const char *), -1) == 0)
+			return 1;
+	return 0;
+}
+
+/*
  * clean any suspicious headers in the HTTP request sent by the user agent
  */
-static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix, apr_hash_t *scrub) {
+static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix, const apr_array_header_t *scrub) {
 
 	const int prefix_len = claim_prefix ? (int)_oidc_strlen(claim_prefix) : 0;
 
@@ -90,8 +104,7 @@ static void oidc_scrub_request_headers(request_rec *r, const char *claim_prefix,
 		const char *const k = e[i].key;
 
 		/* is this header's name equivalent to a header that needs scrubbing? */
-		const char *hdr = (k != NULL) && (scrub != NULL) ? apr_hash_get(scrub, k, APR_HASH_KEY_STRING) : NULL;
-		const int header_matches = (hdr != NULL) && (oidc_util_strnenvcmp(k, hdr, -1) == 0);
+		const int header_matches = oidc_scrub_header_matches(k, scrub);
 
 		/*
 		 * would this header be interpreted as a mod_auth_openidc attribute? Note
@@ -122,20 +135,35 @@ void oidc_scrub_headers(request_rec *r) {
 	const oidc_cfg_t *cfg = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 
 	const char *prefix = oidc_cfg_claim_prefix_get(cfg);
-	apr_hash_t *hdrs = apr_hash_make(r->pool);
+	apr_array_header_t *hdrs = apr_array_make(r->pool, 4, sizeof(const char *));
 
 	if (_oidc_strcmp(prefix, "") == 0) {
-		if ((oidc_cfg_white_listed_claims_get(cfg) != NULL) &&
-		    (apr_hash_count(oidc_cfg_white_listed_claims_get(cfg)) > 0))
-			hdrs = apr_hash_overlay(r->pool, oidc_cfg_white_listed_claims_get(cfg), hdrs);
-		else
+		apr_hash_t *white_listed_claims = oidc_cfg_white_listed_claims_get(cfg);
+		if ((white_listed_claims != NULL) && (apr_hash_count(white_listed_claims) > 0)) {
+			for (apr_hash_index_t *hi = apr_hash_first(r->pool, white_listed_claims); hi != NULL;
+			     hi = apr_hash_next(hi)) {
+				const void *name = NULL;
+				apr_hash_this(hi, &name, NULL, NULL);
+				APR_ARRAY_PUSH(hdrs, const char *) = (const char *)name;
+			}
+		} else {
 			oidc_warn(r, "both " OIDCClaimPrefix " and " OIDCWhiteListedClaims
 				     " are empty: this renders an insecure setup!");
+		}
 	}
 
 	const char *authn_hdr = oidc_cfg_dir_authn_header_get(r);
 	if (authn_hdr != NULL)
-		apr_hash_set(hdrs, authn_hdr, APR_HASH_KEY_STRING, authn_hdr);
+		APR_ARRAY_PUSH(hdrs, const char *) = authn_hdr;
+
+	/* a name configured in OIDCPassUserInfoAs is passed as-is, i.e. without any prefix */
+	const apr_array_header_t *pass_userinfo_as = oidc_cfg_dir_pass_userinfo_as_get(r);
+	for (int i = 0; (pass_userinfo_as != NULL) && (i < pass_userinfo_as->nelts); i++) {
+		const oidc_pass_user_info_as_t *p =
+		    APR_ARRAY_IDX(pass_userinfo_as, i, const oidc_pass_user_info_as_t *);
+		if ((p != NULL) && (p->name != NULL))
+			APR_ARRAY_PUSH(hdrs, const char *) = p->name;
+	}
 
 	/*
 	 * scrub all headers starting with OIDC_ first

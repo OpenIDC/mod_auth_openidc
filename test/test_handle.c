@@ -3685,6 +3685,37 @@ START_TEST(test_handle_mod_scrub_headers_custom_prefix) {
 }
 END_TEST
 
+START_TEST(test_handle_mod_scrub_headers_name_variants) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+
+	/* a configured header name must be scrubbed in every spelling the application may read it
+	 * under: another case (HTTP/2 lowercases all header names) or '_' instead of '-' */
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCAuthNHeader);
+	ck_assert_ptr_null(oidc_cmd_dir_authn_header_set(cmd, dir_cfg, "X-Remote-User"));
+	cmd = oidc_test_cmd_get(OIDCPassUserInfoAs);
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(cmd, dir_cfg, "json:X-User-Info"));
+	cmd = oidc_test_cmd_get(OIDCClaimPrefix);
+	ck_assert_ptr_null(oidc_cmd_claim_prefix_set(cmd, NULL, ""));
+	cmd = oidc_test_cmd_get(OIDCWhiteListedClaims);
+	ck_assert_ptr_null(oidc_cmd_white_listed_claims_set(cmd, NULL, "groups"));
+
+	apr_table_addn(r->headers_in, "x-remote-user", "admin");
+	apr_table_addn(r->headers_in, "X_Remote_User", "admin");
+	apr_table_addn(r->headers_in, "x-user-info", "{\"sub\":\"admin\"}");
+	apr_table_addn(r->headers_in, "GROUPS", "admins");
+	apr_table_addn(r->headers_in, "X-Other", "kept");
+
+	oidc_scrub_headers(r);
+
+	ck_assert_table_unset(r->headers_in, "X-Remote-User");
+	ck_assert_table_unset(r->headers_in, "X_Remote_User");
+	ck_assert_table_unset(r->headers_in, "X-User-Info");
+	ck_assert_table_unset(r->headers_in, "groups");
+	ck_assert_table_str(r->headers_in, "X-Other", "kept");
+}
+END_TEST
+
 START_TEST(test_handle_mod_strip_cookies_configured) {
 	request_rec *r = oidc_test_request_get();
 	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
@@ -7207,6 +7238,7 @@ int main(void) {
 	tcase_add_test(mod_main, test_handle_mod_scrub_headers_default_prefix);
 	tcase_add_test(mod_main, test_handle_mod_scrub_headers_empty_prefix_with_whitelist);
 	tcase_add_test(mod_main, test_handle_mod_scrub_headers_custom_prefix);
+	tcase_add_test(mod_main, test_handle_mod_scrub_headers_name_variants);
 	tcase_add_test(mod_main, test_handle_mod_strip_cookies_configured);
 	tcase_add_test(mod_main, test_handle_mod_provider_static_config_no_metadata_url);
 	tcase_add_test(mod_main, test_handle_mod_provider_static_config_metadata_url_cached);
