@@ -164,12 +164,12 @@ typedef enum {
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, int)                                                            \
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, int)
 
-/* string setter + JWK-array getter + a set-from-keys helper */
+/* string setter + JWK-array getter + a helper that sets already parsed keys (which cannot fail) */
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_KEYS_DECL(member)                                                               \
 	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member)                                                                     \
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, const apr_array_header_t *)                                     \
-	const char *oidc_cfg_provider_##member##_set_keys(apr_pool_t *, oidc_provider_t *, apr_array_header_t *);
+	void oidc_cfg_provider_##member##_set_keys(oidc_provider_t *provider, apr_array_header_t *arg);
 
 /* string setter + getter of <rtype> + an int_set helper that bypasses parsing */
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_INT_INT_DECL(member, rtype)                                                     \
@@ -178,12 +178,12 @@ typedef enum {
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, rtype)                                                          \
 	void oidc_cfg_provider_##member##_int_set(oidc_provider_t *provider, rtype arg);
 
-/* string setter + array getter + a set-from-string-list helper */
+/* string setter + array getter + a helper that sets an already parsed string list (which cannot fail) */
 #define OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_LIST_DECL(member)                                                           \
 	OIDC_CMD_PROVIDER_MEMBER_FUNC_DECL(member)                                                                     \
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_SET_DECL(member, const char *)                                                   \
 	OIDC_CFG_PROVIDER_MEMBER_FUNC_GET_DECL(member, const apr_array_header_t *)                                     \
-	const char *oidc_cfg_provider_##member##_set_str_list(apr_pool_t *, oidc_provider_t *, apr_array_header_t *);
+	void oidc_cfg_provider_##member##_set_str_list(oidc_provider_t *provider, apr_array_header_t *arg);
 
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(metadata_url)
 OIDC_CFG_PROVIDER_MEMBER_FUNCS_STR_DECL(issuer)

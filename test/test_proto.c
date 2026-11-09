@@ -2001,7 +2001,7 @@ static void set_provider_aud_values(request_rec *r, oidc_provider_t *provider, c
 	ck_assert_ptr_null(oidc_cfg_string_list_add(r->pool, &list, v1));
 	if (v2 != NULL)
 		ck_assert_ptr_null(oidc_cfg_string_list_add(r->pool, &list, v2));
-	ck_assert_ptr_null(oidc_cfg_provider_id_token_aud_values_set_str_list(r->pool, provider, list));
+	oidc_cfg_provider_id_token_aud_values_set_str_list(provider, list);
 }
 
 START_TEST(test_proto_idtoken_validate_aud_values_string_special_at) {
@@ -3884,7 +3884,7 @@ START_TEST(test_proto_request_auth_request_object_signing_keys) {
 	ck_assert_ptr_null(oidc_cmd_private_keys_set(oidc_test_cmd_get(OIDCPrivateKeyFiles), NULL,
 						     apr_psprintf(r->pool, "rsa-client#%s/private.pem", dir)));
 	apr_array_header_t *keys = (apr_array_header_t *)oidc_cfg_private_keys_get(c);
-	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, keys));
+	oidc_cfg_provider_client_keys_set_keys(provider, keys);
 	c->private_keys = NULL;
 	loc = e2e_request_object_location(r, c, provider, "{\"crypto\":{\"sign_alg\":\"RS256\"}}", "state-rosk-5");
 	ck_assert_msg(_oidc_strstr(loc, "request_uri=") != NULL,
@@ -3892,7 +3892,7 @@ START_TEST(test_proto_request_auth_request_object_signing_keys) {
 
 	/* hand the list back to the config: cfg and the provider each destroy the list they hold, so
 	 * exactly one of them may point at it when the fixture tears down */
-	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, NULL));
+	oidc_cfg_provider_client_keys_set_keys(provider, NULL);
 	c->private_keys = keys;
 }
 END_TEST

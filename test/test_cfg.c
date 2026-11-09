@@ -1333,7 +1333,7 @@ START_TEST(test_cmd_provider_metadata_only_setters) {
 	ck_assert_int_gt(keys->nelts, 0);
 
 	/* set_keys: direct array assignment */
-	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(r->pool, provider, (apr_array_header_t *)keys));
+	oidc_cfg_provider_client_keys_set_keys(provider, (apr_array_header_t *)keys);
 	ck_assert_ptr_eq(oidc_cfg_provider_client_keys_get(provider), keys);
 
 	cmd = oidc_test_cmd_get("OIDCProviderResponseRequireIss");
@@ -1833,11 +1833,11 @@ START_TEST(test_cfg_provider_set_keys_direct) {
 	apr_array_header_t *keys = apr_array_make(pool, 1, sizeof(oidc_jwk_t *));
 
 	ck_assert_ptr_null(oidc_cfg_provider_verify_public_keys_get(provider));
-	ck_assert_ptr_null(oidc_cfg_provider_verify_public_keys_set_keys(pool, provider, keys));
+	oidc_cfg_provider_verify_public_keys_set_keys(provider, keys);
 	ck_assert_ptr_eq(oidc_cfg_provider_verify_public_keys_get(provider), keys);
 
 	ck_assert_ptr_null(oidc_cfg_provider_client_keys_get(provider));
-	ck_assert_ptr_null(oidc_cfg_provider_client_keys_set_keys(pool, provider, keys));
+	oidc_cfg_provider_client_keys_set_keys(provider, keys);
 	ck_assert_ptr_eq(oidc_cfg_provider_client_keys_get(provider), keys);
 }
 END_TEST

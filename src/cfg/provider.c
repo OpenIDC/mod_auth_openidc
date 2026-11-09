@@ -291,10 +291,8 @@ OIDC_PROVIDER_TYPE_MEMBER_FUNCS_PASSPHRASE(token_endpoint_tls_client_key_pwd)
  */
 #define OIDC_PROVIDER_MEMBER_FUNCS_KEYS(member)                                                                        \
                                                                                                                        \
-	const char *oidc_cfg_provider_##member##_set_keys(apr_pool_t *pool, oidc_provider_t *provider,                 \
-							  apr_array_header_t *arg) {                                   \
+	void oidc_cfg_provider_##member##_set_keys(oidc_provider_t *provider, apr_array_header_t *arg) {               \
 		provider->member = arg;                                                                                \
-		return NULL;                                                                                           \
 	}                                                                                                              \
                                                                                                                        \
 	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \
@@ -311,10 +309,8 @@ OIDC_PROVIDER_MEMBER_FUNCS_KEYS(client_keys)
 
 #define OIDC_PROVIDER_MEMBER_FUNCS_STR_LIST(member)                                                                    \
                                                                                                                        \
-	const char *oidc_cfg_provider_##member##_set_str_list(apr_pool_t *pool, oidc_provider_t *provider,             \
-							      apr_array_header_t *arg) {                               \
+	void oidc_cfg_provider_##member##_set_str_list(oidc_provider_t *provider, apr_array_header_t *arg) {           \
 		provider->member = arg;                                                                                \
-		return NULL;                                                                                           \
 	}                                                                                                              \
                                                                                                                        \
 	const char *oidc_cfg_provider_##member##_set(apr_pool_t *pool, oidc_provider_t *provider, const char *arg) {   \

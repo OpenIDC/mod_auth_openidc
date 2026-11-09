@@ -145,9 +145,7 @@ static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, const
 
 	oidc_metadata_get_jwks(r, j_conf, &keys);
 	if (keys != NULL) {
-		rv = oidc_cfg_provider_client_keys_set_keys(r->pool, provider, keys);
-		if (rv != NULL)
-			oidc_error(r, "oidc_cfg_provider_client_keys_set: %s", rv);
+		oidc_cfg_provider_client_keys_set_keys(provider, keys);
 		/* the inline .conf "keys" are freshly parsed and owned by this per-request provider, so free
 		 * them when the request pool is destroyed rather than leaking one cjose key set per
 		 * authentication */
@@ -172,7 +170,6 @@ static void oidc_metadata_conf_parse_keys(request_rec *r, oidc_cfg_t *cfg, const
  */
 static void oidc_metadata_conf_parse_id_token(request_rec *r, oidc_cfg_t *cfg, const oidc_json_t *j_conf,
 					      oidc_provider_t *provider) {
-	const char *rv = NULL;
 	apr_array_header_t *auds = NULL;
 
 	OIDC_METADATA_CONF_STR(j_conf, OIDC_METADATA_ID_TOKEN_SIGNED_RESPONSE_ALG, id_token_signed_response_alg);
@@ -182,11 +179,8 @@ static void oidc_metadata_conf_parse_id_token(request_rec *r, oidc_cfg_t *cfg, c
 	oidc_json_object_get_string_array(
 	    r->pool, j_conf, OIDC_METADATA_ID_TOKEN_AUD_VALUES, &auds,
 	    oidc_proto_profile_id_token_aud_values_get(r->pool, oidc_cfg_provider_get(cfg)));
-	if (auds != NULL) {
-		rv = oidc_cfg_provider_id_token_aud_values_set_str_list(r->pool, provider, auds);
-		if (rv != NULL)
-			oidc_error(r, "oidc_cfg_provider_aud_values_set: %s", rv);
-	}
+	if (auds != NULL)
+		oidc_cfg_provider_id_token_aud_values_set_str_list(provider, auds);
 }
 
 /*
