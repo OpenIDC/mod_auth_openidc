@@ -6,6 +6,10 @@
   the names configured in OIDCPassUserInfoAs were not scrubbed at all
 - security: an unauthenticated request to the OIDCMetricsPublish path crashed the server process when no
   virtual host sets OIDCMetricsData; it now returns 404 and logs that OIDCMetricsData is needed
+- security: build the Prometheus metrics output in linear rather than quadratic time and memory, and label the
+  provider connect error counter with curl's generic error text instead of its detailed message, which carries
+  the host name, elapsed time and byte counts: a scrape could otherwise exhaust memory once enough distinct
+  values had been recorded, which an OP outage or unauthenticated discovery requests can produce
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic

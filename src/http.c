@@ -1046,13 +1046,15 @@ static apr_byte_t oidc_http_request_perform_with_retries(request_rec *r, const o
 			/* in case of a request/transfer timeout (which includes the connect timeout) we'll not retry */
 			oidc_error(r, "curl_easy_perform failed with a timeout for %s: [%s]; won't retry", url,
 				   curl_err[0] ? curl_err : "<n/a>");
-			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR,
-						       curl_err[0] ? curl_err : "timeout");
+			/* label with the generic error text: curl_err carries the host name, elapsed time and
+			 * byte counts, so it would record a new label value, and output line, for nearly every
+			 * failure, including for host names supplied in an unauthenticated request */
+			OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_easy_strerror(res));
 			return FALSE;
 		}
 		oidc_error(r, "curl_easy_perform(%d/%d) failed for %s with: [%s]", i + 1, http_timeout->retries + 1,
 			   url, curl_err[0] ? curl_err : "<n/a>");
-		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_err[0] ? curl_err : "undefined");
+		OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_PROVIDER_CONNECT_ERROR, curl_easy_strerror(res));
 		/* in case of a connectivity/network glitch we'll back off before retrying */
 		if (i < http_timeout->retries)
 			apr_sleep(apr_time_from_msec(http_timeout->retry_interval));

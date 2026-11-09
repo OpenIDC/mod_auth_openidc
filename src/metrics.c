@@ -1496,50 +1496,50 @@ static const char *oidc_metrics_prometheus_escape_label(apr_pool_t *pool, const 
 #define OIDC_METRICS_PROMETHEUS_VALUE "value"
 #define OIDC_METRICS_PROMETHEUS_NAME "name"
 
-// loop context for Prometheus output
+// loop context for Prometheus output: the output lines, joined once at the end; appending every line to the text
+// accumulated so far would copy all of it again for each line, i.e. take time and memory quadratic in the number of
+// lines, which grows with every distinct label value recorded
 typedef struct oidc_metric_prometheus_callback_ctx_t {
-	char *s_result;
+	apr_array_header_t *lines;
 	apr_pool_t *pool;
 } oidc_metric_prometheus_callback_ctx_t;
 
 /*
  * append per-(name, value) label-pair lines for a single key under a server's counter
  */
-static char *oidc_metrics_prometheus_counter_named(apr_pool_t *pool, char *s_text, const char *s_start,
-						   const char *s_key, oidc_json_t *j_value) {
+static void oidc_metrics_prometheus_counter_named(apr_pool_t *pool, apr_array_header_t *lines, const char *s_start,
+						  const char *s_key, oidc_json_t *j_value) {
 	void *iter = oidc_json_object_iter(j_value);
 	while (iter) {
 		const char *s_value = oidc_json_object_iter_key(iter);
-		s_text =
-		    apr_psprintf(pool, "%s%s,%s=\"%s\",%s=\"%s\"} %s\n", s_text, s_start, OIDC_METRICS_PROMETHEUS_NAME,
+		APR_ARRAY_PUSH(lines, const char *) =
+		    apr_psprintf(pool, "%s,%s=\"%s\",%s=\"%s\"} %s\n", s_start, OIDC_METRICS_PROMETHEUS_NAME,
 				 oidc_metrics_prometheus_escape_label(pool, s_key), OIDC_METRICS_PROMETHEUS_VALUE,
 				 oidc_metrics_prometheus_escape_label(pool, s_value),
 				 _json_int2str(pool, oidc_json_integer_value(oidc_json_object_iter_value(iter))));
 		iter = oidc_json_object_iter_next(j_value, iter);
 	}
-	return s_text;
 }
 
 /*
  * append per-key lines for one server's counter dict; integer entries are value-labeled, sub-dict
  * entries are delegated to oidc_metrics_prometheus_counter_named for name+value labeling
  */
-static char *oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, char *s_text, const char *s_start,
-						   oidc_json_t *j_counter) {
+static void oidc_metrics_prometheus_counter_keyed(apr_pool_t *pool, apr_array_header_t *lines, const char *s_start,
+						  oidc_json_t *j_counter) {
 	void *iter = oidc_json_object_iter(j_counter);
 	while (iter) {
 		const char *s_key = oidc_json_object_iter_key(iter);
 		oidc_json_t *j_value = oidc_json_object_iter_value(iter);
 		if (oidc_json_is_integer(j_value))
-			s_text =
-			    apr_psprintf(pool, "%s%s,%s=\"%s\"} %s\n", s_text, s_start, OIDC_METRICS_PROMETHEUS_VALUE,
+			APR_ARRAY_PUSH(lines, const char *) =
+			    apr_psprintf(pool, "%s,%s=\"%s\"} %s\n", s_start, OIDC_METRICS_PROMETHEUS_VALUE,
 					 oidc_metrics_prometheus_escape_label(pool, s_key),
 					 _json_int2str(pool, oidc_json_integer_value(j_value)));
 		else
-			s_text = oidc_metrics_prometheus_counter_named(pool, s_text, s_start, s_key, j_value);
+			oidc_metrics_prometheus_counter_named(pool, lines, s_start, s_key, j_value);
 		iter = oidc_json_object_iter_next(j_counter, iter);
 	}
-	return s_text;
 }
 
 /*
@@ -1550,14 +1550,13 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
 	oidc_json_t *o_counter = value;
 	const oidc_metrics_counter_info_t *info = _oidc_metrics_key2counter_info(key);
 	const char *s_label = NULL;
-	char *s_text = NULL;
 
 	if (info == NULL)
 		return 1;
 
 	s_label = oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_info2s(ctx->pool, info));
-	s_text = apr_psprintf(ctx->pool, "# HELP %s The number of %s.\n", s_label, info->desc);
-	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s counter\n", s_text, s_label);
+	APR_ARRAY_PUSH(ctx->lines, const char *) =
+	    apr_psprintf(ctx->pool, "# HELP %s The number of %s.\n# TYPE %s counter\n", s_label, info->desc, s_label);
 
 	void *iter = oidc_json_object_iter(o_counter);
 	while (iter) {
@@ -1566,13 +1565,14 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
 		const char *s_start = apr_psprintf(ctx->pool, "%s{%s=\"%s\"", s_label, OIDC_METRICS_PROMETHEUS_SERVER,
 						   oidc_metrics_prometheus_escape_label(ctx->pool, s_server));
 		if (oidc_json_is_integer(j_counter))
-			s_text = apr_psprintf(ctx->pool, "%s%s} %s\n", s_text, s_start,
-					      _json_int2str(ctx->pool, oidc_json_integer_value(j_counter)));
+			APR_ARRAY_PUSH(ctx->lines, const char *) =
+			    apr_psprintf(ctx->pool, "%s} %s\n", s_start,
+					 _json_int2str(ctx->pool, oidc_json_integer_value(j_counter)));
 		else
-			s_text = oidc_metrics_prometheus_counter_keyed(ctx->pool, s_text, s_start, j_counter);
+			oidc_metrics_prometheus_counter_keyed(ctx->pool, ctx->lines, s_start, j_counter);
 		iter = oidc_json_object_iter_next(o_counter, iter);
 	}
-	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", NULL);
+	APR_ARRAY_PUSH(ctx->lines, const char *) = "\n";
 	oidc_json_decref(o_counter);
 	return 1;
 }
@@ -1592,8 +1592,8 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	oidc_json_int_t v = 0;
 	const oidc_metrics_timing_info_t *info = _oidc_metrics_key2timing_info(key);
 	const char *s_label = NULL;
-	char *s_text = NULL;
-	char *s_secs = NULL;
+	apr_array_header_t *s_text = NULL;
+	apr_array_header_t *s_secs = NULL;
 
 	if (info == NULL)
 		return 1;
@@ -1602,10 +1602,13 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	/* the unsuffixed millisecond family is deprecated as of 2.4.20.4 in favor of the
 	 * Prometheus-idiomatic _seconds family emitted alongside it below, and will be
 	 * removed in a future release */
-	s_text = apr_psprintf(ctx->pool, "# HELP %s A histogram of %s.\n", s_label, info->desc);
-	s_text = apr_psprintf(ctx->pool, "%s# TYPE %s histogram\n", s_text, s_label);
-	s_secs = apr_psprintf(ctx->pool, "# HELP %s_seconds A histogram of %s in seconds.\n", s_label, info->desc);
-	s_secs = apr_psprintf(ctx->pool, "%s# TYPE %s_seconds histogram\n", s_secs, s_label);
+	s_text = apr_array_make(ctx->pool, 16, sizeof(const char *));
+	s_secs = apr_array_make(ctx->pool, 16, sizeof(const char *));
+	APR_ARRAY_PUSH(s_text, const char *) = apr_psprintf(
+	    ctx->pool, "# HELP %s A histogram of %s.\n# TYPE %s histogram\n", s_label, info->desc, s_label);
+	APR_ARRAY_PUSH(s_secs, const char *) =
+	    apr_psprintf(ctx->pool, "# HELP %s_seconds A histogram of %s in seconds.\n# TYPE %s_seconds histogram\n",
+			 s_label, info->desc, s_label);
 
 	void *iter1 = oidc_json_object_iter(o_timer);
 	while (iter1) {
@@ -1619,36 +1622,39 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 			v = oidc_json_integer_value(j_member);
 			bucket = oidc_metrics_prometheus_bucket_get(s_key);
 			if (bucket != NULL) {
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s,%s=\"%s\"} %s\n", s_text, s_label,
-						      OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
-						      _json_int2str(ctx->pool, v));
-				s_secs = apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s,%s=\"%s\"} %s\n", s_secs, s_label,
-						      OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label_seconds,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
-						      _json_int2str(ctx->pool, v));
+				APR_ARRAY_PUSH(s_text, const char *) = apr_psprintf(
+				    ctx->pool, "%s_%s{%s,%s=\"%s\"} %s\n", s_label, OIDC_METRICS_PROMETHEUS_BUCKET,
+				    bucket->label, OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
+				    _json_int2str(ctx->pool, v));
+				APR_ARRAY_PUSH(s_secs, const char *) = apr_psprintf(
+				    ctx->pool, "%s_seconds_%s{%s,%s=\"%s\"} %s\n", s_label,
+				    OIDC_METRICS_PROMETHEUS_BUCKET, bucket->label_seconds,
+				    OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped, _json_int2str(ctx->pool, v));
 			} else if (_oidc_strcmp(s_key, OIDC_METRICS_SUM) == 0) {
 				/* the sum is kept in microseconds in shared memory: truncate to
 				 * milliseconds for the legacy family, exact seconds for _seconds */
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
-						      _json_int2str(ctx->pool, v / 1000));
-				s_secs = apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %.6f\n", s_secs, s_label,
-						      s_key, OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
-						      (double)v / 1000000.0);
+				APR_ARRAY_PUSH(s_text, const char *) = apr_psprintf(
+				    ctx->pool, "%s_%s{%s=\"%s\"} %s\n", s_label, s_key, OIDC_METRICS_PROMETHEUS_SERVER,
+				    s_server_escaped, _json_int2str(ctx->pool, v / 1000));
+				APR_ARRAY_PUSH(s_secs, const char *) = apr_psprintf(
+				    ctx->pool, "%s_seconds_%s{%s=\"%s\"} %.6f\n", s_label, s_key,
+				    OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped, (double)v / 1000000.0);
 			} else {
-				s_text = apr_psprintf(ctx->pool, "%s%s_%s{%s=\"%s\"} %s\n", s_text, s_label, s_key,
-						      OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
-						      _json_int2str(ctx->pool, v));
-				s_secs = apr_psprintf(ctx->pool, "%s%s_seconds_%s{%s=\"%s\"} %s\n", s_secs, s_label,
-						      s_key, OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped,
-						      _json_int2str(ctx->pool, v));
+				APR_ARRAY_PUSH(s_text, const char *) = apr_psprintf(
+				    ctx->pool, "%s_%s{%s=\"%s\"} %s\n", s_label, s_key, OIDC_METRICS_PROMETHEUS_SERVER,
+				    s_server_escaped, _json_int2str(ctx->pool, v));
+				APR_ARRAY_PUSH(s_secs, const char *) = apr_psprintf(
+				    ctx->pool, "%s_seconds_%s{%s=\"%s\"} %s\n", s_label, s_key,
+				    OIDC_METRICS_PROMETHEUS_SERVER, s_server_escaped, _json_int2str(ctx->pool, v));
 			}
 			iter3 = oidc_json_object_iter_next(j_timing, iter3);
 		}
 		iter1 = oidc_json_object_iter_next(o_timer, iter1);
 	}
-	ctx->s_result = apr_pstrcat(ctx->pool, ctx->s_result, s_text, "\n", s_secs, "\n", NULL);
+	apr_array_cat(ctx->lines, s_text);
+	APR_ARRAY_PUSH(ctx->lines, const char *) = "\n";
+	apr_array_cat(ctx->lines, s_secs);
+	APR_ARRAY_PUSH(ctx->lines, const char *) = "\n";
 	oidc_json_decref(o_timer);
 	return 1;
 }
@@ -1710,7 +1716,8 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 	    OIDC_METRICS_PROMETHEUS_PREFIX, OIDC_METRICS_PROMETHEUS_PREFIX,
 	    apr_atomic_read32(&_oidc_metrics_shm_hdr()->last_flush));
 
-	oidc_metric_prometheus_callback_ctx_t ctx = {s_self, r->pool};
+	oidc_metric_prometheus_callback_ctx_t ctx = {apr_array_make(r->pool, 64, sizeof(const char *)), r->pool};
+	APR_ARRAY_PUSH(ctx.lines, const char *) = s_self;
 	void *iter = NULL;
 
 	/* parse the metrics string to JSON */
@@ -1741,8 +1748,8 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 
 	oidc_json_decref(json);
 
-	return oidc_util_http_send(r, ctx.s_result, _oidc_strlen(ctx.s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE,
-				   OK);
+	const char *s_result = apr_array_pstrcat(r->pool, ctx.lines, 0);
+	return oidc_util_http_send(r, s_result, _oidc_strlen(s_result), OIDC_METRICS_PROMETHEUS_CONTENT_TYPE, OK);
 }
 
 /*
