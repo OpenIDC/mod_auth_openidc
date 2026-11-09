@@ -166,6 +166,23 @@ apr_byte_t oidc_metadata_provider_retrieve(request_rec *r, oidc_cfg_t *cfg, cons
 }
 
 /*
+ * the metadata file name drops the scheme of the issuer, so that an http:// and an https:// issuer share one: check
+ * that a cached document is that of the requested issuer before refreshing it or falling back to it
+ */
+static apr_byte_t oidc_metadata_provider_cache_is_for(request_rec *r, const oidc_json_t *j_cache, const char *issuer) {
+	char *s_issuer = NULL;
+	oidc_json_object_get_string(r->pool, j_cache, OIDC_METADATA_ISSUER, &s_issuer, NULL);
+	/* a document without an issuer is invalid anyway and may be replaced */
+	if ((s_issuer == NULL) || (oidc_util_issuer_match(issuer, s_issuer) == TRUE))
+		return TRUE;
+	oidc_error(r,
+		   "requested issuer (%s) does not match the \"" OIDC_METADATA_ISSUER
+		   "\" value (%s) in the provider metadata file it maps to; not refreshing that file",
+		   issuer, s_issuer);
+	return FALSE;
+}
+
+/*
  * see if we have provider metadata and check its validity
  * if not, use OpenID Connect Discovery to get it, check it and store it
  */
@@ -201,6 +218,14 @@ apr_byte_t oidc_metadata_provider_get(request_rec *r, oidc_cfg_t *cfg, const cha
 	if ((oidc_metadata_file_read_json(r, provider_path, &j_cache) == TRUE) && (use_cache == TRUE)) {
 		*j_provider = j_cache;
 		return oidc_metadata_provider_is_valid(r, cfg, *j_provider, issuer);
+	}
+
+	/* never refresh the file of another issuer: an http:// request would replace the metadata of the https://
+	 * issuer with a document retrieved over plain http, and pair that with the https:// issuer's client credentials
+	 */
+	if ((j_cache != NULL) && (oidc_metadata_provider_cache_is_for(r, j_cache, issuer) == FALSE)) {
+		oidc_json_decref(j_cache);
+		return FALSE;
 	}
 
 	if ((have_cache == FALSE) && (!allow_discovery)) {

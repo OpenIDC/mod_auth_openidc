@@ -29,6 +29,10 @@
   until the cache entry expired
 - file cache: skip non-regular entries when cleaning the cache directory, and never block opening an entry: a FIFO
   planted in it, e.g. in a shared /tmp, blocked every cleaning cycle and the request running it
+- security: with OIDCMetadataDir and OIDCProviderMetadataRefreshInterval, do not refresh the provider metadata file of
+  another issuer: an http:// issuer, e.g. from 3rd-party initiated login, maps to the file of the https:// one, so a
+  request for it replaced that issuer's metadata with a document retrieved over plain http, paired with its client
+  credentials
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic

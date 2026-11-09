@@ -1847,6 +1847,44 @@ START_TEST(test_metadata_disk_provider_refresh_replaces_stale_cache) {
 }
 END_TEST
 
+/* an http:// issuer maps to the metadata file of the https:// one: it must not refresh that file, which would
+ * replace the https:// metadata with a document retrieved over plain http, paired with the https:// client */
+START_TEST(test_metadata_disk_provider_refresh_refuses_other_scheme) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	(void)e2e_make_metadata_dir(r);
+	apr_finfo_t before, after;
+
+	ck_assert_ptr_null(oidc_cmd_provider_metadata_refresh_interval_set(
+	    oidc_test_cmd_get("OIDCProviderMetadataRefreshInterval"), NULL, "60"));
+
+	/* nothing listens: a refresh attempt fails and falls back to the stale file, which bumps its mtime */
+	int port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_gt(port, 0);
+	const char *https_issuer = apr_psprintf(r->pool, "https://127.0.0.1:%d", port);
+	const char *http_issuer = apr_psprintf(r->pool, "http://127.0.0.1:%d", port);
+
+	const char *path = oidc_metadata_provider_file_path(r, https_issuer);
+	ck_assert_str_eq(path, oidc_metadata_provider_file_path(r, http_issuer));
+	e2e_write_file(r, path, e2e_provider_metadata_for(r, https_issuer));
+	ck_assert_int_eq(apr_file_mtime_set(path, apr_time_now() - apr_time_from_sec(3600), r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_stat(&before, path, APR_FINFO_MTIME, r->pool), APR_SUCCESS);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, http_issuer, &j, TRUE), FALSE);
+	ck_assert_ptr_null(j);
+	/* no refresh was attempted */
+	ck_assert_int_eq(apr_stat(&after, path, APR_FINFO_MTIME, r->pool), APR_SUCCESS);
+	ck_assert_int_eq((int)apr_time_sec(after.mtime), (int)apr_time_sec(before.mtime));
+
+	/* while the https:// issuer still gets its (stale) metadata */
+	ck_assert_int_eq(oidc_metadata_provider_get(r, c, https_issuer, &j, TRUE), TRUE);
+	ck_assert_ptr_nonnull(j);
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(j, "issuer")), https_issuer);
+	oidc_json_decref(j);
+}
+END_TEST
+
 /*
  * an issuer given without a scheme is discovered over https, so "idp.example.com" and
  * "https://idp.example.com" name the same provider
@@ -2712,6 +2750,7 @@ int main(void) {
 	tcase_add_test(disk, test_metadata_disk_provider_refresh_within_interval_uses_cache);
 	tcase_add_test(disk, test_metadata_disk_provider_refresh_falls_back_to_stale_cache);
 	tcase_add_test(disk, test_metadata_disk_provider_refresh_replaces_stale_cache);
+	tcase_add_test(disk, test_metadata_disk_provider_refresh_refuses_other_scheme);
 	tcase_add_test(disk, test_metadata_disk_get_with_empty_conf_file);
 	tcase_add_test(disk, test_metadata_disk_get_with_invalid_conf_alg);
 	tcase_add_test(disk, test_metadata_disk_dyn_registration_success);
