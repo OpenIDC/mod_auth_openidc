@@ -126,6 +126,11 @@ static request_rec *oidc_test_request_init(apr_pool_t *pool) {
 		      "=0123456789abcdef; baz=zot");
 
 	request->server = apr_pcalloc(pool, sizeof(struct server_rec));
+	/* log at debug level: httpd's ap_log_*error macros only skip their arguments for levels above
+	 * NOTICE, so with the zeroed level of a bare server_rec the arguments of every oidc_debug and
+	 * oidc_info call -- the code a "LogLevel auth_openidc:debug" deployment runs -- were never
+	 * evaluated here, and so never ran under valgrind or the sanitizers either */
+	request->server->log.level = APLOG_DEBUG;
 	request->server->process = apr_pcalloc(pool, sizeof(struct process_rec));
 	apr_pool_create(&request->server->process->pool, pool);
 	apr_pool_create(&request->server->process->pconf, pool);

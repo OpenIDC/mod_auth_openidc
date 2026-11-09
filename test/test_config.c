@@ -57,6 +57,7 @@
  */
 static server_rec *oidc_test_server_create(apr_pool_t *pool, const server_rec *base) {
 	server_rec *s = apr_pcalloc(pool, sizeof(server_rec));
+	s->log.level = base->log.level;
 	s->process = base->process;
 	s->server_hostname = "www.example.com";
 	s->module_config = apr_pcalloc(pool, sizeof(void *) * 1);
