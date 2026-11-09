@@ -28,6 +28,7 @@
 #include "cache/cache.h"
 #include "cfg/cfg_int.h"
 #include "cfg/dir.h"
+#include "cfg/oauth.h"
 #include "check_util.h"
 #include "handle/handle.h"
 #include "http_server.h"
@@ -4279,6 +4280,33 @@ START_TEST(test_handle_revoke_at_cache_remove_cached) {
 }
 END_TEST
 
+/* with OIDCOAuthServerMetadataURL the validation result is cached under a key that binds the introspection
+ * endpoint from the metadata, which the removal must compute the same way */
+START_TEST(test_handle_revoke_at_cache_remove_metadata_url) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *md_url = "https://idp.example.com/.well-known/oauth-authorization-server";
+	char *value = NULL;
+
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_metadata_url_set(oidc_test_cmd_get(OIDCOAuthServerMetadataURL), NULL, md_url));
+	oidc_cache_set_oauth_provider(r, md_url,
+				      "{\"issuer\":\"https://idp.example.com\",\"introspection_endpoint\":"
+				      "\"https://idp.example.com/introspect\"}",
+				      apr_time_now() + apr_time_from_sec(3600));
+
+	const char *key = oidc_oauth_cache_key_resolved(r, c, "AT-md");
+	ck_assert_ptr_nonnull(key);
+	ck_assert_str_ne(key, oidc_oauth_cache_key(r, c, "AT-md"));
+	oidc_cache_set_access_token(r, key, "{\"sub\":\"alice\"}", apr_time_now() + apr_time_from_sec(3600));
+
+	r->args = "remove_at_cache=AT-md";
+	ck_assert_int_eq(oidc_revoke_at_cache_remove(r, c), OK);
+	oidc_cache_get_access_token(r, key, &value);
+	ck_assert_ptr_null(value);
+}
+END_TEST
+
 /*
  * Tests for handle/session_management.c — oidc_session_management entry point.
  */
@@ -7398,6 +7426,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_dpop);
 	tcase_add_test(dispatch, test_handle_dispatch_request_uri);
 	tcase_add_test(dispatch, test_handle_dispatch_remove_at_cache);
+	tcase_add_test(dispatch, test_handle_revoke_at_cache_remove_metadata_url);
 	tcase_add_test(dispatch, test_handle_dispatch_revoke_session);
 	tcase_add_test(dispatch, test_handle_dispatch_info_no_session_returns_unauthorized);
 	tcase_add_test(dispatch, test_handle_dispatch_unknown_args_returns_500);

@@ -449,6 +449,14 @@ const char *oidc_oauth_cache_key(request_rec *r, const oidc_cfg_t *c, const char
 }
 
 /*
+ * the cache key of an access token's validation result as oidc_oauth_check_userid() stores it, i.e. with the
+ * endpoints obtained from OIDCOAuthServerMetadataURL when configured
+ */
+const char *oidc_oauth_cache_key_resolved(request_rec *r, oidc_cfg_t *c, const char *access_token) {
+	return oidc_oauth_cache_key(r, oidc_oauth_provider_config(r, c), access_token);
+}
+
+/*
  * cache the OAuth 2.0 introspection results for the specified access token
  */
 static apr_byte_t oidc_oauth_cache_access_token(request_rec *r, const oidc_cfg_t *c, apr_time_t cache_until,
@@ -905,7 +913,7 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, const oidc_cfg_t *
  * handle "special" requests directed at the Redirect URI (JWKS, remove-access-token-cache);
  * returns the status to send back, or DECLINED if not a special request
  */
-static int oidc_oauth_check_userid_redirect_uri(request_rec *r, const oidc_cfg_t *c) {
+static int oidc_oauth_check_userid_redirect_uri(request_rec *r, oidc_cfg_t *c) {
 	if (oidc_util_url_has_parameter(r, OIDC_REDIRECT_URI_REQUEST_JWKS)) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_REDIRECT_URI_REQUEST_JWKS);
 		/*

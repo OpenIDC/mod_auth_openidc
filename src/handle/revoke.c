@@ -65,13 +65,14 @@ int oidc_revoke_session(request_rec *r, const oidc_cfg_t *c) {
 /*
  * handle a request to invalidate a cached access token introspection result
  */
-int oidc_revoke_at_cache_remove(request_rec *r, const oidc_cfg_t *c) {
+int oidc_revoke_at_cache_remove(request_rec *r, oidc_cfg_t *c) {
 	char *access_token = NULL;
 	oidc_util_url_parameter_get(r, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, &access_token);
 	if (access_token == NULL)
 		return HTTP_BAD_REQUEST;
 
-	const char *key = oidc_oauth_cache_key(r, c, access_token);
+	/* the key the validation result was cached under, which binds the endpoints from the metadata URL too */
+	const char *key = oidc_oauth_cache_key_resolved(r, c, access_token);
 	if (key == NULL)
 		return HTTP_INTERNAL_SERVER_ERROR;
 
