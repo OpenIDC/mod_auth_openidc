@@ -814,6 +814,69 @@ START_TEST(test_oauth_check_userid_jwt_cached_other_verifier) {
 }
 END_TEST
 
+/* a merged vhost config verifying with the given "kid#file" public keys, in this order, plus an optional shared key */
+static oidc_cfg_t *e2e_vhost_with_public_keys(request_rec *r, const char *const *keys, const char *secret) {
+	server_rec *s = e2e_vhost_create(r);
+	for (int i = 0; keys[i] != NULL; i++) {
+		const char *hash = strchr(keys[i], '#');
+		const char *arg = apr_psprintf(r->pool, "%.*s#%s/%s", (int)(hash - keys[i]), keys[i],
+					       oidc_test_srcdir(), hash + 1);
+		ck_assert_ptr_null(
+		    oidc_cmd_oauth_verify_public_keys_set(e2e_vhost_cmd(s, OIDCOAuthVerifyCertFiles), NULL, arg));
+	}
+	if (secret != NULL)
+		ck_assert_ptr_null(
+		    oidc_cmd_oauth_verify_shared_keys_set(e2e_vhost_cmd(s, OIDCOAuthVerifySharedKeys), NULL, secret));
+	/* merge onto an empty base so that the keys above are the only ones in play */
+	return e2e_vhost_merge(r, oidc_cfg_server_create(r->pool, r->server), s);
+}
+
+static const char *e2e_cache_key_public_keys(request_rec *r, const char *const *keys, const char *secret,
+					     const char *access_token) {
+	const char *key = oidc_oauth_cache_key(r, e2e_vhost_with_public_keys(r, keys, secret), access_token);
+	ck_assert_ptr_nonnull(key);
+	return key;
+}
+
+/*
+ * the cache key of a JWT validation result is bound to the configured RSA/EC public keys as well as
+ * to the shared keys, and does not depend on the order in which they were configured
+ */
+START_TEST(test_oauth_cache_key_public_keys) {
+	request_rec *r = oidc_test_request_get();
+	const char *token = "the-access-token";
+	static const char *const k1[] = {"k1#public.pem", NULL};
+	static const char *const k2[] = {"k2#certificate.pem", NULL};
+	static const char *const k1_k2[] = {"k1#public.pem", "k2#certificate.pem", NULL};
+	static const char *const k2_k1[] = {"k2#certificate.pem", "k1#public.pem", NULL};
+	static const char *const none[] = {NULL};
+
+	const char *key_k1 = e2e_cache_key_public_keys(r, k1, NULL, token);
+	const char *key_k2 = e2e_cache_key_public_keys(r, k2, NULL, token);
+	const char *key_k1_k2 = e2e_cache_key_public_keys(r, k1_k2, NULL, token);
+
+	/* deterministic for the same configuration, and still ends in the token itself */
+	ck_assert_str_eq(e2e_cache_key_public_keys(r, k1, NULL, token), key_k1);
+	ck_assert_ptr_nonnull(_oidc_strstr(key_k1, ".the-access-token"));
+
+	/* another public key, or an additional one, yields another key */
+	ck_assert_str_ne(key_k1, key_k2);
+	ck_assert_str_ne(key_k1, key_k1_k2);
+	ck_assert_str_ne(key_k2, key_k1_k2);
+
+	/* the same set of public keys configured in another order yields the same key */
+	ck_assert_str_eq(e2e_cache_key_public_keys(r, k2_k1, NULL, token), key_k1_k2);
+
+	/* public and shared keys are bound together: adding a shared key changes it, and the shared key
+	 * alone is not the same verifier as the shared key plus a public key */
+	const char *secret = "0123456789abcdef0123456789abcdef";
+	const char *key_k1_secret = e2e_cache_key_public_keys(r, k1, secret, token);
+	ck_assert_str_ne(key_k1_secret, key_k1);
+	ck_assert_str_ne(key_k1_secret, e2e_cache_key_public_keys(r, none, secret, token));
+	ck_assert_str_eq(e2e_cache_key_public_keys(r, k1, secret, token), key_k1_secret);
+}
+END_TEST
+
 /* an introspection result cached for one introspection endpoint must not satisfy a vhost that
  * introspects at another endpoint */
 START_TEST(test_oauth_check_userid_introspection_cached_other_endpoint) {
@@ -1615,6 +1678,7 @@ int main(void) {
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_audience_claim);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_audience_cached);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_cached_other_verifier);
+	tcase_add_test(jwt, test_oauth_cache_key_public_keys);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_wrong_issuer);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_matching_issuer);
 	tcase_add_test(jwt, test_oauth_check_userid_jwt_no_issuer_claim);
