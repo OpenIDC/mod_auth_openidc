@@ -27,6 +27,8 @@
 - fix the redirect URI's remove_at_cache request with OIDCOAuthServerMetadataURL: it looked the cached validation
   result up without the endpoints from the metadata, so it never found it, and a revoked access token stayed accepted
   until the cache entry expired
+- file cache: skip non-regular entries when cleaning the cache directory, and never block opening an entry: a FIFO
+  planted in it, e.g. in a shared /tmp, blocked every cleaning cycle and the request running it
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic

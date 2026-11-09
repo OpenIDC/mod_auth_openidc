@@ -57,8 +57,9 @@
 #include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
-/* the symlink, permission and RLIMIT_FSIZE tests below are POSIX-only */
+/* the symlink, FIFO, permission and RLIMIT_FSIZE tests below are POSIX-only */
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 #if APR_HAS_FORK
@@ -1179,14 +1180,17 @@ START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	/* clean on every write instead of once a minute */
 	cfg->cache.file_clean_interval = 0;
 
-	/* A directory reaches the corrupt-header path but must survive cleaning. */
+	/* a directory is not a cache entry and must survive cleaning */
 	const char *subdir = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "subdir");
 	ck_assert_int_eq(apr_dir_make(subdir, APR_FPROT_OS_DEFAULT, r->pool), APR_SUCCESS);
 
-	/* a dangling symlink, which is the one shape that cannot be opened at all -- and unlike a
-	 * mode-0000 file it cannot be opened by root either, so this holds however the tests run */
+	/* a dangling symlink, which is skipped as a non-regular entry rather than opened */
 	const char *dangling = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "dangling");
 	ck_assert_int_eq(symlink("/nonexistent/target", dangling), 0);
+
+	/* a FIFO, which would block the cleaning cycle (and the request running it) forever in open() */
+	const char *fifo = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "fifo");
+	ck_assert_int_eq(mkfifo(fifo, 0600), 0);
 
 	/* an entry too short to hold a header */
 	const char *corrupt = e2e_file_cache_path(r, OIDC_CACHE_SECTION_SESSION, "corrupt");
@@ -1205,6 +1209,7 @@ START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	ck_assert_int_ne(apr_stat(&fi, corrupt, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
 	ck_assert_int_eq(apr_stat(&fi, foreign, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
 	ck_assert_int_eq(apr_stat(&fi, subdir, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
+	ck_assert_int_eq(apr_stat(&fi, fifo, APR_FINFO_TYPE, r->pool), APR_SUCCESS);
 	char *value = NULL;
 	ck_assert_int_eq(oidc_cache_file.get(r, OIDC_CACHE_SECTION_SESSION, "keep", &value), TRUE);
 	ck_assert_str_eq(value, "keep-value");
@@ -1223,6 +1228,7 @@ START_TEST(test_cache_file_clean_cycle_handles_junk) {
 	    APR_SUCCESS);
 
 	apr_file_remove(dangling, r->pool);
+	apr_file_remove(fifo, r->pool);
 	apr_dir_remove(subdir, r->pool);
 	e2e_restore_cache_backend(prev);
 }

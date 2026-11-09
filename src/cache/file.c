@@ -154,6 +154,13 @@ static apr_status_t oidc_cache_file_write(request_rec *r, const char *path, apr_
 	return rc;
 }
 
+/* a FIFO swapped in for a cache entry after its type was checked must not block the open, which reading one would */
+#if defined(APR_FOPEN_NONBLOCK) && !defined(_WIN32)
+#define OIDC_CACHE_FILE_OPEN_NONBLOCK APR_FOPEN_NONBLOCK
+#else
+#define OIDC_CACHE_FILE_OPEN_NONBLOCK 0
+#endif
+
 /*
  * get a value for the specified key from the cache
  */
@@ -179,7 +186,8 @@ static apr_byte_t oidc_cache_file_get(request_rec *r, const char *section, const
 	}
 
 	/* open the cache file if it exists, otherwise we just have a "regular" cache miss */
-	if (apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
+	if (apr_file_open(&fd, path, APR_FOPEN_READ | APR_FOPEN_BUFFERED | OIDC_CACHE_FILE_OPEN_NONBLOCK,
+			  APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
 		oidc_debug(r, "cache miss for key \"%s\"", key);
 		return TRUE;
 	}
@@ -347,9 +355,17 @@ static void oidc_cache_file_clean_entry(request_rec *r, oidc_cfg_t *cfg, const c
 	    (_oidc_strcmp(fi->name, metadata_filename) == 0))
 		return;
 
+	/* this module only writes regular files here: skip anything else, a FIFO in particular, which someone who
+	 * can write the directory (e.g. a shared /tmp) could otherwise plant to block every cleaning cycle in open() */
+	if (((fi->valid & APR_FINFO_TYPE) == APR_FINFO_TYPE) && (fi->filetype != APR_REG)) {
+		oidc_debug(r, "skipping non-regular cache directory entry \"%s\"", fi->name);
+		return;
+	}
+
 	/* get the fully qualified path to the cache file and open it */
 	const char *path = apr_psprintf(r->pool, "%s/%s", cfg->cache.file_dir, fi->name);
-	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ, APR_OS_DEFAULT, r->pool)) != APR_SUCCESS) {
+	if ((rc = apr_file_open(&fd, path, APR_FOPEN_READ | OIDC_CACHE_FILE_OPEN_NONBLOCK, APR_OS_DEFAULT, r->pool)) !=
+	    APR_SUCCESS) {
 		oidc_error(r, "unable to open cache entry \"%s\" (%s)", path, apr_strerror(rc, s_err, sizeof(s_err)));
 		return;
 	}
@@ -420,7 +436,7 @@ static apr_status_t oidc_cache_file_clean(request_rec *r) {
 
 	/* loop trough the cache file entries */
 	do {
-		i = apr_dir_read(&fi, APR_FINFO_NAME, dir);
+		i = apr_dir_read(&fi, APR_FINFO_NAME | APR_FINFO_TYPE, dir);
 		if (i == APR_SUCCESS)
 			oidc_cache_file_clean_entry(r, cfg, metadata_filename, &fi);
 	} while (i == APR_SUCCESS);
