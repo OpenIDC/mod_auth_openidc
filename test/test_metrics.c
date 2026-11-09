@@ -446,6 +446,57 @@ START_TEST(test_metrics_handle_request_flushed_reset_nested_counter) {
 }
 END_TEST
 
+/* the "provider.token" timing entry of the (single) server in a format=json metrics document */
+static oidc_json_t *e2e_metrics_json_provider_token(request_rec *r, const char *body, oidc_json_t **json) {
+	ck_assert_ptr_nonnull(body);
+	ck_assert_int_eq(oidc_json_decode_object(r, body, json), TRUE);
+	void *iter = oidc_json_object_iter(*json);
+	ck_assert_ptr_nonnull(iter);
+	oidc_json_t *timings = oidc_json_object_get(oidc_json_object_iter_value(iter), "timings");
+	ck_assert_ptr_nonnull(timings);
+	oidc_json_t *timing = oidc_json_object_get(timings, "provider.token");
+	ck_assert_ptr_nonnull(timing);
+	return timing;
+}
+
+/* reset=true zeroes the count, the sum and every bucket of a flushed timing, and keeps the entry itself */
+START_TEST(test_metrics_handle_request_flushed_reset_timing) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_json_t *json = NULL;
+	e2e_metrics_setup_flushed(r);
+
+	OIDC_METRICS_TIMING_START(r, c);
+	apr_sleep(apr_time_from_msec(2));
+	OIDC_METRICS_TIMING_ADD(r, c, OM_PROVIDER_TOKEN);
+	oidc_json_t *timing =
+	    e2e_metrics_json_provider_token(r, metrics_json_wait_for(r, "\"provider.token\"", 5000), &json);
+	ck_assert_int_eq(oidc_json_integer_value(oidc_json_object_get(timing, "count")), 1);
+	oidc_json_decref(json);
+
+	r->args = "format=json&reset=true";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+
+	r->args = "format=json&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	timing = e2e_metrics_json_provider_token(r, oidc_request_state_get(r, "sent_body"), &json);
+	int n = 0;
+	for (void *iter = oidc_json_object_iter(timing); iter != NULL; iter = oidc_json_object_iter_next(timing, iter)) {
+		const oidc_json_t *v = oidc_json_object_iter_value(iter);
+		if (!oidc_json_is_integer(v))
+			continue;
+		ck_assert_msg(oidc_json_integer_value(v) == 0, "timing member \"%s\" was not reset",
+			      oidc_json_object_iter_key(iter));
+		n++;
+	}
+	/* the buckets plus "sum" and "count" */
+	ck_assert_int_gt(n, 2);
+	oidc_json_decref(json);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 /* Increment twice before flushing to exercise the existing-counter branch. */
 START_TEST(test_metrics_handle_request_flushed_counter_inc_twice_before_flush) {
 	request_rec *r = oidc_test_request_get();
@@ -871,6 +922,7 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_counter_with_value);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_json_default_no_reset);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_reset_nested_counter);
+	tcase_add_test(flushed, test_metrics_handle_request_flushed_reset_timing);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_counter_inc_twice_before_flush);
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
 	tcase_add_test(flushed, test_metrics_prometheus_escapes_claim_labels);
