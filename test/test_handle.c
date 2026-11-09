@@ -4207,7 +4207,9 @@ START_TEST(test_handle_mod_original_request_method_discovery_response) {
 }
 END_TEST
 
-/* a redirect URL that has no hostname but starts with slash-backslash is refused */
+/* a redirect URL starting with slash-backslash is refused: the backslash is normalized to a forward
+ * slash first, and the resulting "//evil.example.org/" parses as a URL with that hostname, so it is
+ * the same-host check that refuses it */
 START_TEST(test_handle_mod_validate_redirect_url_slash_backslash) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -4216,6 +4218,9 @@ START_TEST(test_handle_mod_validate_redirect_url_slash_backslash) {
 	ck_assert_int_eq(
 	    oidc_validate_redirect_url(r, c, "/\\evil.example.org/", OIDC_REDIRECT_URL_SAME_HOST, &err_str, &err_desc),
 	    FALSE);
+	ck_assert_str_eq(err_str, "Invalid Request");
+	ck_assert_ptr_nonnull(_oidc_strstr(err_desc, "evil.example.org"));
+	ck_assert_ptr_nonnull(_oidc_strstr(err_desc, "does not match the hostname of the current request"));
 }
 END_TEST
 
