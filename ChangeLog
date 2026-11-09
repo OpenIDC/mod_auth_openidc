@@ -4,6 +4,8 @@
   in any case and with "_" for "-", not only in the configured spelling: e.g. "x-remote-user", which
   every HTTP/2 client sends, reached the application, also unauthenticated with OIDCUnAuthAction pass;
   the names configured in OIDCPassUserInfoAs were not scrubbed at all
+- security: an unauthenticated request to the OIDCMetricsPublish path crashed the server process when no
+  virtual host sets OIDCMetricsData; it now returns 404 and logs that OIDCMetricsData is needed
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic

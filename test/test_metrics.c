@@ -129,6 +129,18 @@ static void metrics_subsystem_teardown(request_rec *r) {
 	ck_assert_int_eq(oidc_metrics_cleanup(r->server), APR_SUCCESS);
 }
 
+START_TEST(test_metrics_handle_request_not_initialized) {
+	request_rec *r = oidc_test_request_get();
+
+	/* OIDCMetricsPublish without OIDCMetricsData leaves the subsystem uninitialized: every format
+	 * must be refused rather than dereference the missing mutex */
+	r->args = "";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), HTTP_NOT_FOUND);
+	r->args = "format=status";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), HTTP_NOT_FOUND);
+}
+END_TEST
+
 START_TEST(test_metrics_handle_request_no_format_default_prometheus) {
 	request_rec *r = oidc_test_request_get();
 	metrics_subsystem_setup(r);
@@ -839,6 +851,7 @@ int main(void) {
 	TCase *lifecycle = tcase_create("lifecycle");
 	tcase_add_checked_fixture(lifecycle, oidc_test_setup, oidc_test_teardown);
 	tcase_set_timeout(lifecycle, 30);
+	tcase_add_test(lifecycle, test_metrics_handle_request_not_initialized);
 	tcase_add_test(lifecycle, test_metrics_handle_request_no_format_default_prometheus);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_json);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_internal);

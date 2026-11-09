@@ -1828,6 +1828,13 @@ int oidc_metrics_handle_request(request_rec *r) {
 	const char *s_json = NULL;
 	const oidc_metrics_content_handler_t *handler = NULL;
 
+	/* OIDCMetricsPublish without any OIDCMetricsData: the subsystem, and so its mutex and storage,
+	 * was never initialized */
+	if (_oidc_metrics_global_mutex == NULL) {
+		oidc_error(r, "metrics are published on this path but not collected: set " OIDCMetricsData);
+		return HTTP_NOT_FOUND;
+	}
+
 	/* get the content handler for the format */
 	handler = oidc_metrics_find_handler(r);
 	if (handler == NULL)
