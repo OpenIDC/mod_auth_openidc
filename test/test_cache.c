@@ -505,6 +505,81 @@ START_TEST(test_cache_shm_delete_missing_from_full_cache_is_noop) {
 }
 END_TEST
 
+/*
+ * removing an entry that is not the first one of its bucket list -- by deleting it, or by reading it after it has
+ * expired -- must keep the rest of that list intact; the hash key is random, but filling all slots of the (500 slot)
+ * test cache puts ~250 entries in a bucket that already holds one, so both kinds of removal hit such entries
+ */
+START_TEST(test_cache_shm_unlink_from_bucket_list) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const int old_encrypt = cfg->cache.encrypt;
+	const int n = oidc_cfg_cache_shm_size_max_get(cfg) / 2;
+	const apr_time_t past = apr_time_now() - apr_time_from_sec(1);
+	const apr_time_t future = apr_time_now() + apr_time_from_sec(3600);
+	char *value = NULL;
+	cfg->cache.encrypt = 0;
+
+	/* interleave live and expired entries so that each kind ends up both first and further down a list */
+	for (int i = 0; i < n; i++) {
+		ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "live-%d", i),
+						apr_psprintf(r->pool, "value-%d", i), future),
+				 TRUE);
+		ck_assert_int_eq(
+		    oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "dead-%d", i), "expired", past),
+		    TRUE);
+	}
+
+	/* reading an expired entry is a miss that frees its slot */
+	for (int i = 0; i < n; i++) {
+		value = NULL;
+		ck_assert_int_eq(
+		    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "dead-%d", i), &value), TRUE);
+		ck_assert_ptr_null(value);
+	}
+
+	/* delete every other live entry */
+	for (int i = 0; i < n; i += 2)
+		ck_assert_int_eq(
+		    oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "live-%d", i), NULL, future),
+		    TRUE);
+
+	const char *error = NULL;
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure: %s",
+		      error != NULL ? error : "unknown");
+
+	/* the deleted entries are gone and every other one is still found, with its own value */
+	for (int i = 0; i < n; i++) {
+		value = NULL;
+		ck_assert_int_eq(
+		    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "live-%d", i), &value), TRUE);
+		if (i % 2 == 0) {
+			ck_assert_ptr_null(value);
+		} else {
+			ck_assert_ptr_nonnull(value);
+			ck_assert_str_eq(value, apr_psprintf(r->pool, "value-%d", i));
+		}
+	}
+
+	/* and the freed slots are all usable again */
+	for (int i = 0; i < n + n / 2; i++)
+		ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "refill-%d", i),
+						"refill", future),
+				 TRUE);
+	ck_assert_msg(oidc_cache_shm_validate(r, &error) == TRUE, "invalid shm structure after refill: %s",
+		      error != NULL ? error : "unknown");
+	for (int i = 1; i < n; i += 2) {
+		value = NULL;
+		ck_assert_int_eq(
+		    oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, apr_psprintf(r->pool, "live-%d", i), &value), TRUE);
+		ck_assert_ptr_nonnull(value);
+		ck_assert_str_eq(value, apr_psprintf(r->pool, "value-%d", i));
+	}
+
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
 START_TEST(test_cache_shm_pressure_reclaims_expired_before_live) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *cfg = oidc_test_cfg_get();
@@ -2510,6 +2585,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_shm_hash_size_and_value_boundaries);
 	tcase_add_test(core, test_cache_shm_delete_missing_from_full_cache_is_noop);
 	tcase_add_test(core, test_cache_shm_pressure_reclaims_expired_before_live);
+	tcase_add_test(core, test_cache_shm_unlink_from_bucket_list);
 	tcase_add_test(core, test_cache_shm_concurrent_shard_churn);
 #if APR_HAS_FORK
 	tcase_add_test(core, test_cache_shm_multiprocess_churn);
