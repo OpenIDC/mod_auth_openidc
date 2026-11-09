@@ -1902,6 +1902,33 @@ START_TEST(test_util_issuer_match_empty_and_null) {
 }
 END_TEST
 
+/* the request state lives in the main request: a value set from a subrequest must outlive the subrequest's pool,
+ * which ap_destroy_sub_req() destroys while the state is still read by later subrequests and the main request */
+START_TEST(test_util_request_state_subrequest_lifetime) {
+	request_rec *r = oidc_test_request_get();
+	request_rec *sr = apr_pcalloc(r->pool, sizeof(request_rec));
+	ck_assert_int_eq(apr_pool_create(&sr->pool, r->pool), APR_SUCCESS);
+	sr->main = r;
+
+	const char *value = apr_pstrdup(sr->pool, "1762668000000000");
+	oidc_request_state_set(sr, "timer", value);
+	const char pixel[] = {'G', 'I', 'F', '\0', 'x'};
+	oidc_request_state_set_bytes(sr, "data", apr_pmemdup(sr->pool, pixel, sizeof(pixel)), sizeof(pixel));
+	apr_pool_destroy(sr->pool);
+
+	const char *stored = oidc_request_state_get(r, "timer");
+	ck_assert_ptr_nonnull(stored);
+	ck_assert_ptr_ne(stored, value);
+	ck_assert_str_eq(stored, "1762668000000000");
+	/* binary data keeps its length, embedded NUL included */
+	ck_assert_int_eq(memcmp(oidc_request_state_get(r, "data"), pixel, sizeof(pixel)), 0);
+
+	/* NULL still removes an entry */
+	oidc_request_state_set(r, "timer", NULL);
+	ck_assert_ptr_null(oidc_request_state_get(r, "timer"));
+}
+END_TEST
+
 START_TEST(test_util_set_trace_parent_flags) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -1995,6 +2022,7 @@ int main(void) {
 
 	c = tcase_create("jwt");
 	tcase_add_checked_fixture(c, oidc_test_setup, oidc_test_teardown);
+	tcase_add_test(c, test_util_request_state_subrequest_lifetime);
 	tcase_add_test(c, test_util_jwt);
 	tcase_add_test(c, test_util_jwt_bound);
 	tcase_add_test(c, test_util_jwt_passphrase_rotation);

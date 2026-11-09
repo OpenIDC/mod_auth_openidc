@@ -156,7 +156,7 @@ int oidc_util_http_content_prep(request_rec *r, const char *data, size_t data_le
 	 * request */
 	oidc_request_state_set(r, "data", NULL);
 	if (data)
-		oidc_request_state_set(r, "data", data);
+		oidc_request_state_set_bytes(r, "data", data, data_len);
 	oidc_request_state_set(r, "data_len", NULL);
 	if (data_len)
 		oidc_request_state_set(r, "data_len", apr_psprintf(r->pool, "%d", (int)data_len));

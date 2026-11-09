@@ -22,6 +22,8 @@
   response itself (Discovery page, POST authentication request, POST preservation, step-up authentication) pass
   authentication and authorization with an empty user, so with CacheQuickHandler Off a cached copy of the protected
   content, or a LuaMapHandler, was served to unauthenticated or unauthorized users instead
+- fix a use-after-free in subrequests (e.g. mod_include, mod_dir): a request state value set while handling a
+  subrequest was kept in the main request but allocated in the subrequest's pool, and read after that was destroyed
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic

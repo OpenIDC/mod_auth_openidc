@@ -75,6 +75,7 @@
 #define OIDC_USERDATA_POST_PARAMS_KEY "oidc_userdata_post_params"
 
 void oidc_request_state_set(request_rec *r, const char *key, const char *value);
+void oidc_request_state_set_bytes(request_rec *r, const char *key, const char *value, apr_size_t len);
 const char *oidc_request_state_get(request_rec *r, const char *key);
 oidc_json_t *oidc_request_state_json_get(request_rec *r, const char *key);
 void oidc_request_state_json_set(request_rec *r, const char *key, const oidc_json_t *value);

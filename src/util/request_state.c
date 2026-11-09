@@ -86,12 +86,26 @@ static apr_hash_t *oidc_request_state(request_rec *rr) {
  * (used for passing state between various Apache request processing stages and hook callbacks)
  */
 void oidc_request_state_set(request_rec *r, const char *key, const char *value) {
+	oidc_request_state_set_bytes(r, key, value, (value != NULL) ? _oidc_strlen(value) : 0);
+}
+
+/*
+ * set a name/value pair in the mod_auth_openidc-specific request context, where the value is a
+ * (possibly binary) buffer of len bytes; a NULL value removes the entry
+ */
+void oidc_request_state_set_bytes(request_rec *r, const char *key, const char *value, apr_size_t len) {
 
 	/* get a handle to the global state, which is a hash table */
 	apr_hash_t *state = oidc_request_state(r);
 
+	/* copy the value into the pool of the (main) request that owns the state hash: a value allocated in a
+	 * subrequest's pool would be left dangling once ap_destroy_sub_req() destroys that pool, and read by a
+	 * later subrequest or by the main request */
+	request_rec *main_r = (r->main != NULL) ? r->main : r;
+
 	/* put the name/value pair in that hash table */
-	apr_hash_set(state, key, APR_HASH_KEY_STRING, value);
+	apr_hash_set(state, key, APR_HASH_KEY_STRING,
+		     (value != NULL) ? apr_pstrmemdup(main_r->pool, value, len) : NULL);
 }
 
 /*
