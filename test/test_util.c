@@ -1958,6 +1958,46 @@ START_TEST(test_util_set_trace_parent_flags) {
 }
 END_TEST
 
+/* the traceparent set for a span: "00-<32 hex trace-id>-<16 hex parent-id>-<2 hex flags>" */
+static const char *test_util_trace_parent(request_rec *r, const oidc_cfg_t *c, const char *span) {
+	oidc_util_set_trace_parent(r, c, span);
+	const char *tp = apr_table_get(r->headers_in, OIDC_HTTP_HDR_TRACE_PARENT);
+	ck_assert_ptr_nonnull(tp);
+	ck_assert_int_eq((int)_oidc_strlen(tp), 55);
+	return apr_pstrdup(r->pool, tp);
+}
+
+/*
+ * a span (e.g. the session or access token the request is processed for) keeps the request's trace-id but gets a
+ * parent-id of its own, derived from the span value
+ */
+START_TEST(test_util_set_trace_parent_span) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_cmd_trace_parent_set(oidc_test_cmd_get(OIDCTraceParent), NULL, "generate");
+
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, NULL);
+	const char *request = test_util_trace_parent(r, c, NULL);
+	const char *span1 = test_util_trace_parent(r, c, "session-1");
+	const char *span2 = test_util_trace_parent(r, c, "session-2");
+
+	/* one trace-id throughout the request */
+	ck_assert_int_eq(_oidc_strncmp(request, span1, 35), 0);
+	ck_assert_int_eq(_oidc_strncmp(request, span2, 35), 0);
+
+	/* a parent-id per span, the same one for the same span value */
+	ck_assert_str_ne(request + 36, span1 + 36);
+	ck_assert_str_ne(span1 + 36, span2 + 36);
+	ck_assert_str_eq(test_util_trace_parent(r, c, "session-1"), span1);
+
+	/* a span on a request that has no trace-id yet still gets a traceparent, with a new trace-id */
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_TRACE_ID, NULL);
+	const char *orphan = test_util_trace_parent(r, c, "session-1");
+	ck_assert_int_ne(_oidc_strncmp(orphan, span1, 35), 0);
+	ck_assert_str_eq(orphan + 36, span1 + 36);
+}
+END_TEST
+
 int main(void) {
 	TCase *c = NULL;
 	Suite *s = suite_create("util");
@@ -2065,6 +2105,7 @@ int main(void) {
 	tcase_add_test(c, test_util_issuer_match_trailing_slash);
 	tcase_add_test(c, test_util_issuer_match_empty_and_null);
 	tcase_add_test(c, test_util_set_trace_parent_flags);
+	tcase_add_test(c, test_util_set_trace_parent_span);
 	tcase_add_test(c, test_util_table_and_hash_clear_and_openssl);
 	tcase_add_test(c, test_util_mask_value);
 	tcase_add_test(c, test_util_apr_time_saturating);

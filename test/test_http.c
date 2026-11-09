@@ -1434,6 +1434,7 @@ START_TEST(test_e2e_traceparent_propagated) {
 
 	cfg->trace_parent = OIDC_TRACE_PARENT_PROPAGATE;
 	apr_table_set(r->headers_in, "traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+	apr_table_set(r->headers_in, "tracestate", "vendor1=opaque1,vendor2=opaque2");
 
 	const char *url = oidc_test_http_server_url(srv, r->pool);
 	char *response = NULL;
@@ -1449,6 +1450,10 @@ START_TEST(test_e2e_traceparent_propagated) {
 	const char *tp = apr_table_get(cap->headers, "traceparent");
 	ck_assert_ptr_nonnull(tp);
 	ck_assert_msg(_oidc_strstr(tp, "4bf92f3577b34da6a3ce929d0e0e4736") != NULL, "traceparent propagated");
+	/* W3C Trace Context: the tracestate travels along with the traceparent */
+	const char *ts = apr_table_get(cap->headers, "tracestate");
+	ck_assert_ptr_nonnull(ts);
+	ck_assert_str_eq(ts, "vendor1=opaque1,vendor2=opaque2");
 
 	cfg->trace_parent = OIDC_TRACE_PARENT_OFF;
 	oidc_test_http_server_stop(srv);
