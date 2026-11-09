@@ -502,20 +502,73 @@ START_TEST(test_session_load_cache_fallback_to_cookie) {
 	ck_assert_str_eq(z3->remote_user, "carol");
 	oidc_session_free(r, z2);
 	oidc_session_free(r, z3);
+}
+END_TEST
 
-	/* a session too large for the shm cache slot falls back to the cookie on save */
-	oidc_session_t *z4 = NULL;
-	oidc_session_load(r, &z4);
-	z4->remote_user = apr_pstrdup(r->pool, "dave");
-	z4->expiry = apr_time_now() + apr_time_from_sec(3600);
-	char *big = apr_palloc(r->pool, 64 * 1024 + 1);
-	_oidc_memset(big, 'x', 64 * 1024);
-	big[64 * 1024] = '\0';
-	oidc_session_set_issuer(r, z4, big);
-	/* the shm write fails, the cookie fallback needs too many chunks: overall failure,
-	 * but both fallback branches have run */
-	(void)oidc_session_save(r, z4, OIDC_SESSION_SAVE_NEW);
-	oidc_session_free(r, z4);
+/*
+ * a session for a server-side cache that does not fit in the cache: the random (so incompressible) ~32 KB claim
+ * below exceeds the ~16 KB shm slot of the test fixture after compression, but fits in a chunked session cookie
+ */
+static oidc_session_t *e2e_session_too_large_for_cache(request_rec *r) {
+	oidc_session_t *z = NULL;
+	oidc_session_load(r, &z);
+	z->remote_user = apr_pstrdup(r->pool, "dave");
+	z->expiry = apr_time_now() + apr_time_from_sec(3600);
+	char *big = NULL;
+	ck_assert_int_eq(oidc_util_rand_str(r, &big, 24 * 1024), TRUE);
+	oidc_session_set_issuer(r, z, big);
+	return z;
+}
+
+/* the value of the response's Set-Cookie for the named cookie, or NULL */
+static const char *e2e_set_cookie_value(request_rec *r, const char *name) {
+	const char *prefix = apr_pstrcat(r->pool, name, "=", NULL);
+	const apr_array_header_t *arr = apr_table_elts(r->err_headers_out);
+	for (int i = 0; i < arr->nelts; i++) {
+		const apr_table_entry_t *e = &((const apr_table_entry_t *)arr->elts)[i];
+		if ((e->key == NULL) || (_oidc_strcmp(e->key, "Set-Cookie") != 0) ||
+		    (_oidc_strncmp(e->val, prefix, _oidc_strlen(prefix)) != 0))
+			continue;
+		char *value = apr_pstrdup(r->pool, e->val + _oidc_strlen(prefix));
+		char *semi = strchr(value, ';');
+		if (semi != NULL)
+			*semi = '\0';
+		return value;
+	}
+	return NULL;
+}
+
+/* with OIDCSessionCacheFallbackToCookie, a session that the cache cannot store is saved in a session cookie instead */
+START_TEST(test_session_save_cache_fallback_to_cookie) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	ck_assert_int_eq(oidc_cfg_session_type_get(c), OIDC_SESSION_TYPE_SERVER_CACHE);
+
+	/* without the fallback the save fails */
+	c->session_cache_fallback_to_cookie = 0;
+	oidc_session_t *z = e2e_session_too_large_for_cache(r);
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), FALSE);
+	oidc_session_free(r, z);
+	apr_table_unset(r->err_headers_out, "Set-Cookie");
+
+	/* with the fallback it is saved as a chunked, self-contained session cookie */
+	c->session_cache_fallback_to_cookie = 1;
+	z = e2e_session_too_large_for_cache(r);
+	const char *issuer = oidc_session_get_issuer(r, z);
+	ck_assert_int_eq(oidc_session_save(r, z, OIDC_SESSION_SAVE_NEW), TRUE);
+	const char *chunks = e2e_set_cookie_value(r, apr_psprintf(r->pool, "%s_chunks", oidc_cfg_dir_cookie_get(r)));
+	ck_assert_ptr_nonnull(chunks);
+	ck_assert_int_gt(_oidc_str_to_int(chunks, 0), 1);
+	replay_set_cookies(r);
+
+	/* which is read back as such, still in server-cache mode */
+	oidc_session_t *z2 = NULL;
+	ck_assert_int_eq(oidc_session_load(r, &z2), TRUE);
+	ck_assert_str_eq(z2->remote_user, "dave");
+	ck_assert_str_eq(oidc_session_get_issuer(r, z2), issuer);
+
+	oidc_session_free(r, z);
+	oidc_session_free(r, z2);
 }
 END_TEST
 
@@ -820,6 +873,7 @@ int main(void) {
 	tcase_add_test(c, test_session_cookie_no_crypto_passphrase);
 	tcase_add_test(c, test_session_cookie_samesite_variants);
 	tcase_add_test(c, test_session_load_cache_fallback_to_cookie);
+	tcase_add_test(c, test_session_save_cache_fallback_to_cookie);
 	tcase_add_test(c, test_session_load_cache_value_as_cookie);
 	tcase_add_test(c, test_session_cache_corruption);
 	tcase_add_test(c, test_session_format_version);
