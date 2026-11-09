@@ -1663,8 +1663,15 @@ static void oidc_register_hooks(apr_pool_t *pool) {
 	ap_hook_post_config(oidc_post_config, NULL, NULL, APR_HOOK_LAST);
 	ap_hook_child_init(oidc_child_init, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_fixups(oidc_fixups, NULL, NULL, APR_HOOK_MIDDLE);
-	static const char *const proxySucc[] = {"mod_proxy.c", NULL};
-	ap_hook_handler(oidc_content_handler, NULL, proxySucc, APR_HOOK_FIRST);
+	/*
+	 * the content handler must run before any other: authentication and authorization let requests through
+	 * with r->user set to "" when the response is produced here instead (Discovery page, POST authentication
+	 * request, POST preservation, step-up authentication), so a handler running before this one, such as
+	 * mod_cache's with CacheQuickHandler Off or a mod_lua LuaMapHandler, would serve the protected content to
+	 * an unauthenticated or unauthorized user; the successor constraints take precedence over the order
+	 */
+	static const char *const contentSucc[] = {"mod_proxy.c", "mod_cache.c", "mod_lua.c", NULL};
+	ap_hook_handler(oidc_content_handler, NULL, contentSucc, APR_HOOK_REALLY_FIRST);
 	ap_hook_insert_filter(oidc_filter_in_insert_filter, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_register_input_filter(oidcFilterName, oidc_filter_in_filter, NULL, AP_FTYPE_RESOURCE);
 	ap_hook_check_authn(oidc_check_user_id, NULL, NULL, APR_HOOK_MIDDLE, AP_AUTH_INTERNAL_PER_CONF);

@@ -18,6 +18,10 @@
   or redis, was accepted as a self-contained session cookie, and a value copied to another entry by someone who can
   write the cache was accepted for that entry, e.g. an OAuth 2.0 token validation result for another token; values
   written by an earlier version are still read, and earlier versions read the new ones
+- security: run the content handler before mod_cache's and mod_lua's: requests for which this module produces the
+  response itself (Discovery page, POST authentication request, POST preservation, step-up authentication) pass
+  authentication and authorization with an empty user, so with CacheQuickHandler Off a cached copy of the protected
+  content, or a LuaMapHandler, was served to unauthenticated or unauthorized users instead
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic
