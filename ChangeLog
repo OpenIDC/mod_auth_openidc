@@ -33,6 +33,16 @@
   another issuer: an http:// issuer, e.g. from 3rd-party initiated login, maps to the file of the https:// one, so a
   request for it replaced that issuer's metadata with a document retrieved over plain http, paired with its client
   credentials
+- remove the unreachable "/\" check from the redirect URL validation: backslashes are replaced with "/" before it runs,
+  and the resulting "//host" URL is refused by the hostname checks
+- test: evaluate the arguments of debug-level log calls in the unit tests, so the code that "LogLevel
+  auth_openidc:debug" runs is also exercised under valgrind and the sanitizers; add tests for the binding of the
+  OAuth 2.0 cache key to the public verification keys, OIDCProviderResponseRequireIss, the JWKs refresh on a key
+  rollover, removing shm cache entries from a bucket chain, saving an oversized session as a cookie with
+  OIDCSessionCacheFallbackToCookie, recovering the refresh results of a concurrent caller, traceparent spans and
+  tracestate propagation, the metrics timings reset, invalid values in a provider's .conf file and the virtual host
+  merge of the multi-part OAuth 2.0 settings; this raises line coverage from 95.7% to 96.2% and branch coverage
+  from 56.3% to 57.0%
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic
