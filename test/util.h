@@ -94,6 +94,11 @@ void oidc_test_brigade_prime(const char *body, apr_status_t rc);
  * command could not be run at all */
 void oidc_test_exec_line_prime(const char *output);
 
+/* capture the error-level (and more severe) messages logged for a request, one per line, from start until stop;
+ * stop returns them; meant for code that logs on the test's own thread */
+void oidc_test_log_errors_start(void);
+const char *oidc_test_log_errors_stop(void);
+
 /* the first authz_provider the module registered, for driving its parse_require_line */
 const void *oidc_test_authz_provider_get(void);
 

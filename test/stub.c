@@ -34,6 +34,12 @@ static const char *_oidc_test_brigade_body = NULL;
 static apr_status_t _oidc_test_brigade_rc = APR_SUCCESS;
 static const char *_oidc_test_exec_line_output = NULL;
 
+/* the error-level request log messages since oidc_test_log_errors_start(), when started */
+#define OIDC_TEST_LOG_ERRORS_MAX 16384
+static char _oidc_test_log_errors[OIDC_TEST_LOG_ERRORS_MAX];
+static size_t _oidc_test_log_errors_len = 0;
+static int _oidc_test_log_errors_on = 0;
+
 #define ap_HOOK_check_user_id_t void
 
 AP_DECLARE(void)
@@ -311,14 +317,38 @@ ap_log_error_(const char *file, int line, int module_index, int level, apr_statu
 AP_DECLARE(void)
 ap_log_rerror_(const char *file, int line, int module_index, int level, apr_status_t status, const request_rec *r,
 	       const char *fmt, ...) {
+	va_list ap;
+	if ((_oidc_test_log_errors_on) && (level <= APLOG_ERR) &&
+	    (_oidc_test_log_errors_len < OIDC_TEST_LOG_ERRORS_MAX - 1)) {
+		va_start(ap, fmt);
+		int n = vsnprintf(_oidc_test_log_errors + _oidc_test_log_errors_len,
+				  OIDC_TEST_LOG_ERRORS_MAX - 1 - _oidc_test_log_errors_len, fmt, ap);
+		va_end(ap);
+		if (n > 0)
+			_oidc_test_log_errors_len += (size_t)n;
+		if (_oidc_test_log_errors_len > OIDC_TEST_LOG_ERRORS_MAX - 2)
+			_oidc_test_log_errors_len = OIDC_TEST_LOG_ERRORS_MAX - 2;
+		_oidc_test_log_errors[_oidc_test_log_errors_len++] = '\n';
+		_oidc_test_log_errors[_oidc_test_log_errors_len] = '\0';
+	}
 	if (level < APLOG_DEBUG) {
 		fprintf(stderr, "%s:%d [%d] [%d] ", file, line, level, status);
-		va_list ap;
 		va_start(ap, fmt);
 		vfprintf(stderr, fmt, ap);
 		va_end(ap);
 		fprintf(stderr, "\n");
 	}
+}
+
+void oidc_test_log_errors_start(void) {
+	_oidc_test_log_errors_len = 0;
+	_oidc_test_log_errors[0] = '\0';
+	_oidc_test_log_errors_on = 1;
+}
+
+const char *oidc_test_log_errors_stop(void) {
+	_oidc_test_log_errors_on = 0;
+	return _oidc_test_log_errors;
 }
 
 AP_DECLARE(void) ap_note_auth_failure(request_rec *r) {

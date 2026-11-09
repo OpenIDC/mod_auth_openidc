@@ -2336,6 +2336,66 @@ START_TEST(test_metadata_conf_parse_token_endpoint_auth_aud) {
 END_TEST
 
 /*
+ * an invalid value in a provider's .conf file does not fail the provider: it is reported, the setting keeps its
+ * default, and the rest of the file still applies
+ */
+START_TEST(test_metadata_conf_parse_invalid_values) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const oidc_provider_t *unset = oidc_cfg_provider_create(r->pool);
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_json_t *j = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"profile\":\"bogus\","
+						 "\"signed_jwks_uri_key\":\"bogus\","
+						 "\"userinfo_token_method\":\"bogus\","
+						 "\"token_endpoint_auth\":\"bogus\","
+						 "\"dpop_mode\":\"bogus\","
+						 "\"cert_bound_tokens\":\"bogus\","
+						 "\"auth_request_method\":\"bogus\","
+						 "\"pkce_method\":\"bogus\","
+						 "\"jwks_refresh_interval\":-5,"
+						 "\"scope\":\"openid email\"}",
+						 &j),
+			 TRUE);
+	/* as in oidc_metadata_get: cert_bound_tokens is applied before the provider metadata is parsed only */
+	oidc_test_log_errors_start();
+	oidc_metadata_conf_parse_pre_provider(r, c, j, provider);
+	ck_assert_int_eq(oidc_metadata_conf_parse(r, c, j, provider), TRUE);
+	const char *errors = oidc_test_log_errors_stop();
+	oidc_json_decref(j);
+
+	/* each one is reported */
+	const char *setters[] = {"profile",		 "signed_jwks_uri_keys", "userinfo_token_method",
+				 "token_endpoint_auth",	 "dpop_mode",		 "cert_bound_tokens",
+				 "auth_request_method", "pkce",		 "jwks_uri_refresh_interval"};
+	for (int i = 0; i < (int)(sizeof(setters) / sizeof(setters[0])); i++)
+		ck_assert_msg(_oidc_strstr(errors, apr_psprintf(r->pool, "oidc_cfg_provider_%s_set: ", setters[i])) !=
+				  NULL,
+			      "the invalid \"%s\" was not reported, errors: %s", setters[i], errors);
+
+	/* and left at its default */
+	ck_assert_int_eq(oidc_cfg_provider_profile_get(provider), oidc_cfg_provider_profile_get(unset));
+	ck_assert_int_eq(oidc_cfg_provider_userinfo_token_method_get(provider),
+			 oidc_cfg_provider_userinfo_token_method_get(unset));
+	ck_assert_ptr_eq(oidc_cfg_provider_token_endpoint_auth_get(provider),
+			 oidc_cfg_provider_token_endpoint_auth_get(unset));
+	ck_assert_int_eq(oidc_cfg_provider_dpop_mode_get(provider), oidc_cfg_provider_dpop_mode_get(unset));
+	ck_assert_int_eq(oidc_cfg_provider_cert_bound_tokens_get(provider),
+			 oidc_cfg_provider_cert_bound_tokens_get(unset));
+	ck_assert_int_eq(oidc_cfg_provider_auth_request_method_get(provider),
+			 oidc_cfg_provider_auth_request_method_get(unset));
+	ck_assert_ptr_eq(oidc_cfg_provider_pkce_get(provider), oidc_cfg_provider_pkce_get(unset));
+	ck_assert_int_eq(oidc_cfg_provider_jwks_uri_refresh_interval_get(provider),
+			 oidc_cfg_provider_jwks_uri_refresh_interval_get(unset));
+
+	/* while the valid one next to them applies */
+	ck_assert_str_eq(oidc_cfg_provider_scope_get(provider), "openid email");
+}
+END_TEST
+
+/*
  * Tests for the oidc_metadata_client_register POST payload — drive the static
  * helper through the full disk-backed dynamic-registration flow and inspect
  * the captured POST body.
@@ -2724,6 +2784,7 @@ int main(void) {
 	tcase_add_test(conf, test_metadata_conf_parse_dpop_and_auth_request_method);
 	tcase_add_test(conf, test_metadata_conf_parse_userinfo_token_method);
 	tcase_add_test(conf, test_metadata_conf_parse_token_endpoint_auth_aud);
+	tcase_add_test(conf, test_metadata_conf_parse_invalid_values);
 
 	TCase *disk = tcase_create("disk");
 	tcase_add_checked_fixture(disk, oidc_test_setup, oidc_test_teardown);
