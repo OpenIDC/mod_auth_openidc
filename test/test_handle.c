@@ -1243,6 +1243,67 @@ START_TEST(test_handle_refresh_grant_id_token_unsigned) {
 }
 END_TEST
 
+/* what another caller writes into the refresh token cache while our own refresh request is in flight */
+typedef struct e2e_refresh_race_t {
+	request_rec *r;
+	const char *refresh_token;
+	const char *s_json;
+} e2e_refresh_race_t;
+
+static void e2e_refresh_race_populate(void *data) {
+	const e2e_refresh_race_t *race = data;
+	oidc_cache_set_refresh_token(race->r, race->refresh_token, race->s_json, apr_time_now() + apr_time_from_sec(30));
+}
+
+/*
+ * two callers refresh the same (rotating) refresh token: the other one wins, so the OP refuses our own grant, but the
+ * other caller has cached its results by then and those are used instead of failing the request
+ */
+START_TEST(test_handle_refresh_grant_recovers_concurrent_result) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	oidc_session_set_refresh_token(r, session, "RT-RACE");
+
+	/* the other caller writes from the mock server's thread, so it gets a request of its own on a pool of its own */
+	apr_pool_t *pool = NULL;
+	ck_assert_int_eq(apr_pool_create(&pool, NULL), APR_SUCCESS);
+	request_rec *other = apr_pmemdup(pool, r, sizeof(request_rec));
+	other->pool = pool;
+	e2e_refresh_race_t race = {.r = other,
+				   .refresh_token = "RT-RACE",
+				   .s_json = "{\"access_token\":\"AT-OTHER\",\"token_type\":\"Bearer\","
+					     "\"expires_in\":3600,\"refresh_token\":\"RT-RACE-2\"}"};
+
+	oidc_test_http_response_t resp = {.status_code = 400,
+					  .content_type = "application/json",
+					  .body = "{\"error\":\"invalid_grant\"}",
+					  .on_request = e2e_refresh_race_populate,
+					  .on_request_data = &race};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	char *new_at = NULL;
+	ck_assert_int_eq(oidc_refresh_token_grant(r, c, session, provider, &new_at, NULL, NULL), TRUE);
+	ck_assert_str_eq(new_at, "AT-OTHER");
+	ck_assert_str_eq(oidc_session_get_refresh_token(r, session), "RT-RACE-2");
+
+	/* the refresh token was not locked out: the cache still holds the other caller's results */
+	char *s_cached = NULL;
+	ck_assert_int_eq(oidc_cache_get_refresh_token(r, "RT-RACE", &s_cached), TRUE);
+	ck_assert_str_eq(s_cached, race.s_json);
+
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 1);
+	oidc_test_http_server_stop(srv);
+	oidc_session_free(r, session);
+	apr_pool_destroy(pool);
+}
+END_TEST
+
 START_TEST(test_handle_refresh_grant_cache_locks) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -7179,6 +7240,7 @@ int main(void) {
 	tcase_add_test(refresh, test_handle_refresh_grant_id_token_sub_mismatch);
 	tcase_add_test(refresh, test_handle_refresh_grant_id_token_unsigned);
 	tcase_add_test(refresh, test_handle_refresh_grant_cache_locks);
+	tcase_add_test(refresh, test_handle_refresh_grant_recovers_concurrent_result);
 	tcase_add_test(refresh, test_handle_refresh_before_expiry_due_paths);
 	tcase_add_test(refresh, test_handle_refresh_interval_due_paths);
 	tcase_add_test(refresh, test_handle_refresh_interval_no_timestamp);

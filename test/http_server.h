@@ -58,6 +58,11 @@ typedef struct oidc_test_http_response_t {
 	const char *content_type;   /* nullable; if set, emitted as Content-Type response header */
 	const char *body;	    /* nullable response body (treated as 0-length when NULL) */
 	apr_table_t *extra_headers; /* nullable; emitted as additional response headers */
+	/* nullable; called in the server thread once the request has been read and before this response is sent,
+	 * i.e. while the client blocks on it: lets a test change shared state (e.g. the cache) "during" the request;
+	 * it must not allocate from a pool that the client thread uses */
+	void (*on_request)(void *data);
+	void *on_request_data;
 } oidc_test_http_response_t;
 
 typedef struct oidc_test_http_captured_t {

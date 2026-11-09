@@ -243,6 +243,9 @@ static void *APR_THREAD_FUNC srv_run(apr_thread_t *t, void *data) {
 		if ((cap->method != NULL) && (cap->path != NULL))
 			s->captured_count = i + 1;
 
+		if (s->responses[i].on_request != NULL)
+			s->responses[i].on_request(s->responses[i].on_request_data);
+
 		srv_send_response(s, &s->responses[i], conn);
 
 		apr_socket_close(conn);
