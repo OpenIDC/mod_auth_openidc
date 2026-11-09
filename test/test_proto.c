@@ -2672,6 +2672,137 @@ START_TEST(test_proto_response_code_idtoken_happy) {
 }
 END_TEST
 
+/* the authorization response parameters of a plain code flow, with an optional "iss" parameter */
+static apr_table_t *e2e_code_response_params(request_rec *r, const char *code, const char *iss) {
+	apr_table_t *params = apr_table_make(r->pool, 3);
+	apr_table_setn(params, OIDC_PROTO_CODE, code);
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+	if (iss != NULL)
+		apr_table_setn(params, OIDC_PROTO_ISS, iss);
+	return params;
+}
+
+/*
+ * RFC 9207: with OIDCProviderResponseRequireIss On, an authorization response without an "iss" parameter is refused
+ * before its code is redeemed, i.e. the code is never sent to the token endpoint
+ */
+START_TEST(test_proto_response_code_iss_required) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "code-flow-shared-secret-require-iss";
+	const char *nonce = "nonce-require-iss";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code", nonce, secret);
+	ck_assert_ptr_null(oidc_cfg_provider_response_require_iss_set(r->pool, provider, 1));
+	ck_assert_int_eq(oidc_proto_profile_response_require_iss_get(provider), 1);
+
+	/* scripted for exactly one token request: the one of the response that carries the "iss" */
+	oidc_test_http_response_t resp = {
+	    .status_code = 200,
+	    .content_type = "application/json",
+	    .body = apr_psprintf(r->pool, "{\"access_token\":\"AT-ISS-1\",\"token_type\":\"Bearer\",\"id_token\":\"%s\"}",
+				 e2e_sign_hybrid_idtoken(r, secret, nonce, NULL, "AT-ISS-1"))};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	/* no "iss": refused without contacting the token endpoint */
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider, e2e_code_response_params(r, "code-without-iss", NULL),
+						  "query", &jwt),
+			 FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* with the configured issuer it is accepted, which also proves that the token request above was never made:
+	 * the server would otherwise have served its single response already */
+	ck_assert_int_eq(oidc_proto_response_code(r, c, ps, provider,
+						  e2e_code_response_params(r, "code-with-iss", "https://idp.example.com"),
+						  "query", &jwt),
+			 TRUE);
+	ck_assert_ptr_nonnull(jwt);
+
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 1);
+	ck_assert_ptr_nonnull(_oidc_strstr(oidc_test_http_server_wait(srv)->body, "code=code-with-iss"));
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* a token endpoint response that returns an access token without a token_type is refused in the code flow */
+START_TEST(test_proto_response_code_missing_token_type) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "code-flow-shared-secret-token-type";
+	const char *nonce = "nonce-token-type";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "code", nonce, secret);
+	const char *id_token = e2e_sign_hybrid_idtoken(r, secret, nonce, NULL, "AT-TT-1");
+	oidc_test_http_response_t resp[2] = {
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = apr_psprintf(r->pool, "{\"access_token\":\"AT-TT-1\",\"id_token\":\"%s\"}", id_token)},
+	    {.status_code = 200,
+	     .content_type = "application/json",
+	     .body = apr_psprintf(r->pool, "{\"access_token\":\"AT-TT-1\",\"token_type\":\"Bearer\",\"id_token\":\"%s\"}",
+				  id_token)}};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start_seq(r->pool, resp, 2);
+	ck_assert_ptr_nonnull(srv);
+	oidc_cfg_provider_token_endpoint_url_set(r->pool, provider, oidc_test_http_server_url(srv, r->pool));
+	oidc_cfg_provider_ssl_validate_server_set(r->pool, provider, 0);
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(
+	    oidc_proto_response_code(r, c, ps, provider, e2e_code_response_params(r, "code-1", NULL), "query", &jwt),
+	    FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* the same response with a token_type is accepted */
+	ck_assert_int_eq(
+	    oidc_proto_response_code(r, c, ps, provider, e2e_code_response_params(r, "code-2", NULL), "query", &jwt),
+	    TRUE);
+	ck_assert_ptr_nonnull(jwt);
+
+	ck_assert_int_eq(oidc_test_http_server_request_count(srv), 2);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
+/* an implicit "id_token" response that also carries a "code" parameter is refused */
+START_TEST(test_proto_response_idtoken_unexpected_code) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "implicit-flow-shared-secret-code";
+	const char *nonce = "nonce-implicit-code";
+
+	oidc_proto_state_t *ps = e2e_make_hybrid_proto_state(r, c, "id_token", nonce, secret);
+	const char *id_token = e2e_sign_hybrid_idtoken(r, secret, nonce, NULL, NULL);
+
+	apr_table_t *params = apr_table_make(r->pool, 3);
+	apr_table_setn(params, OIDC_PROTO_ID_TOKEN, id_token);
+	apr_table_setn(params, OIDC_PROTO_STATE, "s-1");
+	apr_table_setn(params, OIDC_PROTO_CODE, "an-unexpected-code");
+
+	oidc_jwt_t *jwt = NULL;
+	ck_assert_int_eq(oidc_proto_response_idtoken(r, c, ps, provider, params, "fragment", &jwt), FALSE);
+	ck_assert_ptr_null(jwt);
+
+	/* the same response without the code is accepted */
+	apr_table_unset(params, OIDC_PROTO_CODE);
+	ck_assert_int_eq(oidc_proto_response_idtoken(r, c, ps, provider, params, "fragment", &jwt), TRUE);
+	ck_assert_ptr_nonnull(jwt);
+
+	oidc_jwt_destroy(jwt);
+	oidc_proto_state_destroy(ps);
+}
+END_TEST
+
 /* "code token": the access token from the authorization response and the
  * id_token from the token endpoint; an access token the token endpoint also
  * returns overrides the fragment one (with a warning) */
@@ -4837,6 +4968,9 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_token_endpoint_request_dpop_nonce_retry_new_assertion);
 	tcase_add_test(e2e, test_proto_response_code_missing_access_token);
 	tcase_add_test(e2e, test_proto_response_code_idtoken_happy);
+	tcase_add_test(e2e, test_proto_response_code_iss_required);
+	tcase_add_test(e2e, test_proto_response_code_missing_token_type);
+	tcase_add_test(e2e, test_proto_response_idtoken_unexpected_code);
 	tcase_add_test(e2e, test_proto_response_code_token_happy);
 	tcase_add_test(e2e, test_proto_response_code_token_missing_id_token);
 	tcase_add_test(e2e, test_proto_response_code_idtoken_token_happy);
