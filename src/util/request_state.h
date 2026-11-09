@@ -60,6 +60,8 @@
 #define OIDC_REQUEST_STATE_KEY_AUTHN_POST "a"
 #define OIDC_REQUEST_STATE_KEY_CLAIMS "c"
 #define OIDC_REQUEST_STATE_KEY_DISCOVERY "d"
+/* set when the Discovery response being handled passed its CSRF check, i.e. was not 3rd-party initiated */
+#define OIDC_REQUEST_STATE_KEY_DISCOVERY_CSRF "dc"
 #define OIDC_REQUEST_STATE_KEY_HTTP "hp"
 #define OIDC_REQUEST_STATE_KEY_HTML "hl"
 #define OIDC_REQUEST_STATE_KEY_IDTOKEN "i"

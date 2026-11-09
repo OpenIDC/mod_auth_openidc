@@ -2420,6 +2420,8 @@ START_TEST(test_handle_discovery_response_3rd_party_ignores_scopes_and_params) {
 	ck_assert_msg(_oidc_strstr(loc, "adminscope") == NULL, "attacker-chosen scope must not reach the OP");
 	ck_assert_msg(_oidc_strstr(loc, "acr_values") == NULL,
 		      "attacker-chosen authorization request parameter must not reach the OP");
+	/* nor may it make the browser POST to the target_link_uri after login */
+	ck_assert_ptr_null(oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY_CSRF));
 }
 END_TEST
 
@@ -2716,6 +2718,8 @@ START_TEST(test_handle_discovery_response_csrf_and_authenticate) {
 	const char *loc = apr_table_get(r->headers_out, "Location");
 	ck_assert_ptr_nonnull(loc);
 	ck_assert_ptr_nonnull(_oidc_strstr(loc, "https://idp.example.com/authorize"));
+	/* ...and records that it passed, so a preserved POST may be restored after login */
+	ck_assert_ptr_nonnull(oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY_CSRF));
 
 	/* a mismatching pair fails the CSRF check (third-party initiated SSO, no dynamic
 	 * registration) but still resolves the (statically registered) provider */
@@ -4182,6 +4186,12 @@ START_TEST(test_handle_mod_original_request_method_discovery_response) {
 	/* make the current request hit the redirect URI and carry discovery-response params */
 	apr_uri_parse(r->pool, oidc_util_url_redirect_uri(r, c), &r->parsed_uri);
 	r->args = "iss=https%3A%2F%2Fidp.example.com&method=form_post";
+
+	/* 3rd-party initiated SSO, i.e. no valid CSRF cookie/parameter pair: "form_post" is ignored */
+	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_GET);
+
+	/* a Discovery response that passed its CSRF check may restore the preserved POST */
+	oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY_CSRF, "");
 	ck_assert_str_eq(oidc_original_request_method(r, c, TRUE), OIDC_METHOD_FORM_POST);
 
 	/* an unknown or absent value is not stored as-is but falls back to GET */

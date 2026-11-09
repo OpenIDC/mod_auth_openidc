@@ -45,6 +45,7 @@
 #include "metadata.h"
 #include "mod_auth_openidc.h"
 #include "proto/proto.h"
+#include "util/request_state.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
 
@@ -612,7 +613,10 @@ int oidc_discovery_response(request_rec *r, oidc_cfg_t *c) {
 	/* do CSRF protection if not 3rd party initiated SSO */
 	apr_byte_t csrf_valid = oidc_discovery_response_csrf_check(r, c);
 
-	/* Only a CSRF-validated Discovery response may control scopes or authorization parameters. */
+	/* Only a CSRF-validated Discovery response may control scopes, authorization parameters or the method
+	 * of the original request, which oidc_original_request_method reads from this request state. */
+	if (csrf_valid == TRUE)
+		oidc_request_state_set(r, OIDC_REQUEST_STATE_KEY_DISCOVERY_CSRF, "");
 	if (csrf_valid == FALSE) {
 		if ((path_scopes != NULL) || (auth_request_params != NULL))
 			oidc_warn(r,

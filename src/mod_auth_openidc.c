@@ -345,9 +345,20 @@ const char *oidc_original_request_method(request_rec *r, oidc_cfg_t *cfg, apr_by
 		/* the method parameter is client-supplied: map it onto one of the known methods instead of
 		 * storing an arbitrary value in the state */
 		oidc_util_url_parameter_get(r, OIDC_DISC_RM_PARAM, &m);
-		if (_oidc_strcmp(m, OIDC_METHOD_FORM_POST) == 0)
-			method = OIDC_METHOD_FORM_POST;
-		else if ((m != NULL) && (_oidc_strcmp(m, OIDC_METHOD_GET) != 0))
+		if (_oidc_strcmp(m, OIDC_METHOD_FORM_POST) == 0) {
+			/*
+			 * only the Discovery page that preserved the POST data sends "form_post": on a 3rd-party
+			 * initiated SSO request it would make the browser POST to the target_link_uri after
+			 * login, with the new session and from our own origin, turning a cross-site link into a
+			 * same-origin POST that SameSite cookies and Origin checks no longer stop
+			 */
+			if (oidc_request_state_get(r, OIDC_REQUEST_STATE_KEY_DISCOVERY_CSRF) != NULL)
+				method = OIDC_METHOD_FORM_POST;
+			else
+				oidc_warn(
+				    r, "ignoring \"%s=%s\" on a Discovery response that did not pass CSRF validation",
+				    OIDC_DISC_RM_PARAM, m);
+		} else if ((m != NULL) && (_oidc_strcmp(m, OIDC_METHOD_GET) != 0))
 			oidc_warn(r, "ignoring unknown \"%s\" parameter value: %s", OIDC_DISC_RM_PARAM, m);
 	} else {
 

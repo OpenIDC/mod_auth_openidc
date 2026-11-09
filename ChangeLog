@@ -10,6 +10,9 @@
   provider connect error counter with curl's generic error text instead of its detailed message, which carries
   the host name, elapsed time and byte counts: a scrape could otherwise exhaust memory once enough distinct
   values had been recorded, which an OP outage or unauthenticated discovery requests can produce
+- security: ignore "method=form_post" on a 3rd-party initiated SSO request, i.e. a Discovery response without a
+  valid CSRF cookie/parameter pair: a cross-site link could make the browser POST to any URL on the host after
+  login, with the new session and from the host's own origin, defeating SameSite cookies and Origin checks
 
 11/08/2026
 - fix the DPoP proof, and the JWT that OIDCPassUserInfoAs signed_jwt passes, claiming "alg" ES256 for any Elliptic
