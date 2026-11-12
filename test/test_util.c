@@ -1599,6 +1599,68 @@ START_TEST(test_util_read_form_encoded_params) {
 }
 END_TEST
 
+/* a name that occurs more than once keeps its last value, at the position of its first occurrence, and a
+ * table that already holds parameters is merged with */
+START_TEST(test_util_read_form_encoded_params_repeated) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *t = apr_table_make(r->pool, 4);
+	apr_table_set(t, "z", "old");
+	apr_table_set(t, "keep", "me");
+
+	ck_assert_int_eq(oidc_util_read_form_encoded_params(r, t, "a=1&b=2&A=3&z=new&b=4&=empty&novalue"), TRUE);
+
+	const apr_array_header_t *arr = apr_table_elts(t);
+	const apr_table_entry_t *e = (const apr_table_entry_t *)arr->elts;
+	ck_assert_int_eq(arr->nelts, 6);
+	ck_assert_str_eq(e[0].key, "z");
+	ck_assert_str_eq(e[0].val, "new");
+	ck_assert_str_eq(e[1].key, "keep");
+	ck_assert_str_eq(e[1].val, "me");
+	/* table keys are case-insensitive: "A" replaces "a" */
+	ck_assert_str_eq(e[2].val, "3");
+	ck_assert_str_eq(e[3].key, "b");
+	ck_assert_str_eq(e[3].val, "4");
+	ck_assert_str_eq(e[4].key, "");
+	ck_assert_str_eq(e[4].val, "empty");
+	ck_assert_str_eq(e[5].key, "novalue");
+	ck_assert_str_eq(e[5].val, "");
+
+	/* a protocol field that must not repeat is refused against what the table already holds, too */
+	const char *const no_repeat[] = {OIDC_PROTO_STATE, NULL};
+	t = apr_table_make(r->pool, 2);
+	apr_table_set(t, OIDC_PROTO_STATE, "first");
+	ck_assert_int_eq(oidc_util_read_form_encoded_params_reject_dup(r, t, "x=1&state=second", no_repeat), FALSE);
+	ck_assert_table_str(t, OIDC_PROTO_STATE, "first");
+}
+END_TEST
+
+/* the largest form body that is accepted, 1MB, filled with as many distinct parameters as fit: parsing it takes
+ * time linear in their number; setting them in the table one by one took about 20 seconds for it, which anyone
+ * can have the server spend with a single POST to the redirect URI */
+START_TEST(test_util_read_form_encoded_params_many) {
+	request_rec *r = oidc_test_request_get();
+	apr_table_t *t = apr_table_make(r->pool, 4);
+	const int n = 100000;
+	char *form = apr_palloc(r->pool, (apr_size_t)n * 10 + 1);
+	char *p = form;
+
+	/* same first character and same first four characters, the worst case for a table lookup */
+	for (int i = 0; i < n; i++)
+		p += apr_snprintf(p, 11, "aaaa%05d&", i);
+	ck_assert_int_lt((int)(p - form), 1024 * 1024);
+
+	apr_time_t start = apr_time_now();
+	ck_assert_int_eq(oidc_util_read_form_encoded_params(r, t, form), TRUE);
+	apr_time_t elapsed = apr_time_now() - start;
+
+	ck_assert_int_eq(apr_table_elts(t)->nelts, n);
+	ck_assert_table_str(t, "aaaa00000", "");
+	ck_assert_table_str(t, "aaaa99999", "");
+	ck_assert_msg(elapsed < apr_time_from_sec(10), "parsing %d parameters took %d seconds", n,
+		      (int)apr_time_sec(elapsed));
+}
+END_TEST
+
 START_TEST(test_util_read_post_params_wrong_content_type) {
 	request_rec *r = oidc_test_request_get();
 	apr_table_t *t = apr_table_make(r->pool, 2);
@@ -2094,6 +2156,8 @@ int main(void) {
 	tcase_add_test(c, test_util_strenv_and_casestr);
 	tcase_add_test(c, test_util_strenv_length_and_casestr_edge);
 	tcase_add_test(c, test_util_read_form_encoded_params);
+	tcase_add_test(c, test_util_read_form_encoded_params_repeated);
+	tcase_add_test(c, test_util_read_form_encoded_params_many);
 	tcase_add_test(c, test_util_read_post_params_wrong_content_type);
 	tcase_add_test(c, test_util_read_post_params_oversized);
 	tcase_add_test(c, test_util_read_post_params);

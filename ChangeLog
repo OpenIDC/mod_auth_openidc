@@ -12,6 +12,10 @@
 - security: with OIDCMetadataDir, an unauthenticated back-channel logout request with a logout token that has no
   "iss" claim crashed the server process: the provider is looked up before the signature of the token is verified,
   and the name of the metadata file was derived from the missing issuer; such a token is now refused with a 400
+- security: parse form-encoded parameters in linear time: a 1MB POST body with as many distinct parameter names
+  as fit took about 20 seconds of CPU time to parse, which any unauthenticated client could have the server
+  spend with a single request to the redirect URI (the authorization response and back-channel logout
+  endpoints), and so tie up its workers with a handful of them
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled

@@ -242,12 +242,19 @@ static apr_byte_t oidc_util_param_must_not_repeat(const char *const *no_repeat, 
 	return FALSE;
 }
 
-/* Parse form parameters, optionally rejecting repeated names from no_repeat. */
+/*
+ * Parse form parameters, optionally rejecting repeated names from no_repeat. The parameters are collected in a
+ * table of their own and merged into the result in one apr_table_overlap(): an apr_table_set() per parameter
+ * scans the table for the name, which takes time quadratic in the number of parameters, i.e. tens of seconds
+ * for the 1MB body that an unauthenticated POST to the redirect URI may carry; the overlap sorts once and keeps
+ * the last value of a name that occurs more than once, at the position of its first one, as the set did.
+ */
 static apr_byte_t oidc_util_read_form_encoded_params_impl(request_rec *r, apr_table_t *table, const char *data,
 							  const char *const *no_repeat) {
 	const char *key = NULL;
 	const char *val = NULL;
 	const char *p = data;
+	apr_table_t *params = apr_table_make(apr_table_elts(table)->pool, 16);
 
 	while (p && (*p)) {
 		val = ap_getword(r->pool, &p, OIDC_CHAR_AMP);
@@ -256,15 +263,18 @@ static apr_byte_t oidc_util_read_form_encoded_params_impl(request_rec *r, apr_ta
 		key = ap_getword(r->pool, &val, OIDC_CHAR_EQUAL);
 		key = oidc_http_url_decode(r, key);
 		val = oidc_http_url_decode(r, val);
-		if (oidc_util_param_must_not_repeat(no_repeat, key) && (apr_table_get(table, key) != NULL)) {
+		if (oidc_util_param_must_not_repeat(no_repeat, key) &&
+		    ((apr_table_get(table, key) != NULL) || (apr_table_get(params, key) != NULL))) {
 			oidc_error(r, "duplicate \"%s\" parameter is not allowed", key);
 			return FALSE;
 		}
 		/* this parses the front-channel authorization response and the back-channel logout
 		 * request, so the values include the authorization code and bare tokens */
 		oidc_debug(r, "read: %s=%s", key, oidc_http_param_is_sensitive(key) ? "***" : val);
-		apr_table_set(table, key, val);
+		apr_table_add(params, key, val);
 	}
+
+	apr_table_overlap(table, params, APR_OVERLAP_TABLES_SET);
 
 	oidc_debug(r, "parsed: %d bytes into %d elements", data ? (int)_oidc_strlen(data) : 0,
 		   apr_table_elts(table)->nelts);
