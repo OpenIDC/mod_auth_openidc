@@ -6547,6 +6547,40 @@ START_TEST(test_handle_existing_session_issuer_claim_is_the_validated_one) {
 }
 END_TEST
 
+/* the session that the info hook retains for the content handler is released with the request when that
+ * handler does not run, here because the request is refused: it was leaked, once for every such request */
+START_TEST(test_handle_info_retained_session_is_released_with_the_request) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	apr_pool_t *pool = NULL;
+
+	/* a request with a pool of its own, so that it can be destroyed here */
+	ck_assert_int_eq(apr_pool_create(&pool, r->pool), APR_SUCCESS);
+	request_rec *rr = apr_pmemdup(pool, r, sizeof(request_rec));
+	rr->pool = pool;
+	rr->args = "info=json";
+	rr->method_number = M_GET;
+
+	oidc_session_load(rr, &session);
+	session->remote_user = apr_pstrdup(rr->pool, "alice");
+	oidc_session_set_cookie_domain(rr, session, "other.example.com");
+
+	/* keep a reference to the session state to see whether it is let go of */
+	json_t *state = (json_t *)session->state;
+	ck_assert_ptr_nonnull(state);
+	json_incref(state);
+	ck_assert_int_eq((int)state->refcount, 2);
+
+	/* refused because of the cookie domain, so that the content handler will not run */
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(rr, c, session), HTTP_UNAUTHORIZED);
+	apr_pool_destroy(pool);
+
+	ck_assert_int_eq((int)state->refcount, 1);
+	json_decref(state);
+}
+END_TEST
+
 START_TEST(test_handle_existing_session_refresh_error_actions) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -7720,6 +7754,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_info_happy_sets_authn_header);
 	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
 	tcase_add_test(dispatch, test_handle_existing_session_issuer_claim_is_the_validated_one);
+	tcase_add_test(dispatch, test_handle_info_retained_session_is_released_with_the_request);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_error_actions);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_interval_error_actions);
 	tcase_add_test(dispatch, test_handle_existing_session_userinfo_error_actions);

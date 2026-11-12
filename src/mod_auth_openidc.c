@@ -1093,6 +1093,18 @@ static int oidc_redirect_uri_handle_revoke_session(request_rec *r, oidc_cfg_t *c
 }
 
 /*
+ * release the session that was retained for the content handler when that did not get to free it
+ */
+static apr_status_t oidc_session_retained_cleanup(void *data) {
+	oidc_session_t *session = (oidc_session_t *)data;
+	if (session->state != NULL) {
+		oidc_json_decref(session->state);
+		session->state = NULL;
+	}
+	return APR_SUCCESS;
+}
+
+/*
  * handle a request to the info hook
  */
 static int oidc_redirect_uri_handle_info(request_rec *r, oidc_cfg_t *c, oidc_session_t *session) {
@@ -1107,8 +1119,9 @@ static int oidc_redirect_uri_handle_info(request_rec *r, oidc_cfg_t *c, oidc_ses
 	    r, c, session, (s_extend_session == NULL) || (_oidc_strcmp(s_extend_session, "false") != 0), &needs_save);
 
 	// retain this session across the authentication and content handler phases
-	// by storing it in the request state
-	apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, NULL, r->pool);
+	// by storing it in the request state; the content handler frees it, but it does not run when
+	// the request is refused here or by an authorization check, so release it with the request
+	apr_pool_userdata_set(session, OIDC_USERDATA_SESSION, oidc_session_retained_cleanup, r->pool);
 
 	// record whether the session was modified and needs to be saved in the cache
 	if (needs_save)

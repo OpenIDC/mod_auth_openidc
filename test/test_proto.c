@@ -4192,10 +4192,14 @@ START_TEST(test_proto_request_auth_no_client_id) {
 	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
 	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
 
+	/* oidc_request_auth() releases the state on every path, also when it fails early: keep a reference to
+	 * see that it does, since its caller does not release it either */
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	json_incref((json_t *)ps);
 	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
 				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+	ck_assert_int_eq((int)((json_t *)ps)->refcount, 1);
 	oidc_proto_state_destroy(ps);
 }
 END_TEST
@@ -4210,10 +4214,13 @@ START_TEST(test_proto_request_auth_unknown_method) {
 	/* an out-of-enum value triggers the default branch in the dispatch switch */
 	oidc_cfg_provider_auth_request_method_int_set(provider, 999);
 
+	/* the state is released here too, see test_proto_request_auth_no_client_id */
 	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	json_incref((json_t *)ps);
 	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-1", ps, NULL,
 				   NULL, NULL, NULL);
 	ck_assert_int_eq(rc, HTTP_INTERNAL_SERVER_ERROR);
+	ck_assert_int_eq((int)((json_t *)ps)->refcount, 1);
 	oidc_proto_state_destroy(ps);
 }
 END_TEST

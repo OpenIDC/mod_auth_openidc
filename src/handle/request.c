@@ -255,6 +255,7 @@ int oidc_request_auth(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provide
 	if (oidc_cfg_provider_client_id_get(provider) == NULL) {
 		oidc_error(r, "no Client ID set for the provider: perhaps you are accessing an endpoint protected with "
 			      "\"AuthType openid-connect\" instead of \"AuthType oauth20\"?)");
+		oidc_proto_state_destroy(proto_state);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -277,6 +278,7 @@ int oidc_request_auth(request_rec *r, oidc_cfg_t *cfg, const struct oidc_provide
 	default:
 		oidc_error(r, "oidc_cfg_provider_auth_request_method_get(provider) set to an unknown value: %d",
 			   oidc_proto_profile_auth_request_method_get(provider));
+		oidc_proto_state_destroy(proto_state);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 

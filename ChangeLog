@@ -29,6 +29,9 @@
 - security: with OIDCStripCookies, strip the cookies in memory linear in their number: a request with 40,000
   cookies, i.e. 120KB of Cookie header lines, made the server process allocate 3.5GB, so that an authenticated
   client could have it killed for running out of memory
+- fix a memory leak of the session for every request to the info hook on the redirect URI ("?info=") that is not
+  served, e.g. because it is refused for its cookie domain or by a Require directive, which a client with a valid
+  session could repeat at will; and of the state of an authentication request when no Client ID is configured
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled
