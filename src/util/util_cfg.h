@@ -59,9 +59,9 @@ void oidc_util_appinfo_set_all(request_rec *r, oidc_json_t *j_attrs, const char 
 // util.c
 /* redact a secret/token for the debug log, unless OIDCDebugMaskSecrets is Off for this server.
  * Config-dependent, hence declared here rather than in the config-free util.h */
-const char *oidc_util_mask_value(request_rec *r, const char *value);
+const char *oidc_util_mask_value(const request_rec *r, const char *value);
 /* whether secrets are to be masked in the log for this request's server */
-apr_byte_t oidc_util_log_mask_secrets(request_rec *r);
+apr_byte_t oidc_util_log_mask_secrets(const request_rec *r);
 
 // expr.c
 char *oidc_util_apr_expr_parse(cmd_parms *cmd, const char *str, oidc_apr_expr_t **expr,

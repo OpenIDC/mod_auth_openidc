@@ -469,7 +469,7 @@ char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigne
  * RSRC_CONF, so this is a per-virtual-host answer and cannot be relaxed from a directory or
  * location section
  */
-apr_byte_t oidc_util_log_mask_secrets(request_rec *r) {
+apr_byte_t oidc_util_log_mask_secrets(const request_rec *r) {
 	const oidc_cfg_t *cfg = NULL;
 	if (r == NULL)
 		return TRUE;
@@ -479,7 +479,7 @@ apr_byte_t oidc_util_log_mask_secrets(request_rec *r) {
 	return (oidc_cfg_debug_mask_secrets_get(cfg) != 0) ? TRUE : FALSE;
 }
 
-const char *oidc_util_mask_value(request_rec *r, const char *value) {
+const char *oidc_util_mask_value(const request_rec *r, const char *value) {
 	apr_size_t len = 0;
 	if (value == NULL)
 		return "(null)";

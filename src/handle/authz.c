@@ -312,7 +312,7 @@ static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, oi
  * the form of a URL, so the claim that a spec refers to is found by trying every claim whose name it starts with.
  * A provider that names its own claims could use that to satisfy a requirement on another claim with a value that
  * it cannot set, e.g. "Require claim iss:https://op.example.com" with a claim "iss:https" whose value is
- * "//op.example.com". Return the name of the shortest claim for which the spec reads as "<name>:<value>" or
+ * the rest of that URL. Return the name of the shortest claim for which the spec reads as "<name>:<value>" or
  * "<name>~<regex>", i.e. the one that it most directly names: when there is such a claim it alone decides, and
  * no claim with a longer name is tried.
  */

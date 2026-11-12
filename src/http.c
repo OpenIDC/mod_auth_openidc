@@ -200,12 +200,11 @@ static apr_byte_t oidc_http_hdr_name_in(const char *name, const char *const *nam
  * for a redirect; any other value is masked.
  */
 const char *oidc_http_hdr_value_for_log(const request_rec *r, const char *name, const char *value) {
-	request_rec *rr = (request_rec *)r;
 	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
 	const char *claim_prefix = oidc_cfg_claim_prefix_get(c);
 	const size_t prefix_len = _oidc_strlen(OIDC_DEFAULT_HEADER_PREFIX);
 
-	if ((name == NULL) || (value == NULL) || (oidc_util_log_mask_secrets(rr) == FALSE))
+	if ((name == NULL) || (value == NULL) || (oidc_util_log_mask_secrets(r) == FALSE))
 		return value;
 
 	if (oidc_http_hdr_name_in(name, _oidc_http_hdr_log_plain))
@@ -218,7 +217,7 @@ const char *oidc_http_hdr_value_for_log(const request_rec *r, const char *name, 
 			return value;
 		if (_oidc_strstr(name + prefix_len, "token") || _oidc_strstr(name + prefix_len, "jwt") ||
 		    _oidc_strstr(name + prefix_len, "userinfo"))
-			return oidc_util_mask_value(rr, value);
+			return oidc_util_mask_value(r, value);
 	}
 
 	/* claims are logged as they were; without a prefix there is no telling them from any other header */
@@ -232,10 +231,10 @@ const char *oidc_http_hdr_value_for_log(const request_rec *r, const char *name, 
 		if (query == NULL)
 			return value;
 		return apr_pstrcat(r->pool, apr_pstrmemdup(r->pool, value, (apr_size_t)(query - value) + 1),
-				   oidc_http_redact_body_for_log(rr, query + 1), NULL);
+				   oidc_http_redact_body_for_log(r, query + 1), NULL);
 	}
 
-	return oidc_util_mask_value(rr, value);
+	return oidc_util_mask_value(r, value);
 }
 
 /*
@@ -303,7 +302,7 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
 
 	if (value != NULL) {
 
-		char *s_value = oidc_http_hdr_value_sanitize(r, value);
+		const char *s_value = oidc_http_hdr_value_sanitize(r, value);
 
 		oidc_debug(r, "%s: %s", name, oidc_http_hdr_value_for_log(r, name, s_value));
 		apr_table_set(table, name, s_value);
@@ -321,7 +320,7 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
  * apr_table_overlap(); the name and the value must live as long as the table
  */
 void oidc_http_hdr_table_add(const request_rec *r, apr_table_t *table, const char *name, const char *value) {
-	char *s_value = oidc_http_hdr_value_sanitize(r, value);
+	const char *s_value = oidc_http_hdr_value_sanitize(r, value);
 	oidc_debug(r, "%s: %s", name, oidc_http_hdr_value_for_log(r, name, s_value));
 	apr_table_addn(table, name, s_value);
 }
@@ -705,7 +704,7 @@ static apr_byte_t oidc_http_param_name_is_sensitive(const char *name, size_t nam
  * purposes; JSON request bodies do not carry these parameters in this codebase and
  * are therefore left untouched
  */
-const char *oidc_http_redact_body_for_log(request_rec *r, const char *data) {
+const char *oidc_http_redact_body_for_log(const request_rec *r, const char *data) {
 	size_t n_params = 1;
 
 	if (data == NULL)
@@ -827,7 +826,7 @@ static const char *oidc_http_redact_json_member(apr_pool_t *pool, const char *da
 	return result;
 }
 
-const char *oidc_http_redact_json_for_log(request_rec *r, const char *data) {
+const char *oidc_http_redact_json_for_log(const request_rec *r, const char *data) {
 	const char *result = NULL;
 
 	if (data == NULL)

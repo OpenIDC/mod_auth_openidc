@@ -1696,7 +1696,7 @@ static int oidc_metrics_handle_prometheus(request_rec *r, const char *s_json) {
 	void *value = NULL;
 
 	/* start the output with the build info and the metrics subsystem's own health */
-	char *s_self = apr_psprintf(
+	const char *s_self = apr_psprintf(
 	    r->pool,
 	    "# HELP %s_build_info A metric with a constant '1' value labeled by the module build version.\n"
 	    "# TYPE %s_build_info gauge\n"

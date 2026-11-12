@@ -125,7 +125,7 @@ char *oidc_http_url_decode(const request_rec *r, const char *str);
 apr_byte_t oidc_http_param_is_sensitive(const char *key);
 
 /* mask well-known sensitive parameter values inside a URL-form-encoded body or query for debug-log purposes */
-const char *oidc_http_redact_body_for_log(request_rec *r, const char *data);
+const char *oidc_http_redact_body_for_log(const request_rec *r, const char *data);
 /* the value of a header as it is written to the debug log: masked unless it cannot carry a credential or a token */
 const char *oidc_http_hdr_value_for_log(const request_rec *r, const char *name, const char *value);
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value);

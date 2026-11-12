@@ -193,6 +193,21 @@ static const char *oidc_strip_cookies_match(const char *cookie, const apr_array_
 }
 
 /*
+ * keep a cookie for the application/backend, unless it is one of the cookies to strip
+ */
+static void oidc_strip_cookies_keep(const request_rec *r, const char *cookie, const apr_array_header_t *strip,
+				    apr_array_header_t *kept) {
+	const char *matched = oidc_strip_cookies_match(cookie, strip);
+	if (matched != NULL) {
+		oidc_debug(r, "stripping: %s", matched);
+		return;
+	}
+	if (kept->nelts > 0)
+		APR_ARRAY_PUSH(kept, const char *) = OIDC_STR_SEMI_COLON OIDC_STR_SPACE;
+	APR_ARRAY_PUSH(kept, const char *) = cookie;
+}
+
+/*
  * strip the session cookie from the headers sent to the application/backend
  */
 void oidc_strip_cookies(request_rec *r) {
@@ -210,24 +225,15 @@ void oidc_strip_cookies(request_rec *r) {
 	 * it again for every cookie, i.e. takes memory quadratic in their number, gigabytes for a few header lines */
 	apr_array_header_t *kept = apr_array_make(r->pool, 8, sizeof(const char *));
 	char *ctx = NULL;
-	char *cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
+	const char *cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
 	while (cookie != NULL) {
-		const char *matched = NULL;
 
 		while (*cookie == OIDC_CHAR_SPACE)
 			cookie++;
 
 		/* an all-whitespace token would otherwise survive as an empty cookie segment in the result */
-		if (*cookie != '\0') {
-			matched = oidc_strip_cookies_match(cookie, strip);
-			if (matched != NULL) {
-				oidc_debug(r, "stripping: %s", matched);
-			} else {
-				if (kept->nelts > 0)
-					APR_ARRAY_PUSH(kept, const char *) = OIDC_STR_SEMI_COLON OIDC_STR_SPACE;
-				APR_ARRAY_PUSH(kept, const char *) = cookie;
-			}
-		}
+		if (*cookie != '\0')
+			oidc_strip_cookies_keep(r, cookie, strip, kept);
 
 		cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
 	}
@@ -894,8 +900,8 @@ static apr_byte_t oidc_validate_redirect_url_host(request_rec *r, const oidc_cfg
 /*
  * for hostname-less URLs, require the URL to be a safe relative path; NB: "/\" needs no check of its
  * own: the caller has already replaced every backslash with a forward slash, and apr_uri_parse reads
- * the resulting "//host" as a network-path reference that carries a hostname, so such a URL is
- * subject to the host checks instead and never arrives here
+ * the resulting two forward slashes as the start of a network-path reference that carries a hostname,
+ * so such a URL is subject to the host checks instead and never arrives here
  */
 static apr_byte_t oidc_validate_redirect_url_relative(request_rec *r, const char *url, char **err_str,
 						      char **err_desc) {

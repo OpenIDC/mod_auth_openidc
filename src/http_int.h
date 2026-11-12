@@ -92,7 +92,7 @@ struct curl_slist *oidc_http_request_build_header_list(request_rec *r, const oid
 const char *oidc_http_user_agent(request_rec *r);
 
 /* oidc_http_redact_body_for_log() is declared in the public http.h */
-const char *oidc_http_redact_json_for_log(request_rec *r, const char *data);
+const char *oidc_http_redact_json_for_log(const request_rec *r, const char *data);
 
 /* return the configured local interface (CURLOPT_INTERFACE) or NULL if unset */
 const char *oidc_http_interface(const request_rec *r);
