@@ -1,3 +1,10 @@
+11/12/2026
+- security: deleting a cache entry also removes the copy stored under the previous OIDCCryptoPassphrase: with two
+  passphrases configured, i.e. after a rotation, a lookup falls back to that copy, so that a session created before
+  the rotation was found again after a logout (also a back-channel logout or a revoke_session request) and an access
+  token validation result after a remove_at_cache request, until the old entry expired; the file cache no longer logs
+  an error when asked to delete an entry that does not exist
+
 11/09/2026
 - security: scrub the OIDCAuthNHeader, OIDCPassUserInfoAs and (with an empty OIDCClaimPrefix)
   OIDCWhiteListedClaims request headers in every spelling the application may read them under, i.e.

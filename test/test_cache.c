@@ -318,6 +318,56 @@ START_TEST(test_cache_second_passphrase_retry) {
 }
 END_TEST
 
+/* deleting an entry also removes the copy that was stored under the previous passphrase: the lookup falls back
+ * to that one, so a session created before the passphrase was rotated would otherwise survive a logout */
+START_TEST(test_cache_delete_removes_previous_passphrase_entry) {
+	request_rec *r = oidc_test_request_get();
+	char *value = NULL;
+	apr_time_t expiry = apr_time_now() + apr_time_from_sec(60);
+
+	oidc_cfg_t *cfg = oidc_test_cfg_get();
+	const char *old_s1 = oidc_cfg_crypto_passphrase_secret1_get(cfg);
+	const char *old_s2 = oidc_cfg_crypto_passphrase_secret2_get(cfg);
+	int old_encrypt = cfg->cache.encrypt;
+
+	/* two entries are stored under the passphrase that is about to be replaced */
+	cfg->crypto_passphrase.secret1 = "oldsecret012345678901234567890";
+	cfg->crypto_passphrase.secret2 = NULL;
+	oidc_test_crypto_passphrase_rederive(cfg);
+	cfg->cache.encrypt = 1;
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "rot_del_1", "session-1", expiry), TRUE);
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "rot_del_2", "session-2", expiry), TRUE);
+
+	/* rotate: the new passphrase becomes the first, the old one the second */
+	cfg->crypto_passphrase.secret1 = "newsecret01234567890123456789012";
+	cfg->crypto_passphrase.secret2 = "oldsecret012345678901234567890";
+	oidc_test_crypto_passphrase_rederive(cfg);
+
+	/* the first entry is still only there under the previous passphrase when it is deleted */
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "rot_del_1", &value), TRUE);
+	ck_assert_str_eq(value, "session-1");
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "rot_del_1", NULL, 0), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "rot_del_1", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	/* the second one was saved again after the rotation, so that there is a copy under either passphrase */
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "rot_del_2", "session-2-updated", expiry), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "rot_del_2", &value), TRUE);
+	ck_assert_str_eq(value, "session-2-updated");
+	ck_assert_int_eq(oidc_cache_set(r, OIDC_CACHE_SECTION_SESSION, "rot_del_2", NULL, 0), TRUE);
+	value = NULL;
+	ck_assert_int_eq(oidc_cache_get(r, OIDC_CACHE_SECTION_SESSION, "rot_del_2", &value), TRUE);
+	ck_assert_ptr_null(value);
+
+	cfg->crypto_passphrase.secret1 = (char *)old_s1;
+	cfg->crypto_passphrase.secret2 = (char *)old_s2;
+	oidc_test_crypto_passphrase_rederive(cfg);
+	cfg->cache.encrypt = old_encrypt;
+}
+END_TEST
+
 /* fill the shm cache beyond its capacity (500 slots in the test fixture) so the sampled-LRU
  * eviction path runs, then verify recent entries are still served and deletion works */
 START_TEST(test_cache_shm_eviction_and_delete) {
@@ -2579,6 +2629,7 @@ int main(void) {
 	tcase_add_test(core, test_cache_encrypted_value_bound_to_entry);
 	tcase_add_test(core, test_cache_status2str_success);
 	tcase_add_test(core, test_cache_second_passphrase_retry);
+	tcase_add_test(core, test_cache_delete_removes_previous_passphrase_entry);
 	tcase_add_test(core, test_cache_shm_eviction_and_delete);
 	tcase_add_test(core, test_cache_shm_churn_never_crosses_keys);
 	tcase_add_test(core, test_cache_shm_get_key_bounds_negative);

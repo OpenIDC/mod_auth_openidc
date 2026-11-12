@@ -466,10 +466,14 @@ static apr_byte_t oidc_cache_file_set(request_rec *r, const char *section, const
 	/* only on writes (not on reads) we clean the cache first (if not done recently) */
 	oidc_cache_file_clean(r);
 
-	/* just remove cache file if value is NULL */
+	/* just remove cache file if value is NULL; an entry that does not exist is not an error, e.g. the one
+	 * that would have been stored under the previous passphrase */
 	if (value == NULL) {
-		if ((rc = apr_file_remove(target, r->pool)) != APR_SUCCESS) {
-			oidc_error(r, "could not delete cache file \"%s\" (%s)", path,
+		rc = apr_file_remove(target, r->pool);
+		if (APR_STATUS_IS_ENOENT(rc)) {
+			oidc_debug(r, "no cache file \"%s\" to delete", target);
+		} else if (rc != APR_SUCCESS) {
+			oidc_error(r, "could not delete cache file \"%s\" (%s)", target,
 				   apr_strerror(rc, s_err, sizeof(s_err)));
 		}
 		return TRUE;

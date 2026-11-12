@@ -444,6 +444,19 @@ apr_byte_t oidc_cache_set(request_rec *r, const char *section, const char *key, 
 	/* store the resulting value in the cache */
 	rc = cfg->cache.impl->set(r, s_section, s_key, value, expiry);
 
+	/*
+	 * a delete must also remove the entry that was stored under the previous passphrase, which oidc_cache_get
+	 * falls back to when there is none under the current one: otherwise a session that was created before the
+	 * passphrase was rotated is found again after a logout, and so is a removed access token validation result
+	 */
+	if ((value == NULL) && (encrypted == 1) && (oidc_cfg_crypto_passphrase_secret2_get(cfg) != NULL)) {
+		const char *s_key2 = NULL;
+		if ((oidc_cache_get_key(r, key, oidc_cfg_crypto_passphrase_secret2_get(cfg), encrypted, &s_key2) ==
+		     FALSE) ||
+		    (cfg->cache.impl->set(r, s_section, s_key2, NULL, expiry) == FALSE))
+			rc = FALSE;
+	}
+
 	OIDC_METRICS_TIMING_ADD(r, cfg, OM_CACHE_WRITE);
 
 end:
