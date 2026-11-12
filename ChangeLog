@@ -43,6 +43,9 @@
 - handle a request to the redirect URI that names the info hook next to a request that is served without a session
   ("jwks", "dpop") as an info request: it was passed on without the checks on the session, i.e. its cookie domain,
   its maximum duration and the Require directives, and then served the session info
+- auth_openidc.conf: end the hostname in the OIDCRedirectURLsAllowed examples with a "/": an expression is searched
+  for in the URL, so that "^https://www\.example\.com" as the example had it also allows a redirect to
+  "https://www.example.com.attacker.net/"; a configuration that copied it should be changed likewise
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled
