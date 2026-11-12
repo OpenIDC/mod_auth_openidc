@@ -1359,8 +1359,8 @@ int oidc_check_user_id(request_rec *r) {
 	OIDC_METRICS_TIMING_REQUEST_START(r, c);
 
 	/* log some stuff about the incoming HTTP request */
-	oidc_debug(r, "incoming request: \"%s?%s\", ap_is_initial_req(r)=%d", r->parsed_uri.path, r->args,
-		   ap_is_initial_req(r));
+	oidc_debug(r, "incoming request: \"%s?%s\", ap_is_initial_req(r)=%d", r->parsed_uri.path,
+		   oidc_http_redact_body_for_log(r, r->args), ap_is_initial_req(r));
 
 	if (oidc_enabled(r, c) == FALSE) {
 		OIDC_METRICS_COUNTER_INC(r, c, OM_AUTHTYPE_DECLINED);

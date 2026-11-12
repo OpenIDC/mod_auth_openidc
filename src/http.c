@@ -56,6 +56,7 @@
 #include "http.h"
 #include "http_int.h"
 #include "metrics.h"
+#include "mod_auth_openidc.h"
 #include "proto/proto.h"
 #include "util/util.h"
 #include "util/util_cfg.h"
@@ -154,13 +155,96 @@ char *oidc_http_url_decode(const request_rec *r, const char *str) {
 	return rv;
 }
 
+/* the headers whose value is written to the debug log as it is: they carry no credential and no token */
+static const char *const _oidc_http_hdr_log_plain[] = {OIDC_HTTP_HDR_ACCEPT,
+						       OIDC_HTTP_HDR_CACHE_CONTROL,
+						       OIDC_HTTP_HDR_CONTENT_LENGTH,
+						       OIDC_HTTP_HDR_CONTENT_TYPE,
+						       OIDC_HTTP_HDR_DPOP_NONCE,
+						       OIDC_HTTP_HDR_EXPIRES,
+						       OIDC_HTTP_HDR_FORWARDED,
+						       OIDC_HTTP_HDR_HOST,
+						       OIDC_HTTP_HDR_P3P,
+						       OIDC_HTTP_HDR_PRAGMA,
+						       OIDC_HTTP_HDR_SEC_FETCH_DEST,
+						       OIDC_HTTP_HDR_SEC_FETCH_MODE,
+						       OIDC_HTTP_HDR_TRACE_PARENT,
+						       OIDC_HTTP_HDR_TRACE_STATE,
+						       OIDC_HTTP_HDR_USER_AGENT,
+						       OIDC_HTTP_HDR_WWW_AUTHENTICATE,
+						       OIDC_HTTP_HDR_X_FORWARDED_FOR,
+						       OIDC_HTTP_HDR_X_FORWARDED_HOST,
+						       OIDC_HTTP_HDR_X_FORWARDED_PORT,
+						       OIDC_HTTP_HDR_X_FORWARDED_PROTO,
+						       OIDC_HTTP_HDR_X_FRAME_OPTIONS,
+						       OIDC_HTTP_HDR_X_REQUESTED_WITH,
+						       NULL};
+
+/* what this module passes to the application under its own prefix that is not a token, or data from one */
+static const char *const _oidc_http_hdr_log_plain_info[] = {OIDC_APP_INFO_SCOPE, OIDC_APP_INFO_ACCESS_TOKEN_TYPE,
+							    OIDC_APP_INFO_ACCESS_TOKEN_EXP, NULL};
+
+static apr_byte_t oidc_http_hdr_name_in(const char *name, const char *const *names) {
+	for (; *names != NULL; names++)
+		if (_oidc_strcasecmp(name, *names) == 0)
+			return TRUE;
+	return FALSE;
+}
+
+/*
+ * The value of a request or response header as it is written to the debug log. The helpers below log every
+ * header that they read or set, which includes the Cookie and Set-Cookie headers with the session cookie, the
+ * Authorization header, and the tokens that are passed to the application: values that OIDCDebugMaskSecrets
+ * promises to keep out of the log. So unless that is Off, a value is only logged as it is for a header that is
+ * known not to carry a credential or a token, for a claim, and, with the parameters that do carry one masked,
+ * for a redirect; any other value is masked.
+ */
+const char *oidc_http_hdr_value_for_log(const request_rec *r, const char *name, const char *value) {
+	request_rec *rr = (request_rec *)r;
+	const oidc_cfg_t *c = ap_get_module_config(r->server->module_config, &auth_openidc_module);
+	const char *claim_prefix = oidc_cfg_claim_prefix_get(c);
+	const size_t prefix_len = _oidc_strlen(OIDC_DEFAULT_HEADER_PREFIX);
+
+	if ((name == NULL) || (value == NULL) || (oidc_util_log_mask_secrets(rr) == FALSE))
+		return value;
+
+	if (oidc_http_hdr_name_in(name, _oidc_http_hdr_log_plain))
+		return value;
+
+	/* the tokens and what is derived from them are passed under the fixed prefix, which may be the claim
+	 * prefix as well */
+	if (oidc_util_strnenvcmp(name, OIDC_DEFAULT_HEADER_PREFIX, (int)prefix_len) == 0) {
+		if (oidc_http_hdr_name_in(name + prefix_len, _oidc_http_hdr_log_plain_info))
+			return value;
+		if (_oidc_strstr(name + prefix_len, "token") || _oidc_strstr(name + prefix_len, "jwt") ||
+		    _oidc_strstr(name + prefix_len, "userinfo"))
+			return oidc_util_mask_value(rr, value);
+	}
+
+	/* claims are logged as they were; without a prefix there is no telling them from any other header */
+	if ((_oidc_strlen(claim_prefix) > 0) &&
+	    (oidc_util_strnenvcmp(name, claim_prefix, (int)_oidc_strlen(claim_prefix)) == 0))
+		return value;
+
+	/* a redirect is logged with the values of the parameters that carry a token or a code masked */
+	if (_oidc_strcasecmp(name, OIDC_HTTP_HDR_LOCATION) == 0) {
+		const char *query = strchr(value, OIDC_CHAR_QUERY);
+		if (query == NULL)
+			return value;
+		return apr_pstrcat(r->pool, apr_pstrmemdup(r->pool, value, (apr_size_t)(query - value) + 1),
+				   oidc_http_redact_body_for_log(rr, query + 1), NULL);
+	}
+
+	return oidc_util_mask_value(rr, value);
+}
+
 /*
  * obtain a HTTP request header value
  */
 static const char *oidc_http_hdr_in_get(const request_rec *r, const char *name) {
 	const char *value = apr_table_get(r->headers_in, name);
 	if (value)
-		oidc_debug(r, "%s=%s", name, value);
+		oidc_debug(r, "%s=%s", name, oidc_http_hdr_value_for_log(r, name, value));
 	return value;
 }
 
@@ -221,7 +305,7 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
 
 		char *s_value = oidc_http_hdr_value_sanitize(r, value);
 
-		oidc_debug(r, "%s: %s", name, s_value);
+		oidc_debug(r, "%s: %s", name, oidc_http_hdr_value_for_log(r, name, s_value));
 		apr_table_set(table, name, s_value);
 
 	} else {
@@ -238,7 +322,7 @@ static void oidc_http_hdr_table_set(const request_rec *r, apr_table_t *table, co
  */
 void oidc_http_hdr_table_add(const request_rec *r, apr_table_t *table, const char *name, const char *value) {
 	char *s_value = oidc_http_hdr_value_sanitize(r, value);
-	oidc_debug(r, "%s: %s", name, s_value);
+	oidc_debug(r, "%s: %s", name, oidc_http_hdr_value_for_log(r, name, s_value));
 	apr_table_addn(table, name, s_value);
 }
 
@@ -260,7 +344,7 @@ static const char *oidc_http_hdr_out_get(const request_rec *r, const char *name)
  * set a HTTP response header on all responses, included errors and redirects
  */
 void oidc_http_hdr_err_out_add(const request_rec *r, const char *name, const char *value) {
-	oidc_debug(r, "%s: %s", name, value);
+	oidc_debug(r, "%s: %s", name, oidc_http_hdr_value_for_log(r, name, value));
 	apr_table_add(r->err_headers_out, name, value);
 }
 
@@ -559,7 +643,8 @@ size_t oidc_http_response_header(const char *buffer, size_t size, size_t nitems,
 	for (apr_hash_index_t *hi = apr_hash_first(NULL, ctx->hdrs); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&h_name, &h_len, NULL);
 		if (_oidc_strcasecmp(hdr, h_name) == 0) {
-			oidc_debug(ctx->r, "returning response header: %s: %s", h_name, value);
+			oidc_debug(ctx->r, "returning response header: %s: %s", h_name,
+				   oidc_http_hdr_value_for_log(ctx->r, h_name, value));
 			apr_hash_set(ctx->hdrs, h_name, APR_HASH_KEY_STRING, apr_pstrdup(ctx->r->pool, value));
 			break;
 		}
@@ -584,12 +669,17 @@ typedef struct oidc_http_encode_t {
  * before a request URL/body is written to the debug log; the single source of truth
  * for both the per-parameter check and the body redaction below
  */
-static const char *_oidc_http_sensitive_params[] = {OIDC_PROTO_CLIENT_SECRET, OIDC_PROTO_CLIENT_ASSERTION,
-						    OIDC_PROTO_CODE, OIDC_PROTO_CODE_VERIFIER, OIDC_PROTO_REFRESH_TOKEN,
-						    OIDC_PROTO_ACCESS_TOKEN,
-						    /* inbound: the front-channel authorization response and the
-						     * back-channel logout request carry these */
-						    OIDC_PROTO_ID_TOKEN, OIDC_PROTO_LOGOUT_TOKEN, NULL};
+static const char *_oidc_http_sensitive_params[] = {
+    OIDC_PROTO_CLIENT_SECRET, OIDC_PROTO_CLIENT_ASSERTION, OIDC_PROTO_CODE, OIDC_PROTO_CODE_VERIFIER,
+    OIDC_PROTO_REFRESH_TOKEN, OIDC_PROTO_ACCESS_TOKEN,
+    /* inbound: the front-channel authorization response and the
+     * back-channel logout request carry these */
+    OIDC_PROTO_ID_TOKEN, OIDC_PROTO_LOGOUT_TOKEN,
+    /* outbound, in the URL of the logout request to the OP */
+    OIDC_PROTO_ID_TOKEN_HINT,
+    /* inbound, on the redirect URI: an access token and a session
+     * identifier respectively */
+    OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, NULL};
 
 apr_byte_t oidc_http_param_is_sensitive(const char *key) {
 	for (int i = 0; _oidc_http_sensitive_params[i] != NULL; i++)
@@ -1025,7 +1115,7 @@ static void oidc_http_request_pass_cookies(request_rec *r, CURL *curl, const apr
 	if (cookie_string == NULL)
 		return;
 
-	oidc_debug(r, "passing browser cookies on backend call: %s", cookie_string);
+	oidc_debug(r, "passing browser cookies on backend call: %s", oidc_util_mask_value(r, cookie_string));
 	OIDC_HTTP_CURL_SETOPT(CURLOPT_COOKIE, cookie_string);
 }
 

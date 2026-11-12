@@ -4427,8 +4427,14 @@ START_TEST(test_handle_revoke_at_cache_remove_not_cached) {
 	oidc_cfg_t *c = oidc_test_cfg_get();
 
 	r->args = "remove_at_cache=AT-not-in-cache";
+	oidc_test_log_errors_start();
 	int rc = oidc_revoke_at_cache_remove(r, c);
+	const char *errors = oidc_test_log_errors_stop();
 	ck_assert_int_eq(rc, HTTP_NOT_FOUND);
+
+	/* the access token, which may well be a valid one that just is not cached, is not written to the error log */
+	ck_assert_msg(_oidc_strstr(errors, "no cached access token found") != NULL, "logged: %s", errors);
+	ck_assert_msg(_oidc_strstr(errors, "AT-not-in-cache") == NULL, "logged: %s", errors);
 }
 END_TEST
 

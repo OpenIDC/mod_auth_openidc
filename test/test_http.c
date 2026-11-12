@@ -186,6 +186,80 @@ START_TEST(test_redact_body_for_log) {
 }
 END_TEST
 
+/* the value of a header that carries a credential or a token is masked in the debug log, where the helpers that
+ * read and set headers used to write it in full: the session cookie, the Authorization header and the tokens
+ * that are passed to the application */
+START_TEST(test_hdr_value_for_log) {
+	request_rec *r = oidc_test_request_get();
+	cmd_parms *cmd = oidc_test_cmd_get(OIDCDebugMaskSecrets);
+	const char *secret = "0123456789abcdef0123456789abcdef";
+	const char *log = NULL;
+
+	/* credentials and tokens: a 4-character prefix and the length is all that is left */
+	static const char *const masked[] = {"Cookie",
+					     "cookie",
+					     "Set-Cookie",
+					     "Authorization",
+					     "DPoP",
+					     "OIDC_access_token",
+					     "OIDC_refresh_token",
+					     "OIDC_id_token",
+					     "OIDC_id_token_payload",
+					     "OIDC_userinfo_jwt",
+					     "OIDC_userinfo_json",
+					     "OIDC_signed_jwt",
+					     "oidc-access-token",
+					     "X-Remote-User",
+					     "X-Custom-Userinfo"};
+	for (size_t i = 0; i < sizeof(masked) / sizeof(masked[0]); i++) {
+		log = oidc_http_hdr_value_for_log(r, masked[i], secret);
+		ck_assert_msg(_oidc_strstr(log, "456789") == NULL, "%s is logged as: %s", masked[i], log);
+		ck_assert_msg(_oidc_strstr(log, "0123...(32 chars)") != NULL, "%s is logged as: %s", masked[i], log);
+	}
+
+	/* headers that carry neither, and claims, are logged as they are */
+	static const char *const plain[] = {"Content-Type",
+					    "content-type",
+					    "Host",
+					    "User-Agent",
+					    "X-Forwarded-Proto",
+					    "Cache-Control",
+					    "X-Requested-With",
+					    "OIDC_access_token_expires",
+					    "OIDC_access_token_type",
+					    "OIDC_scope",
+					    "OIDC_CLAIM_email",
+					    "oidc-claim-groups"};
+	for (size_t i = 0; i < sizeof(plain) / sizeof(plain[0]); i++)
+		ck_assert_ptr_eq(oidc_http_hdr_value_for_log(r, plain[i], secret), secret);
+
+	/* a redirect keeps its URL; only the parameters that carry a token or a code are masked */
+	ck_assert_str_eq(oidc_http_hdr_value_for_log(r, "Location", "https://op.example.com/logout"),
+			 "https://op.example.com/logout");
+	ck_assert_str_eq(oidc_http_hdr_value_for_log(r, "Location",
+						     "https://op.example.com/logout?id_token_hint=eyJhbGciOi.eyJz.c2ln&"
+						     "post_logout_redirect_uri=https%3A%2F%2Frp.example.com%2F"),
+			 "https://op.example.com/logout?id_token_hint=***&"
+			 "post_logout_redirect_uri=https%3A%2F%2Frp.example.com%2F");
+	ck_assert_str_eq(oidc_http_hdr_value_for_log(
+			     r, "Location", "https://op.example.com/authorize?response_type=code&state=abc&nonce=def"),
+			 "https://op.example.com/authorize?response_type=code&state=abc&nonce=def");
+
+	ck_assert_ptr_null(oidc_http_hdr_value_for_log(r, "Cookie", NULL));
+
+	/* the access token and the session identifier in a request to the redirect URI are masked as well */
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "remove_at_cache=some-access-token"), "remove_at_cache=***");
+	ck_assert_str_eq(oidc_http_redact_body_for_log(r, "revoke_session=some-session-id&x=y"),
+			 "revoke_session=***&x=y");
+
+	/* OIDCDebugMaskSecrets Off: everything is logged as it is */
+	ck_assert_ptr_null(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "Off"));
+	ck_assert_ptr_eq(oidc_http_hdr_value_for_log(r, "Cookie", secret), secret);
+	ck_assert_ptr_eq(oidc_http_hdr_value_for_log(r, "OIDC_access_token", secret), secret);
+	ck_assert_ptr_null(oidc_cmd_debug_mask_secrets_set(cmd, NULL, "On"));
+}
+END_TEST
+
 START_TEST(test_redact_json_for_log) {
 	request_rec *r = oidc_test_request_get();
 
@@ -1539,6 +1613,7 @@ int main(void) {
 	tcase_add_test(accept, test_http_accept);
 	tcase_add_test(accept, test_url_encode_decode);
 	tcase_add_test(accept, test_redact_body_for_log);
+	tcase_add_test(accept, test_hdr_value_for_log);
 	tcase_add_test(accept, test_redact_json_for_log);
 	tcase_add_test(accept, test_hdr_getters_and_forwarded);
 	tcase_add_test(accept, test_hdr_normalize_query_form);

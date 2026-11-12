@@ -46,6 +46,12 @@
 - auth_openidc.conf: end the hostname in the OIDCRedirectURLsAllowed examples with a "/": an expression is searched
   for in the URL, so that "^https://www\.example\.com" as the example had it also allows a redirect to
   "https://www.example.com.attacker.net/"; a configuration that copied it should be changed likewise
+- security: mask the values of the headers that are read and set in the debug log, as OIDCDebugMaskSecrets On
+  promises: the Cookie and Set-Cookie headers with the session cookie, the Authorization header and the tokens
+  passed to the application (OIDC_access_token and the like, also as environment variables) were logged in full
+  with "LogLevel debug", as were the parameters of a request to the redirect URI; claims and the headers that
+  carry no credential are logged as before, a redirect with its tokens and codes masked; do not write the access
+  token of a "remove_at_cache" request that is not cached to the error log
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled

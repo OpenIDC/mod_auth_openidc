@@ -138,7 +138,8 @@ static void oidc_util_appinfo_pair_apply(request_rec *r, const char *s_name, con
 	if (ctx->pass_in & OIDC_APPINFO_PASS_ENVVARS) {
 
 		/* do some logging about this event */
-		oidc_debug(r, "setting environment variable \"%s: %s\"", s_name, s_value);
+		oidc_debug(r, "setting environment variable \"%s: %s\"", s_name,
+			   oidc_http_hdr_value_for_log(r, s_name, s_value));
 
 		if (batched == TRUE)
 			apr_table_addn(ctx->env, s_name, s_value);
