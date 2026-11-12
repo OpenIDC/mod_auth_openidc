@@ -653,6 +653,18 @@ const char *oidc_cfg_dir_path_auth_request_params_get(request_rec *r) {
 static apr_array_header_t *pass_userinfo_as_default = NULL;
 
 /*
+ * forget the default when the pool that holds it is destroyed, so that the next post-config phase in
+ * this process creates it again rather than leaving a pointer to freed memory behind: the process pool
+ * lives as long as the server does, but the unit tests create and destroy one for every test, and
+ * where they do not fork (CK_FORK=no, Windows) they all run in one process
+ */
+static apr_status_t oidc_cfg_dir_pass_userinfo_as_default_cleanup(void *data) {
+	apr_array_header_t **dflt = data;
+	*dflt = NULL;
+	return APR_SUCCESS;
+}
+
+/*
  * initialize the default pass-userinfo-as array once, from the (single-threaded) post-config phase;
  * lazy initialization from the request path is not safe under threaded MPMs because the static and
  * the process pool it allocates from are shared across worker threads without locking.
@@ -662,6 +674,8 @@ int oidc_cfg_dir_post_config(server_rec *s) {
 	if (pass_userinfo_as_default != NULL)
 		return OK;
 	pass_userinfo_as_default = apr_array_make(s->process->pool, 3, sizeof(const oidc_pass_user_info_as_t *));
+	apr_pool_cleanup_register(s->process->pool, &pass_userinfo_as_default,
+				  oidc_cfg_dir_pass_userinfo_as_default_cleanup, apr_pool_cleanup_null);
 	if (oidc_cfg_dir_parse_pass_userinfo_as(s->process->pool, OIDC_DEFAULT_PASS_USERINFO_AS, &p) != NULL)
 		return HTTP_INTERNAL_SERVER_ERROR;
 	APR_ARRAY_PUSH(pass_userinfo_as_default, const oidc_pass_user_info_as_t *) = p;

@@ -6549,9 +6549,8 @@ START_TEST(test_handle_existing_session_issuer_claim_is_the_validated_one) {
 
 	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
 	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(oidc_test_cmd_get(OIDCPassClaimsAs), dir_cfg, "both", NULL));
-	/* set explicitly: the default is only there once the post-config hook has run */
-	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(oidc_test_cmd_get(OIDCPassUserInfoAs), dir_cfg,
-							     apr_pstrdup(r->pool, "claims")));
+	/* NB: OIDCPassUserInfoAs is deliberately left at its default "claims", which every test must find in
+	 * place, also when the tests do not fork and an earlier one has destroyed the pool that held it */
 
 	existing_session_seed(r, session, TRUE);
 	ck_assert_int_eq(oidc_json_decode_object(r,

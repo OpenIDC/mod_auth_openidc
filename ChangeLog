@@ -55,6 +55,11 @@
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled
+- test: create the default OIDCPassUserInfoAs setting again after the pool that held it is destroyed: the unit
+  tests destroy that pool after every test and, where they do not fork (CK_FORK=no, Windows), the next test read
+  freed memory when the request headers were scrubbed, which crashed test_handle and test_oauth on Windows; a
+  running server keeps that pool for as long as it lives and is not affected; the test for the metrics flush at
+  child exit is not run on Windows, where the handler cannot read the result back once the child pool is gone
 
 11/09/2026
 - security: scrub the OIDCAuthNHeader, OIDCPassUserInfoAs and (with an empty OIDCClaimPrefix)

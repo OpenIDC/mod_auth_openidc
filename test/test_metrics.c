@@ -183,7 +183,11 @@ END_TEST
  * the child pool going away stops the flush thread, which flushes on its way out: at exit that has to happen
  * before apr_terminate() destroys the local collection pool the thread clears after every flush, so it cannot
  * be left to oidc_metrics_cleanup(), a pconf cleanup that only runs after that pool is gone
+ *
+ * NB: not on Windows, where the handles that the child-init phase opens on the metrics mutexes are
+ * closed with the child pool, so that the handler cannot be used to read the result back afterwards
  */
+#ifndef _WIN32
 START_TEST(test_metrics_child_pool_cleanup_stops_and_flushes) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -213,6 +217,7 @@ START_TEST(test_metrics_child_pool_cleanup_stops_and_flushes) {
 	oidc_test_unsetenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL");
 }
 END_TEST
+#endif
 
 START_TEST(test_metrics_handle_request_format_status) {
 	request_rec *r = oidc_test_request_get();
@@ -906,7 +911,9 @@ int main(void) {
 	tcase_add_test(lifecycle, test_metrics_handle_request_no_format_default_prometheus);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_json);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_internal);
+#ifndef _WIN32
 	tcase_add_test(lifecycle, test_metrics_child_pool_cleanup_stops_and_flushes);
+#endif
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_status);
 	tcase_add_test(lifecycle, test_metrics_handle_request_format_unknown);
 	tcase_add_test(lifecycle, test_metrics_handle_request_with_samples);
