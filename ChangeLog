@@ -32,6 +32,9 @@
 - fix a memory leak of the session for every request to the info hook on the redirect URI ("?info=") that is not
   served, e.g. because it is refused for its cookie domain or by a Require directive, which a client with a valid
   session could repeat at will; and of the state of an authentication request when no Client ID is configured
+- fix decrypting an id_token that is encrypted with a key derived from the client secret for A128KW or A192KW: the
+  "alg" that sets the size of that key was read from the token as an argument of a debug log call, so that such
+  an id_token was only accepted with "LogLevel auth_openidc:debug" (or more) set
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled

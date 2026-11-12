@@ -1429,6 +1429,49 @@ static char *proto_unsigned_idtoken(request_rec *r, const char *sub, const char 
 	return cser;
 }
 
+/* an id_token that is encrypted with a key derived from the client secret is decrypted with a key of the size
+ * that its "alg" asks for, also when debug logging is off: the "alg" was only read from the header as an argument
+ * of a debug log call, which is not evaluated then, so that A128KW and A192KW only worked with LogLevel debug */
+START_TEST(test_proto_idtoken_parse_symmetric_encryption_without_debug_logging) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_get(c);
+	const char *secret = "idtoken-a128kw-secret-long-enough-1";
+	static const char *const algs[] = {"A128KW", "A192KW", "A256KW"};
+	const int level = r->server->log.level;
+
+	oidc_cfg_provider_client_secret_set(r->pool, provider, secret);
+
+	for (size_t i = 0; i < sizeof(algs) / sizeof(algs[0]); i++) {
+		oidc_jose_error_t err;
+		oidc_jwk_t *jwk = NULL;
+		oidc_jwt_t *jwt = NULL;
+		char *cser = NULL;
+		const char *id_token = proto_unsigned_idtoken(r, "alice", NULL);
+
+		/* encrypted the way an OP does it: with the leftmost bits of the SHA-256 hash of the client secret */
+		ck_assert_int_eq(oidc_util_key_symmetric_create(r, secret, oidc_alg2keysize(algs[i]),
+								OIDC_JOSE_ALG_SHA256, TRUE, &jwk),
+				 TRUE);
+		oidc_jwt_t *jwe = oidc_jwt_new(r->pool, TRUE, TRUE);
+		jwe->header.alg = apr_pstrdup(r->pool, algs[i]);
+		jwe->header.enc = apr_pstrdup(r->pool, "A256GCM");
+		ck_assert_int_eq(
+		    oidc_jwt_encrypt(r->pool, jwe, jwk, id_token, (int)_oidc_strlen(id_token), &cser, &err), TRUE);
+		oidc_jwk_destroy(jwk);
+		oidc_jwt_destroy(jwe);
+
+		r->server->log.level = APLOG_INFO;
+		apr_byte_t rc = oidc_proto_idtoken_parse(r, c, provider, cser, NULL, &jwt, TRUE);
+		r->server->log.level = level;
+
+		ck_assert_msg(rc == TRUE, "%s encrypted id_token was not accepted without debug logging", algs[i]);
+		ck_assert_str_eq(jwt->payload.sub, "alice");
+		oidc_jwt_destroy(jwt);
+	}
+}
+END_TEST
+
 START_TEST(test_proto_idtoken_parse_alg_none) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -5033,6 +5076,7 @@ int main(void) {
 	tcase_add_test(core, test_proto_token_endpoint_auth_idempotent);
 	tcase_add_test(core, test_proto_jwt_validate_edge_cases);
 	tcase_add_test(core, test_proto_idtoken_parse_error_paths);
+	tcase_add_test(core, test_proto_idtoken_parse_symmetric_encryption_without_debug_logging);
 	tcase_add_test(core, test_proto_idtoken_parse_alg_none);
 	tcase_add_test(core, test_proto_jwt_verify_paths);
 	tcase_add_test(core, test_proto_jwt_verify_no_kid_retry_needs_jwks_uri);

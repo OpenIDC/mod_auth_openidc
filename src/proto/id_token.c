@@ -399,7 +399,10 @@ apr_byte_t oidc_proto_idtoken_parse(request_rec *r, oidc_cfg_t *cfg, const oidc_
 				    apr_byte_t is_code_flow) {
 
 	char *alg = NULL;
-	oidc_debug(r, "enter: id_token header=%s", oidc_proto_jwt_header_peek(r, id_token, &alg, NULL, NULL));
+	/* NB: not as an argument of the debug call below: those are only evaluated when debug logging is on, and
+	 * the "alg" sets the size of the key that is derived from the client secret to decrypt the id_token with */
+	const char *header = oidc_proto_jwt_header_peek(r, id_token, &alg, NULL, NULL);
+	oidc_debug(r, "enter: id_token header=%s", header);
 	apr_hash_t *decryption_keys = NULL;
 
 	char buf[APR_RFC822_DATE_LEN + 1];
