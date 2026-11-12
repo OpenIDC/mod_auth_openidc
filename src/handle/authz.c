@@ -308,6 +308,33 @@ static apr_byte_t oidc_auth_handle_separator(request_rec *r, const char *key, oi
 }
 
 /*
+ * The name of a claim may contain the characters that separate it from the value in a Require spec, e.g. a name in
+ * the form of a URL, so the claim that a spec refers to is found by trying every claim whose name it starts with.
+ * A provider that names its own claims could use that to satisfy a requirement on another claim with a value that
+ * it cannot set, e.g. "Require claim iss:https://op.example.com" with a claim "iss:https" whose value is
+ * "//op.example.com". Return the name of the shortest claim for which the spec reads as "<name>:<value>" or
+ * "<name>~<regex>", i.e. the one that it most directly names: when there is such a claim it alone decides, and
+ * no claim with a longer name is tried.
+ */
+static const char *oidc_authz_value_claim(const char *attr_spec, oidc_json_t *claims) {
+	const char *result = NULL;
+	size_t result_len = 0;
+	void *iter = oidc_json_object_iter(claims);
+	while (iter) {
+		const char *key = oidc_json_object_iter_key(iter);
+		const size_t len = _oidc_strlen(key);
+		if ((_oidc_strncmp(attr_spec, key, len) == 0) &&
+		    ((attr_spec[len] == OIDC_CHAR_COLON) || (attr_spec[len] == OIDC_CHAR_TILDE)) &&
+		    ((result == NULL) || (len < result_len))) {
+			result = key;
+			result_len = len;
+		}
+		iter = oidc_json_object_iter_next(claims, iter);
+	}
+	return result;
+}
+
+/*
  * see if a the Require value matches with a set of provided claims
  */
 apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, oidc_json_t *claims) {
@@ -318,8 +345,12 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, o
 	oidc_json_t *val = NULL;
 
 	// if we don't have any claims, they can never match any Require claim primitive
-	if (claims == NULL)
+	if ((claims == NULL) || (attr_spec == NULL))
 		return FALSE;
+
+	// the claim that decides on its own, if the spec names one directly
+	const char *value_claim = oidc_authz_value_claim(attr_spec, claims);
+	const size_t value_claim_len = _oidc_strlen(value_claim);
 
 	// loop over all of the user claims to find one that matches the attr_spec
 	void *iter = oidc_json_object_iter(claims);
@@ -340,8 +371,13 @@ apr_byte_t oidc_authz_match_claim(request_rec *r, const char *const attr_spec, o
 			spec_c++;
 		}
 
-		if ((!(*attr_c)) && (oidc_auth_handle_separator(r, key, val, spec_c) == TRUE))
-			return TRUE;
+		if (!(*attr_c)) {
+			if ((value_claim != NULL) && (_oidc_strlen(key) > value_claim_len))
+				oidc_debug(r, "not evaluating key \"%s\": the value of claim \"%s\" decides", key,
+					   value_claim);
+			else if (oidc_auth_handle_separator(r, key, val, spec_c) == TRUE)
+				return TRUE;
+		}
 
 		iter = oidc_json_object_iter_next(claims, iter);
 	}

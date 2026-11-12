@@ -3537,6 +3537,62 @@ START_TEST(test_handle_legacy_authz_worker) {
 }
 END_TEST
 
+/* the name of a claim may itself contain ":" or "~", so a provider could name a claim "iss:https" and give it the
+ * rest of the value that "Require claim iss:https://..." asks for; when the claim that the spec names is there,
+ * it alone decides */
+START_TEST(test_handle_authz_claim_name_cannot_take_over_value) {
+	request_rec *r = oidc_test_request_get();
+	oidc_json_t *json = NULL;
+	r->user = "dummy";
+
+	/* what a provider other than https://idp.example.com can put in its id_token or userinfo response */
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{"
+						 "\"iss\":\"https://rogue.example.net\","
+						 "\"iss:https\":\"//idp.example.com\","
+						 "\"iss~^https\":\"//idp\\\\.example\\\\.com$\","
+						 "\"aud\":[\"client_id\"],"
+						 "\"aud:api\":\"//orders\","
+						 "\"groups\":[\"users\"],"
+						 "\"groups:urn\":\"admins\""
+						 "}",
+						 &json),
+			 TRUE);
+
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim iss:https://idp.example.com"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim iss~^https://idp\\.example\\.com$"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim aud:api://orders"), AUTHZ_DENIED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim groups:urn:admins"), AUTHZ_DENIED);
+
+	/* the claims that the specs name still match on their own values */
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim iss:https://rogue.example.net"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim iss~^https://rogue\\."), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim aud:client_id"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim groups:users"), AUTHZ_GRANTED);
+	oidc_json_decref(json);
+
+	/* names that contain a separator keep working when no shorter claim reads the spec as its value, also
+	 * next to a claim that the spec only reaches into as an object */
+	json = NULL;
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{"
+						 "\"https://test.com/pay\":\"alot\","
+						 "\"urn:oid:1.3.6.1.4.1.5923.1.1.1.7\":[\"urn:x:staff\"],"
+						 "\"realm\":{\"roles\":[\"a\"]},"
+						 "\"realm.roles\":[\"b\"]"
+						 "}",
+						 &json),
+			 TRUE);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim https://test.com/pay:alot"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim urn:oid:1.3.6.1.4.1.5923.1.1.1.7:urn:x:staff"),
+			 AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim realm.roles:a"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim realm.roles:b"), AUTHZ_GRANTED);
+	ck_assert_int_eq(_legacy_authz(r, json, "Require claim realm.roles:c"), AUTHZ_DENIED);
+	oidc_json_decref(json);
+}
+END_TEST
+
 START_TEST(test_handle_legacy_remote_user) {
 	request_rec *r = oidc_test_request_get();
 	char *remote_user = NULL;
@@ -7398,6 +7454,7 @@ int main(void) {
 	TCase *legacy = tcase_create("legacy");
 	tcase_add_checked_fixture(legacy, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(legacy, test_handle_legacy_authz_worker);
+	tcase_add_test(legacy, test_handle_authz_claim_name_cannot_take_over_value);
 	tcase_add_test(legacy, test_handle_legacy_remote_user);
 	tcase_add_test(legacy, test_handle_legacy_is_auth_capable_request);
 	tcase_add_test(legacy, test_handle_legacy_open_redirect);

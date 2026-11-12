@@ -16,6 +16,12 @@
   as fit took about 20 seconds of CPU time to parse, which any unauthenticated client could have the server
   spend with a single request to the redirect URI (the authorization response and back-channel logout
   endpoints), and so tie up its workers with a handful of them
+- security: when "Require claim <name>:<value>" or "<name>~<regex>" names a claim that is present, only that claim
+  decides: a claim name may itself contain ":" or "~", and every claim whose name the expression starts with was
+  tried, so that a provider could satisfy "Require claim iss:https://op.example.com", which restricts access to one
+  of several providers in OIDCMetadataDir, with a claim named "iss:https" and the value "//op.example.com", and
+  likewise a requirement on "aud" or any other claim whose value it cannot set; claim names that contain a
+  separator, such as URLs, match as before
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled
