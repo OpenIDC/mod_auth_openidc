@@ -352,7 +352,7 @@ static apr_byte_t oidc_userinfo_create_signed_jwt(request_rec *r, oidc_cfg_t *cf
 		expiry = apr_time_now() + apr_time_from_sec(ttl);
 	}
 
-	oidc_debug(r, "caching signed JWT with ~ttl(%ld)", apr_time_sec(expiry - apr_time_now()));
+	oidc_debug(r, "caching signed JWT with ~ttl(%" APR_TIME_T_FMT ")", apr_time_sec(expiry - apr_time_now()));
 	oidc_cache_set_signed_jwt(r, key, *cser, expiry);
 
 end:

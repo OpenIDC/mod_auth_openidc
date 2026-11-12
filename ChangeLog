@@ -37,6 +37,9 @@
   an id_token was only accepted with "LogLevel auth_openidc:debug" (or more) set
 - release a key from a JWKs document that is replaced by a later one with the same "kid" when verifying a JWT
   without a "kid": it was leaked on each verification against a provider that repeats a "kid"
+- do not log the value of an "exp" or "expires_in" claim that is not greater than 0 when caching an OAuth 2.0
+  token validation result: formatting an arbitrary number from the token takes hundreds of digits; log the
+  lifetime of a cached signed JWT with the format of its type
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled

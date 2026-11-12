@@ -359,10 +359,12 @@ static apr_byte_t oidc_oauth_parse_and_cache_token_expiry(request_rec *r, oidc_c
 	/* Truncate to expire no later than the claim; clamp the double before converting it. */
 	double value = oidc_json_number_value(expiry);
 	if (!(value > 0)) {
+		/* NB: the value itself is not logged: it comes from the token or the introspection response and
+		 * formatting an arbitrary double takes hundreds of digits */
 		oidc_warn(r,
-			  "the \"%s\" expiry claim has a value <= 0 (%.0f); caching the result for the default %d "
-			  "seconds instead",
-			  expiry_claim_name, value, OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
+			  "the \"%s\" expiry claim has a value that is not greater than 0; caching the result for the "
+			  "default %d seconds instead",
+			  expiry_claim_name, OIDC_OAUTH_CACHE_DEFAULT_EXPIRY_SECONDS);
 		return TRUE;
 	}
 
