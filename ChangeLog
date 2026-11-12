@@ -22,6 +22,10 @@
   of several providers in OIDCMetadataDir, with a claim named "iss:https" and the value "//op.example.com", and
   likewise a requirement on "aud" or any other claim whose value it cannot set; claim names that contain a
   separator, such as URLs, match as before
+- security: pass the issuer that the id_token was validated for in the "iss" claim header and environment variable
+  (OIDC_CLAIM_iss): their names are case-insensitive and the userinfo claims are passed after those of the id_token,
+  so that an "iss" claim in the userinfo response, or a claim such as "ISS" in either, replaced it; with several
+  providers in OIDCMetadataDir one of them could so present its claims to the application as another's
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled

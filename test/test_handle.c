@@ -6456,6 +6456,54 @@ START_TEST(test_handle_existing_session_cookie_domain_mismatch) {
 }
 END_TEST
 
+/* the issuer claim that is passed to the application is the one the id_token was validated for: header and
+ * environment variable names are case-insensitive, so an "iss" in the userinfo response, or a claim such as
+ * "ISS" in either set, would otherwise replace it and name another provider as the source of the claims */
+START_TEST(test_handle_existing_session_issuer_claim_is_the_validated_one) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	oidc_session_t *session = NULL;
+	oidc_json_t *id_token_claims = NULL;
+	oidc_json_t *userinfo_claims = NULL;
+	oidc_session_load(r, &session);
+	r->args = "info=json";
+	r->method_number = M_GET;
+
+	ck_assert_ptr_null(oidc_cmd_cookie_domain_set(oidc_test_cmd_get(OIDCCookieDomain), NULL, "www.example.com"));
+	ck_assert_ptr_null(oidc_cmd_dir_pass_claims_as_set(oidc_test_cmd_get(OIDCPassClaimsAs), dir_cfg, "both", NULL));
+	/* set explicitly: the default is only there once the post-config hook has run */
+	ck_assert_ptr_null(oidc_cmd_dir_pass_userinfo_as_set(oidc_test_cmd_get(OIDCPassUserInfoAs), dir_cfg,
+							     apr_pstrdup(r->pool, "claims")));
+
+	existing_session_seed(r, session, TRUE);
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"iss\":\"https://idp.example.com\",\"sub\":\"alice\","
+						 "\"ISS\":\"https://other.example.org\",\"email\":\"a@example.com\"}",
+						 &id_token_claims),
+			 TRUE);
+	oidc_session_set_idtoken_claims(r, session, id_token_claims);
+	ck_assert_int_eq(oidc_json_decode_object(r,
+						 "{\"sub\":\"alice\",\"iss\":\"https://other.example.org\","
+						 "\"Iss\":\"https://another.example.org\",\"name\":\"Alice\"}",
+						 &userinfo_claims),
+			 TRUE);
+	oidc_session_set_userinfo_claims(r, session, userinfo_claims);
+
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), OK);
+
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_iss"), "https://idp.example.com");
+	ck_assert_str_eq(apr_table_get(r->subprocess_env, "OIDC_CLAIM_iss"), "https://idp.example.com");
+	/* the other claims of both sets are passed as before */
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_email"), "a@example.com");
+	ck_assert_str_eq(apr_table_get(r->headers_in, "OIDC_CLAIM_name"), "Alice");
+
+	oidc_json_decref(id_token_claims);
+	oidc_json_decref(userinfo_claims);
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_existing_session_refresh_error_actions) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -7627,6 +7675,7 @@ int main(void) {
 	tcase_add_test(dispatch, test_handle_dispatch_existing_session_passes_tokens);
 	tcase_add_test(dispatch, test_handle_dispatch_info_happy_sets_authn_header);
 	tcase_add_test(dispatch, test_handle_existing_session_cookie_domain_mismatch);
+	tcase_add_test(dispatch, test_handle_existing_session_issuer_claim_is_the_validated_one);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_error_actions);
 	tcase_add_test(dispatch, test_handle_existing_session_refresh_interval_error_actions);
 	tcase_add_test(dispatch, test_handle_existing_session_userinfo_error_actions);

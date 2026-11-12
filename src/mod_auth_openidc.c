@@ -643,6 +643,33 @@ void oidc_session_pass_tokens(request_rec *r, const oidc_cfg_t *cfg, oidc_sessio
 	oidc_log_session_expires(r, "session inactivity timeout", session->expiry);
 }
 
+/*
+ * The "iss" claim tells the application which provider vouches for the other claims, so it must be the issuer that
+ * the id_token was validated for. The name of a header or environment variable is case-insensitive and the claims
+ * are passed in the order in which they come, so that an "iss" claim in the userinfo response, or a claim such as
+ * "ISS" in either set, would replace it. If an issuer claim was passed, pass the validated one again.
+ */
+static void oidc_issuer_claim_pass(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
+				   oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
+	const char *prefix = oidc_cfg_claim_prefix_get(cfg);
+	const char *name = apr_pstrcat(r->pool, prefix, OIDC_CLAIM_ISS, NULL);
+	int passed = OIDC_APPINFO_PASS_NONE;
+	char *issuer = NULL;
+
+	if ((pass_in & OIDC_APPINFO_PASS_HEADERS) && (apr_table_get(r->headers_in, name) != NULL))
+		passed |= OIDC_APPINFO_PASS_HEADERS;
+	if ((pass_in & OIDC_APPINFO_PASS_ENVVARS) && (apr_table_get(r->subprocess_env, name) != NULL))
+		passed |= OIDC_APPINFO_PASS_ENVVARS;
+	if (passed == OIDC_APPINFO_PASS_NONE)
+		return;
+
+	/* as it is in the id_token, or else the issuer of the provider that the session was created with */
+	oidc_json_object_get_string(r->pool, oidc_session_get_idtoken_claims(r, session), OIDC_CLAIM_ISS, &issuer,
+				    oidc_session_get_issuer(r, session));
+	if (issuer != NULL)
+		oidc_util_appinfo_set(r, OIDC_CLAIM_ISS, issuer, prefix, (oidc_appinfo_pass_in_t)passed, encoding);
+}
+
 static void oidc_idtoken_pass_as(request_rec *r, const oidc_cfg_t *cfg, const oidc_session_t *session,
 				 oidc_appinfo_pass_in_t pass_in, oidc_appinfo_encoding_t encoding) {
 
@@ -768,6 +795,8 @@ static int oidc_handle_existing_session(request_rec *r, oidc_cfg_t *cfg, oidc_se
 	oidc_idtoken_pass_as(r, cfg, session, pass_in, encoding);
 	/* pass userinfo claims */
 	oidc_userinfo_pass_as(r, cfg, session, pass_in, encoding);
+	/* neither set of claims decides which issuer the application is told about */
+	oidc_issuer_claim_pass(r, cfg, session, pass_in, encoding);
 
 	/* return "user authenticated" status */
 	return OK;
