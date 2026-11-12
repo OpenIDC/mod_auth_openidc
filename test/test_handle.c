@@ -6191,6 +6191,34 @@ START_TEST(test_handle_dispatch_jwks) {
 }
 END_TEST
 
+/* a request for the info hook is handled as one, with the session checks that come with it, also when it
+ * names a request that is served without a session as well: the content handler serves "info" first */
+START_TEST(test_handle_dispatch_info_takes_precedence) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+	r->method_number = M_GET;
+
+	static const char *const args[] = {"jwks=1&info=json", "info=json&jwks=1", "dpop=x&info=json"};
+	for (size_t i = 0; i < sizeof(args) / sizeof(args[0]); i++) {
+		r->args = apr_pstrdup(r->pool, args[i]);
+		r->user = NULL;
+		/* no session: refused, instead of left to the content handler with an empty user */
+		ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_UNAUTHORIZED);
+		ck_assert_ptr_null(r->user);
+	}
+
+	/* a session that is not valid for this host is refused as it is for a plain info request */
+	session->remote_user = apr_pstrdup(r->pool, "alice");
+	oidc_session_set_cookie_domain(r, session, "other.example.com");
+	r->args = "jwks=1&info=json";
+	ck_assert_int_eq(oidc_handle_redirect_uri_request(r, c, session), HTTP_UNAUTHORIZED);
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 /*
  * the remaining dispatch-table entries whose handlers are thin wrappers around a sub-feature: each
  * is asserted to have been routed to, by the distinctive status its sub-handler returns when the
@@ -7740,6 +7768,7 @@ int main(void) {
 	TCase *dispatch = tcase_create("dispatch");
 	tcase_add_checked_fixture(dispatch, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(dispatch, test_handle_dispatch_jwks);
+	tcase_add_test(dispatch, test_handle_dispatch_info_takes_precedence);
 	tcase_add_test(dispatch, test_handle_dispatch_dpop);
 	tcase_add_test(dispatch, test_handle_dispatch_request_uri);
 	tcase_add_test(dispatch, test_handle_dispatch_remove_at_cache);

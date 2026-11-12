@@ -1159,7 +1159,9 @@ typedef struct oidc_redirect_uri_dispatch_t {
 
 /*
  * Ordered redirect_uri dispatch. Logout precedes POST authorization responses so back-channel
- * logout reaches its handler.
+ * logout reaches its handler. The info hook precedes the requests that are left to the content
+ * handler without a session (JWKs, DPoP), as it does there: a request that names one of those next
+ * to "info" would otherwise get the session info without the session having been checked here.
  */
 // clang-format off
 static const oidc_redirect_uri_dispatch_t _oidc_redirect_uri_dispatch[] = {
@@ -1167,6 +1169,7 @@ static const oidc_redirect_uri_dispatch_t _oidc_redirect_uri_dispatch[] = {
     {NULL, OIDC_REDIRECT_URI_REQUEST_LOGOUT, FALSE, oidc_logout, OM_REDIRECT_URI_REQUEST_LOGOUT, FALSE},
     {oidc_redirect_uri_match_response_post, NULL, FALSE, oidc_response_authorization_post, OM_REDIRECT_URI_AUTHN_RESPONSE_POST, TRUE},
     {oidc_is_discovery_response, NULL, FALSE, oidc_redirect_uri_handle_discovery_response, OM_REDIRECT_URI_DISCOVERY_RESPONSE, FALSE},
+    {NULL, OIDC_REDIRECT_URI_REQUEST_INFO, TRUE, oidc_redirect_uri_handle_info, OM_REDIRECT_URI_REQUEST_INFO, FALSE},
     {NULL, OIDC_REDIRECT_URI_REQUEST_JWKS, FALSE, oidc_redirect_uri_handle_in_content_handler, OM_REDIRECT_URI_REQUEST_JWKS, FALSE},
     {NULL, OIDC_REDIRECT_URI_REQUEST_SESSION, FALSE, oidc_session_management, OM_REDIRECT_URI_REQUEST_SESSION, FALSE},
     {NULL, OIDC_REDIRECT_URI_REQUEST_REFRESH, FALSE, oidc_refresh_token_request, OM_REDIRECT_URI_REQUEST_REFRESH, FALSE},
@@ -1174,7 +1177,6 @@ static const oidc_redirect_uri_dispatch_t _oidc_redirect_uri_dispatch[] = {
     {NULL, OIDC_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, FALSE, oidc_redirect_uri_handle_remove_at_cache, OM_REDIRECT_URI_REQUEST_REMOVE_AT_CACHE, FALSE},
     {NULL, OIDC_REDIRECT_URI_REQUEST_REVOKE_SESSION, FALSE, oidc_redirect_uri_handle_revoke_session, OM_REDIRECT_URI_REQUEST_REVOKE_SESSION, FALSE},
     {NULL, OIDC_REDIRECT_URI_REQUEST_DPOP, FALSE, oidc_redirect_uri_handle_in_content_handler, OM_REDIRECT_URI_REQUEST_DPOP, FALSE},
-    {NULL, OIDC_REDIRECT_URI_REQUEST_INFO, TRUE, oidc_redirect_uri_handle_info, OM_REDIRECT_URI_REQUEST_INFO, FALSE},
     {oidc_redirect_uri_match_bare, NULL, FALSE, oidc_redirect_uri_handle_implicit, OM_REDIRECT_URI_AUTHN_RESPONSE_IMPLICIT, FALSE},
 };
 // clang-format on

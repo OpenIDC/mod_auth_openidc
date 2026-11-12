@@ -40,6 +40,9 @@
 - do not log the value of an "exp" or "expires_in" claim that is not greater than 0 when caching an OAuth 2.0
   token validation result: formatting an arbitrary number from the token takes hundreds of digits; log the
   lifetime of a cached signed JWT with the format of its type
+- handle a request to the redirect URI that names the info hook next to a request that is served without a session
+  ("jwks", "dpop") as an info request: it was passed on without the checks on the session, i.e. its cookie domain,
+  its maximum duration and the Require directives, and then served the session info
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled
