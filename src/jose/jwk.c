@@ -377,9 +377,11 @@ apr_byte_t oidc_is_jwks(const json_t *json) {
 }
 
 /*
- * produce the serialized JSON  JWK representation from an oidc_jwk_t structure
+ * produce the serialized JSON JWK representation from an oidc_jwk_t structure, with or without the private key
+ * material that it may hold
  */
-apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *oidc_err) {
+static apr_byte_t oidc_jwk_to_json_impl(apr_pool_t *pool, const oidc_jwk_t *jwk, apr_byte_t with_private, char **s_json,
+					oidc_jose_error_t *oidc_err) {
 	apr_byte_t rv = FALSE;
 	char *s_cjose = NULL;
 	cjose_err err;
@@ -392,7 +394,7 @@ apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_js
 		goto end;
 
 	// get the JWK string representation from cjose
-	s_cjose = cjose_jwk_to_json(jwk->cjose_jwk, TRUE, &err);
+	s_cjose = cjose_jwk_to_json(jwk->cjose_jwk, with_private ? true : false, &err);
 	if (s_cjose == NULL) {
 		oidc_jose_error(oidc_err, "oidc_jwk_to_json: cjose_jwk_to_json failed: %s", oidc_cjose_e2s(pool, err));
 		goto end;
@@ -440,6 +442,21 @@ end:
 		cjose_get_dealloc()(s_cjose);
 
 	return rv;
+}
+
+/*
+ * convert a JWK struct to a JSON string, including the private key material if the key holds any
+ */
+apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err) {
+	return oidc_jwk_to_json_impl(pool, jwk, TRUE, s_json, err);
+}
+
+/*
+ * convert a JWK struct to the JSON string that represents it in a published JWK Set: as oidc_jwk_to_json, i.e.
+ * with "use", "alg" and the certificate members, but never with private key material, whatever the key holds
+ */
+apr_byte_t oidc_jwk_to_jwks_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err) {
+	return oidc_jwk_to_json_impl(pool, jwk, FALSE, s_json, err);
 }
 
 /*

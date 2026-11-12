@@ -219,8 +219,10 @@ apr_byte_t oidc_jwks_parse_json(apr_pool_t *pool, const oidc_json_t *json, apr_a
 apr_byte_t oidc_is_jwk(const oidc_json_t *json);
 /* test if JSON object looks like JWKS */
 apr_byte_t oidc_is_jwks(const oidc_json_t *json);
-/* convert a JWK struct to a JSON string */
+/* convert a JWK struct to a JSON string, including the private key material if the key holds any */
 apr_byte_t oidc_jwk_to_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
+/* convert a JWK struct to its JSON string in a published JWK Set: as oidc_jwk_to_json, without private key material */
+apr_byte_t oidc_jwk_to_jwks_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
 /* convert the PUBLIC part of a JWK struct to a JSON string (excludes private key material) */
 apr_byte_t oidc_jwk_to_public_json(apr_pool_t *pool, const oidc_jwk_t *jwk, char **s_json, oidc_jose_error_t *err);
 /* derive the default JWS signing algorithm for a key (RS256 for RSA; ES256/384/512 per EC curve); NULL if unsupported

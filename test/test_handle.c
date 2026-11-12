@@ -4776,6 +4776,44 @@ START_TEST(test_handle_jwks_request_with_public_key) {
 }
 END_TEST
 
+/* the JWKs endpoint publishes public key material only, also for a key that holds a private part */
+START_TEST(test_handle_jwks_request_never_publishes_private_key) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_jose_error_t err;
+	oidc_jwk_t *jwk = NULL;
+	oidc_json_t *json = NULL;
+
+	/* OIDCPublicKeyFiles does not accept a private key, so put one in the list of keys directly */
+	ck_assert_int_eq(oidc_jwk_parse_pem_private_key(r->pool, "rsa-priv",
+							apr_psprintf(r->pool, "%s/private.pem", oidc_test_srcdir()),
+							&jwk, &err),
+			 TRUE);
+	APR_ARRAY_PUSH(c->public_keys, const oidc_jwk_t *) = jwk;
+
+	ck_assert_int_eq(oidc_jwks_request(r, c), OK);
+	ck_assert_int_eq(oidc_json_decode_object(r, oidc_request_state_get(r, "sent_body"), &json), TRUE);
+	const oidc_json_t *key = oidc_json_array_get(oidc_json_object_get(json, "keys"), 0);
+	ck_assert_ptr_nonnull(key);
+
+	/* the public members are there */
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(key, "kty")), "RSA");
+	ck_assert_str_eq(oidc_json_string_value(oidc_json_object_get(key, "kid")), "rsa-priv");
+	ck_assert_ptr_nonnull(oidc_json_object_get(key, "n"));
+	ck_assert_ptr_nonnull(oidc_json_object_get(key, "e"));
+
+	/* the private exponent and the CRT parameters are not */
+	static const char *const priv[] = {"d", "p", "q", "dp", "dq", "qi"};
+	for (size_t i = 0; i < sizeof(priv) / sizeof(priv[0]); i++)
+		ck_assert_msg(oidc_json_object_get(key, priv[i]) == NULL, "private member \"%s\" was published",
+			      priv[i]);
+
+	oidc_json_decref(json);
+	apr_array_pop(c->public_keys);
+	oidc_jwk_destroy(jwk);
+}
+END_TEST
+
 START_TEST(test_handle_content_handler_jwks) {
 	request_rec *r = oidc_test_request_get();
 
@@ -7416,6 +7454,7 @@ int main(void) {
 	tcase_add_checked_fixture(content, oidc_test_setup, oidc_test_teardown);
 	tcase_add_test(content, test_handle_jwks_request_empty_keys);
 	tcase_add_test(content, test_handle_jwks_request_with_public_key);
+	tcase_add_test(content, test_handle_jwks_request_never_publishes_private_key);
 	tcase_add_test(content, test_handle_content_handler_jwks);
 	tcase_add_test(content, test_handle_content_handler_unknown_redirect_uri_request);
 	tcase_add_test(content, test_handle_content_handler_non_redirect_no_state);

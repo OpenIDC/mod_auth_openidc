@@ -56,10 +56,12 @@ int oidc_jwks_request(request_rec *r, const oidc_cfg_t *c) {
 	for (int i = 0; keys && i < keys->nelts; i++) {
 		jwk = APR_ARRAY_IDX(keys, i, oidc_jwk_t *);
 
-		if (oidc_jwk_to_json(r->pool, jwk, &s_json, &err) == TRUE) {
+		/* public key material only: OIDCPublicKeyFiles reads public keys and certificates, but what is
+		 * published must not depend on that */
+		if (oidc_jwk_to_jwks_json(r->pool, jwk, &s_json, &err) == TRUE) {
 			APR_ARRAY_PUSH(elems, const char *) = apr_psprintf(r->pool, " %s ", s_json);
 		} else {
-			oidc_error(r, "could not convert RSA/EC JWK to JSON using oidc_jwk_to_json: %s",
+			oidc_error(r, "could not convert RSA/EC JWK to JSON using oidc_jwk_to_jwks_json: %s",
 				   oidc_jose_e2s(r->pool, err));
 		}
 	}

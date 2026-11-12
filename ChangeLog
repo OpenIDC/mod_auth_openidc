@@ -9,6 +9,9 @@
   supplies (CVE-2023-37464), so that a modified state or session cookie with a 1-byte tag is accepted in 1 out of
   256 attempts; fixed versions are distributed under an unchanged version number, so this no longer depends on
   the cjose library that the module happens to be linked with
+- harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
+  whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
+  published, but that no longer depends on how the list of keys is filled
 
 11/09/2026
 - security: scrub the OIDCAuthNHeader, OIDCPassUserInfoAs and (with an empty OIDCClaimPrefix)
