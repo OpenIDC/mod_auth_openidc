@@ -61,11 +61,16 @@ static void oidc_proto_jwks_key_include_any(request_rec *r, oidc_jwk_t *jwk, con
 	oidc_jose_error_t err;
 	oidc_jwk_to_json(r->pool, jwk, &jwk_json, &err);
 	oidc_debug(r, "no kid/x5t to match, include matching key type: %s", jwk_json);
-	if (jwk->kid != NULL)
-		apr_hash_set(result, jwk->kid, APR_HASH_KEY_STRING, jwk);
-	else
-		// can do this because we never remove anything from the list
-		apr_hash_set(result, apr_psprintf(r->pool, "%d", apr_hash_count(result)), APR_HASH_KEY_STRING, jwk);
+	// a key without a "kid" gets its position as the name: nothing is ever removed from the list
+	const char *name = (jwk->kid != NULL) ? jwk->kid : apr_psprintf(r->pool, "%d", apr_hash_count(result));
+	// a key that is already there under that name, i.e. a "kid" that the provider repeats or that equals the
+	// position of an earlier key without one, would be dropped from the list without being released
+	oidc_jwk_t *replaced = apr_hash_get(result, name, APR_HASH_KEY_STRING);
+	if (replaced != NULL) {
+		apr_hash_set(result, name, APR_HASH_KEY_STRING, NULL);
+		oidc_jwk_destroy(replaced);
+	}
+	apr_hash_set(result, name, APR_HASH_KEY_STRING, jwk);
 }
 
 /*

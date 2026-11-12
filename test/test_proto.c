@@ -4568,6 +4568,42 @@ START_TEST(test_proto_jwks_uri_keys_no_kid_no_kid_field) {
 }
 END_TEST
 
+/* a "kid" that the provider repeats, or that equals the position that an earlier key without a "kid" was listed
+ * under, replaces that key in the list: the key that is replaced is released, which valgrind checks */
+START_TEST(test_proto_jwks_uri_keys_repeated_kid) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+
+	const char *jwks = "{\"keys\":["
+			   "{\"kty\":\"oct\",\"kid\":\"dup\",\"k\":\"AAECAwQFBgcICQoLDA0ODw\"},"
+			   "{\"kty\":\"oct\",\"kid\":\"dup\",\"k\":\"EBESExQVFhcYGRobHB0eHw\"},"
+			   "{\"kty\":\"oct\",\"k\":\"ICEiIyQlJicoKSorLC0uLw\"},"
+			   "{\"kty\":\"oct\",\"kid\":\"1\",\"k\":\"MDEyMzQ1Njc4OTo7PD0-Pw\"}"
+			   "]}";
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = jwks};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+
+	oidc_jwks_uri_t uri = {0};
+	uri.uri = oidc_test_http_server_url(srv, r->pool);
+	uri.refresh_interval = 60;
+
+	/* no "kid" in the JWT: every key of a matching type is a candidate */
+	oidc_jwt_t *jwt = e2e_make_jwt_for_kid(r->pool, "HS256", NULL);
+	apr_hash_t *keys = apr_hash_make(r->pool);
+	apr_byte_t force_refresh = TRUE;
+	ck_assert_int_eq(oidc_proto_jwks_uri_keys(r, c, jwt, &uri, 0, keys, &force_refresh), TRUE);
+	ck_assert_int_eq(apr_hash_count(keys), 2);
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "dup", APR_HASH_KEY_STRING));
+	ck_assert_ptr_nonnull(apr_hash_get(keys, "1", APR_HASH_KEY_STRING));
+
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	oidc_jwt_destroy(jwt);
+	oidc_jwk_list_destroy_hash(keys);
+}
+END_TEST
+
 /* a JWKS entry that fails to parse (no recognizable "kty") must be skipped rather than aborting
  * the whole lookup; the well-formed sibling entry is still found */
 START_TEST(test_proto_jwks_uri_keys_malformed_entry_skipped) {
@@ -5198,6 +5234,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_jwt_verify_no_kid_rollover_refresh);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_http_failure);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_no_kid_no_kid_field);
+	tcase_add_test(e2e, test_proto_jwks_uri_keys_repeated_kid);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_malformed_entry_skipped);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_kty_mismatch);
 	tcase_add_test(e2e, test_proto_jwks_uri_keys_x5t_match);

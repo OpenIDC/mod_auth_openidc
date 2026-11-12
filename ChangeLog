@@ -35,6 +35,8 @@
 - fix decrypting an id_token that is encrypted with a key derived from the client secret for A128KW or A192KW: the
   "alg" that sets the size of that key was read from the token as an argument of a debug log call, so that such
   an id_token was only accepted with "LogLevel auth_openidc:debug" (or more) set
+- release a key from a JWKs document that is replaced by a later one with the same "kid" when verifying a JWT
+  without a "kid": it was leaked on each verification against a provider that repeats a "kid"
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled
