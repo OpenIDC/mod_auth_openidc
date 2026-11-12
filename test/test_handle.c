@@ -5536,6 +5536,33 @@ START_TEST(test_handle_logout_backchannel_unknown_issuer) {
 }
 END_TEST
 
+/* a logout token without an "iss" claim, which anyone can send since the provider is looked up before the
+ * signature is verified, is refused: with OIDCMetadataDir the lookup dereferenced the missing issuer */
+START_TEST(test_handle_logout_backchannel_no_issuer_metadata_dir) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_session_t *session = NULL;
+	oidc_session_load(r, &session);
+
+	c->metadata_dir = apr_pstrdup(r->pool, "/no-such-metadata-dir");
+
+	/* {"alg":"HS256"} . {} . <any signature>, and one where "iss" is not a string */
+	static const char *const tokens[] = {"eyJhbGciOiJIUzI1NiJ9.e30.AA", "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOjEyM30.AA"};
+	for (size_t i = 0; i < sizeof(tokens) / sizeof(tokens[0]); i++) {
+		char *body = apr_psprintf(r->pool, "logout_token=%s", tokens[i]);
+		e2e_post_body(r, body);
+		r->args = apr_pstrcat(r->pool, "logout=backchannel&", body, NULL);
+		r->remaining = (apr_size_t)_oidc_strlen(r->args);
+		ck_assert_int_eq(oidc_logout(r, c, session), HTTP_BAD_REQUEST);
+	}
+
+	/* the same lookup by any other caller without an issuer finds no provider */
+	ck_assert_ptr_null(oidc_get_provider_for_issuer(r, c, NULL, FALSE));
+
+	oidc_session_free(r, session);
+}
+END_TEST
+
 START_TEST(test_handle_logout_backchannel_alg_mismatch) {
 	request_rec *r = oidc_test_request_get();
 	oidc_cfg_t *c = oidc_test_cfg_get();
@@ -7436,6 +7463,7 @@ int main(void) {
 	tcase_add_test(logout, test_handle_logout_backchannel_get_method_rejected);
 	tcase_add_test(logout, test_handle_logout_backchannel_unsigned_rejected);
 	tcase_add_test(logout, test_handle_logout_backchannel_unknown_issuer);
+	tcase_add_test(logout, test_handle_logout_backchannel_no_issuer_metadata_dir);
 	tcase_add_test(logout, test_handle_logout_backchannel_alg_mismatch);
 	tcase_add_test(logout, test_handle_logout_backchannel_bad_signature);
 	tcase_add_test(logout, test_handle_logout_backchannel_no_sub_no_sid);

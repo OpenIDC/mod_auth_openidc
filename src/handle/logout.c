@@ -377,6 +377,11 @@ static int oidc_logout_backchannel_parse_jwt(request_rec *r, oidc_cfg_t *cfg, co
 
 static int oidc_logout_backchannel_get_provider(request_rec *r, oidc_cfg_t *cfg, oidc_jwt_t *jwt,
 						oidc_provider_t **provider) {
+	/* the token has only been parsed at this point, not verified: anyone can send one without an issuer */
+	if (jwt->payload.iss == NULL) {
+		oidc_error(r, "logout token does not contain an \"%s\" claim", OIDC_CLAIM_ISS);
+		return HTTP_BAD_REQUEST;
+	}
 	*provider = oidc_get_provider_for_issuer(r, cfg, jwt->payload.iss, FALSE);
 	if (*provider == NULL) {
 		oidc_error(r, "no provider found for issuer: %s", jwt->payload.iss);

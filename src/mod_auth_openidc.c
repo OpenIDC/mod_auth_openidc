@@ -322,9 +322,11 @@ oidc_provider_t *oidc_get_provider_for_issuer(request_rec *r, oidc_cfg_t *c, con
 	if (oidc_provider_static_config(r, c, &provider) == FALSE)
 		return NULL;
 
-	/* if a metadata directory was configured, try and get the provider settings from there */
+	/* if a metadata directory was configured, try and get the provider settings from there; there
+	 * are none for a missing issuer, whose metadata file name cannot be derived */
 	if ((oidc_cfg_metadata_dir_get(c) != NULL) &&
-	    ((oidc_metadata_get(r, c, issuer, &provider, allow_discovery) == FALSE) || (provider == NULL))) {
+	    ((issuer == NULL) || (oidc_metadata_get(r, c, issuer, &provider, allow_discovery) == FALSE) ||
+	     (provider == NULL))) {
 		/* don't know nothing about this OP/issuer */
 		oidc_error(r, "no provider metadata found for issuer \"%s\"", issuer);
 		return NULL;
