@@ -145,6 +145,47 @@ static uint8_t *oidc_jwe_decrypt_impl(apr_pool_t *pool, cjose_jwe_t *jwe, apr_ha
 	return oidc_jwe_decrypt_any(pool, jwe, keys, alg, content_len, err);
 }
 
+/* the content encryption algorithms that use AES GCM end in this */
+#define OIDC_JWE_ENC_GCM_SUFFIX "GCM"
+/* the size in bytes of the AES GCM Authentication Tag, RFC 7518 section 5.3 */
+#define OIDC_JWE_GCM_TAG_LEN 16
+
+/*
+ * check the size of the Authentication Tag of an AES GCM encrypted JWE: RFC 7518 fixes it at 128 bits, but
+ * cjose versions before 0.6.2.2 verify only as many bytes as the JWE carries (CVE-2023-37464), so that a
+ * modified JWE with a tag truncated to a single byte is accepted in 1 out of 256 attempts; that would
+ * include the state and session cookies, which this module encrypts with A256GCM; distributions ship
+ * fixed versions under an unchanged version number, so do not rely on the version but check it here
+ */
+static apr_byte_t oidc_jwe_gcm_tag_is_valid(cjose_jwe_t *jwe, const char *compact, oidc_jose_error_t *err) {
+	cjose_err cjose_err;
+	uint8_t *tag = NULL;
+	size_t tag_len = 0;
+	const char *enc = cjose_header_get(cjose_jwe_get_protected(jwe), CJOSE_HDR_ENC, &cjose_err);
+	const size_t enc_len = _oidc_strlen(enc);
+	const size_t suffix_len = _oidc_strlen(OIDC_JWE_ENC_GCM_SUFFIX);
+
+	if ((enc_len < suffix_len) || (_oidc_strcmp(enc + enc_len - suffix_len, OIDC_JWE_ENC_GCM_SUFFIX) != 0))
+		return TRUE;
+
+	/* the Authentication Tag is the last part of the compact serialization */
+	const char *s_tag = strrchr(compact, OIDC_CHAR_DOT);
+	if ((s_tag == NULL) ||
+	    (cjose_base64url_decode(s_tag + 1, _oidc_strlen(s_tag + 1), &tag, &tag_len, &cjose_err) == false)) {
+		oidc_jose_error(err, "could not decode the Authentication Tag of the encrypted JWT");
+		return FALSE;
+	}
+	cjose_get_dealloc()(tag);
+
+	if (tag_len != OIDC_JWE_GCM_TAG_LEN) {
+		oidc_jose_error(err, "the Authentication Tag of the %s encrypted JWT is %d bytes instead of %d", enc,
+				(int)tag_len, OIDC_JWE_GCM_TAG_LEN);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 /*
  * decrypt a JSON Web Token
  */
@@ -152,6 +193,10 @@ apr_byte_t oidc_jwe_decrypt(apr_pool_t *pool, const char *input_json, apr_hash_t
 			    int *plaintext_len, oidc_jose_error_t *err, apr_byte_t import_must_succeed) {
 	cjose_err cjose_err;
 	cjose_jwe_t *jwe = cjose_jwe_import(input_json, _oidc_strlen(input_json), &cjose_err);
+	if ((jwe != NULL) && (oidc_jwe_gcm_tag_is_valid(jwe, input_json, err) == FALSE)) {
+		cjose_jwe_release(jwe);
+		return FALSE;
+	}
 	if (jwe != NULL) {
 		size_t content_len = 0;
 		uint8_t *decrypted = oidc_jwe_decrypt_impl(pool, jwe, keys, &content_len, err);

@@ -829,6 +829,61 @@ START_TEST(test_jwe_decrypt_no_keys_configured) {
 }
 END_TEST
 
+/* an AES GCM encrypted JWE must carry the full 128-bit Authentication Tag: cjose versions before 0.6.2.2 verify
+ * only as many bytes as the JWE supplies (CVE-2023-37464), so a truncated tag is refused here, before cjose */
+START_TEST(test_jwe_decrypt_refuses_truncated_gcm_tag) {
+	apr_pool_t *pool = oidc_test_pool_get();
+	oidc_jose_error_t err;
+	const unsigned char key[] = "0123456789abcdef0123456789abcdef";
+	const char *payload = "{\"sub\":\"joe\"}";
+	char *serialized = NULL;
+	char *plaintext = NULL;
+	int plaintext_len = 0;
+
+	/* the way the state cookie, the session cookie and the cache values are encrypted */
+	oidc_jwk_t *sym = oidc_jwk_create_symmetric_key(pool, NULL, key, sizeof(key) - 1, FALSE, &err);
+	ck_assert_ptr_nonnull(sym);
+	oidc_jwt_t *jwe = oidc_jwt_new(pool, 1, 0);
+	jwe->header.alg = apr_pstrdup(pool, CJOSE_HDR_ALG_DIR);
+	jwe->header.enc = apr_pstrdup(pool, CJOSE_HDR_ENC_A256GCM);
+	ck_assert_int_eq(oidc_jwt_encrypt(pool, jwe, sym, payload, (int)_oidc_strlen(payload), &serialized, &err),
+			 TRUE);
+	oidc_jwt_destroy(jwe);
+
+	apr_hash_t *keys = apr_hash_make(pool);
+	apr_hash_set(keys, "1", APR_HASH_KEY_STRING, sym);
+
+	/* the 16 bytes tag is 22 base64url characters and decrypts */
+	const char *tag = strrchr(serialized, '.');
+	ck_assert_ptr_nonnull(tag);
+	ck_assert_int_eq((int)_oidc_strlen(tag + 1), 22);
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, serialized, keys, &plaintext, &plaintext_len, &err, TRUE), TRUE);
+	ck_assert_str_eq(plaintext, payload);
+
+	/* cut the tag down to 1 byte (2 characters) and to 15 bytes (20 characters) */
+	static const int keep[] = {2, 20};
+	for (size_t i = 0; i < sizeof(keep) / sizeof(keep[0]); i++) {
+		char *truncated = apr_pstrndup(pool, serialized, (apr_size_t)(tag + 1 - serialized) + keep[i]);
+		plaintext = NULL;
+		_oidc_memset(&err, 0, sizeof(err));
+		ck_assert_int_eq(oidc_jwe_decrypt(pool, truncated, keys, &plaintext, &plaintext_len, &err, TRUE),
+				 FALSE);
+		ck_assert_ptr_null(plaintext);
+		/* refused by this module's own check, whatever the cjose version in use does */
+		ck_assert_msg(_oidc_strstr(err.text, "Authentication Tag") != NULL, "keep=%d: %s", keep[i], err.text);
+	}
+
+	/* and without any tag at all */
+	plaintext = NULL;
+	ck_assert_int_eq(oidc_jwe_decrypt(pool, apr_pstrndup(pool, serialized, (apr_size_t)(tag + 1 - serialized)),
+					  keys, &plaintext, &plaintext_len, &err, TRUE),
+			 FALSE);
+	ck_assert_ptr_null(plaintext);
+
+	oidc_jwk_destroy(sym);
+}
+END_TEST
+
 START_TEST(test_jose_hash_bytes) {
 	apr_pool_t *pool = oidc_test_pool_get();
 	unsigned char *out = NULL;
@@ -1852,6 +1907,7 @@ int main(void) {
 	tcase_add_test(core, test_jwe_decrypt_kty_mismatch);
 	tcase_add_test(core, test_jwe_decrypt_use_mismatch);
 	tcase_add_test(core, test_jwe_decrypt_no_keys_configured);
+	tcase_add_test(core, test_jwe_decrypt_refuses_truncated_gcm_tag);
 	tcase_add_test(core, test_jose_hash_bytes);
 	tcase_add_test(core, test_jwk_json_parse_and_jwks);
 	tcase_add_test(core, test_jwk_list_destroy);

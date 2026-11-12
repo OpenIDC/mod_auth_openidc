@@ -4,6 +4,11 @@
   the rotation was found again after a logout (also a back-channel logout or a revoke_session request) and an access
   token validation result after a remove_at_cache request, until the old entry expired; the file cache no longer logs
   an error when asked to delete an entry that does not exist
+- security: refuse an AES GCM encrypted JWT whose Authentication Tag is not the 128 bits that RFC 7518 requires,
+  before handing it to cjose: versions of cjose before 0.6.2.2 verify only as many bytes of the tag as the JWT
+  supplies (CVE-2023-37464), so that a modified state or session cookie with a 1-byte tag is accepted in 1 out of
+  256 attempts; fixed versions are distributed under an unchanged version number, so this no longer depends on
+  the cjose library that the module happens to be linked with
 
 11/09/2026
 - security: scrub the OIDCAuthNHeader, OIDCPassUserInfoAs and (with an empty OIDCClaimPrefix)
