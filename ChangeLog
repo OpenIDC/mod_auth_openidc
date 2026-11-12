@@ -26,6 +26,9 @@
   (OIDC_CLAIM_iss): their names are case-insensitive and the userinfo claims are passed after those of the id_token,
   so that an "iss" claim in the userinfo response, or a claim such as "ISS" in either, replaced it; with several
   providers in OIDCMetadataDir one of them could so present its claims to the application as another's
+- security: with OIDCStripCookies, strip the cookies in memory linear in their number: a request with 40,000
+  cookies, i.e. 120KB of Cookie header lines, made the server process allocate 3.5GB, so that an authenticated
+  client could have it killed for running out of memory
 - harden the JWKs endpoint on the redirect URI: serialize the keys it publishes without private key material,
   whatever the key holds; OIDCPublicKeyFiles only reads public keys and certificates, so nothing private was
   published, but that no longer depends on how the list of keys is filled

@@ -206,8 +206,10 @@ void oidc_strip_cookies(request_rec *r) {
 	oidc_debug(r, "looking for the following cookies to strip from cookie header: %s",
 		   apr_array_pstrcat(r->pool, strip, OIDC_CHAR_COMMA));
 
+	/* the cookies that are kept, joined once at the end: appending each one to the result so far copies all of
+	 * it again for every cookie, i.e. takes memory quadratic in their number, gigabytes for a few header lines */
+	apr_array_header_t *kept = apr_array_make(r->pool, 8, sizeof(const char *));
 	char *ctx = NULL;
-	char *result = NULL;
 	char *cookie = apr_strtok(cookies, OIDC_STR_SEMI_COLON, &ctx);
 	while (cookie != NULL) {
 		const char *matched = NULL;
@@ -221,15 +223,16 @@ void oidc_strip_cookies(request_rec *r) {
 			if (matched != NULL) {
 				oidc_debug(r, "stripping: %s", matched);
 			} else {
-				result = result ? apr_psprintf(r->pool, "%s%s %s", result, OIDC_STR_SEMI_COLON, cookie)
-						: cookie;
+				if (kept->nelts > 0)
+					APR_ARRAY_PUSH(kept, const char *) = OIDC_STR_SEMI_COLON OIDC_STR_SPACE;
+				APR_ARRAY_PUSH(kept, const char *) = cookie;
 			}
 		}
 
 		cookie = apr_strtok(NULL, OIDC_STR_SEMI_COLON, &ctx);
 	}
 
-	oidc_http_hdr_in_cookie_set(r, result);
+	oidc_http_hdr_in_cookie_set(r, (kept->nelts > 0) ? apr_array_pstrcat(r->pool, kept, 0) : NULL);
 }
 
 /*

@@ -3593,6 +3593,49 @@ START_TEST(test_handle_authz_claim_name_cannot_take_over_value) {
 }
 END_TEST
 
+/* stripping cookies from a Cookie header with very many of them takes time and memory linear in their number:
+ * appending each kept cookie to the result so far took 3.5GB and 20 seconds for 40,000 cookies, i.e. for the
+ * 120KB of Cookie header lines that an authenticated client can send */
+START_TEST(test_handle_mod_strip_cookies_many) {
+	request_rec *r = oidc_test_request_get();
+	oidc_dir_cfg_t *dir_cfg = ap_get_module_config(r->per_dir_config, &auth_openidc_module);
+	const int n = 30000;
+
+	ck_assert_ptr_null(oidc_cmd_dir_strip_cookies_set(oidc_test_cmd_get(OIDCStripCookies), dir_cfg, "strip"));
+
+	/* "strip=1;a;a; ... ;a": the first one is stripped, the others are kept */
+	char *cookies = apr_palloc(r->pool, 7 + (apr_size_t)n * 2 + 1);
+	char *expected = apr_palloc(r->pool, (apr_size_t)n * 3 + 1);
+	char *p = cookies + apr_snprintf(cookies, 8, "strip=1");
+	char *q = expected;
+	for (int i = 0; i < n; i++) {
+		*p++ = ';';
+		*p++ = 'a';
+		if (i > 0) {
+			*q++ = ';';
+			*q++ = ' ';
+		}
+		*q++ = 'a';
+	}
+	*p = '\0';
+	*q = '\0';
+	apr_table_setn(r->headers_in, "Cookie", cookies);
+
+	apr_time_t start = apr_time_now();
+	oidc_strip_cookies(r);
+	apr_time_t elapsed = apr_time_now() - start;
+
+	ck_assert_str_eq(apr_table_get(r->headers_in, "Cookie"), expected);
+	ck_assert_msg(elapsed < apr_time_from_sec(5), "stripping %d cookies took %d seconds", n,
+		      (int)apr_time_sec(elapsed));
+
+	/* nothing is left when every cookie is stripped */
+	apr_table_setn(r->headers_in, "Cookie", "strip=1; strip=2");
+	oidc_strip_cookies(r);
+	ck_assert_ptr_null(apr_table_get(r->headers_in, "Cookie"));
+}
+END_TEST
+
 START_TEST(test_handle_legacy_remote_user) {
 	request_rec *r = oidc_test_request_get();
 	char *remote_user = NULL;
@@ -7515,6 +7558,7 @@ int main(void) {
 	tcase_add_test(mod_main, test_handle_mod_scrub_headers_custom_prefix);
 	tcase_add_test(mod_main, test_handle_mod_scrub_headers_name_variants);
 	tcase_add_test(mod_main, test_handle_mod_strip_cookies_configured);
+	tcase_add_test(mod_main, test_handle_mod_strip_cookies_many);
 	tcase_add_test(mod_main, test_handle_mod_provider_static_config_no_metadata_url);
 	tcase_add_test(mod_main, test_handle_mod_provider_static_config_metadata_url_cached);
 	tcase_add_test(mod_main, test_handle_mod_provider_static_config_metadata_url_fetch);
