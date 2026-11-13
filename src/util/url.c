@@ -313,7 +313,7 @@ apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param) {
 /*
  * get a query parameter: the URL-decoded value of the last "<name>=<value>" in the query string
  */
-apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value) {
+apr_byte_t oidc_util_url_parameter_get(request_rec *r, const char *name, char **value) {
 	const char *p = NULL;
 	const char *match = NULL;
 	size_t match_len = 0;

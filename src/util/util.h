@@ -118,7 +118,7 @@ char *oidc_util_rand_hex_str(request_rec *r, apr_pool_t *pool, int len);
 // url.c
 apr_byte_t oidc_util_url_cur_matches(request_rec *r, const char *url);
 apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param);
-apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value);
+apr_byte_t oidc_util_url_parameter_get(request_rec *r, const char *name, char **value);
 
 // util.c
 char *oidc_util_hex_encode(apr_pool_t *pool, const unsigned char *bytes, unsigned int len);
