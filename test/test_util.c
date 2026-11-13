@@ -1761,6 +1761,30 @@ START_TEST(test_util_url_parameter_helpers) {
 	ck_assert_msg(oidc_util_url_has_parameter(r, "foo") == FALSE,
 		      "all-separator args must not match has_parameter");
 
+	/* the in-place scan must keep the semantics of the tokenizer it replaced: the last occurrence
+	 * wins, separators may lead, trail and repeat, the value keeps any "=" and is URL-decoded, an
+	 * empty value is still found, and a name is never matched across a "&" */
+	r->args = "&&foo=one&&foobar=x&foo=a%3Db+c=d&&";
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foo", &value) == TRUE, "repeated foo lookup must succeed");
+	ck_assert_str_eq(value, "a=b c=d");
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "foobar", &value) == TRUE, "foobar lookup must succeed");
+	ck_assert_str_eq(value, "x");
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "fo", &value) == FALSE, "a prefix of a name must not match");
+	ck_assert_ptr_null(value);
+	r->args = "a&b=1&empty=";
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "a&b", &value) == FALSE, "a name must not match across a \"&\"");
+	ck_assert_ptr_null(value);
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "empty", &value) == TRUE, "an empty value must be found");
+	ck_assert_str_eq(value, "");
+	value = NULL;
+	ck_assert_msg(oidc_util_url_parameter_get(r, "a", &value) == FALSE, "a name without \"=\" has no value");
+	ck_assert_ptr_null(value);
+
 	/* request scheme is "https" by default in oidc_test_request_init */
 	ck_assert_msg(oidc_util_url_cur_is_secure(r, c) == TRUE, "default scheme should be secure (https)");
 

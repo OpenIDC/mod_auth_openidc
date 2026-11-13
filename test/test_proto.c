@@ -4170,6 +4170,61 @@ START_TEST(test_proto_auth_request_params_across_directives) {
 }
 END_TEST
 
+static int test_proto_count_occurrences(const char *haystack, const char *needle) {
+	int n = 0;
+	const char *p = _oidc_strstr(haystack, needle);
+	while (p != NULL) {
+		n++;
+		p = _oidc_strstr(p + _oidc_strlen(needle), needle);
+	}
+	return n;
+}
+
+/*
+ * A "#" value forwards a key from the query string once, however often either directive repeats it:
+ * every repeat yields the same value, and repeats in a long auth_request_params made each pair
+ * allocate the whole query string again (OSS-Fuzz 585215402, 2.6GB for a 259KB query string).
+ */
+START_TEST(test_proto_auth_request_params_forward_once) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	oidc_provider_t *provider = oidc_cfg_provider_create(r->pool);
+
+	oidc_cfg_provider_issuer_set(r->pool, provider, "https://idp.example.com");
+	oidc_cfg_provider_authorization_endpoint_url_set(r->pool, provider, "https://idp.example.com/authorize");
+	oidc_cfg_provider_client_id_set(r->pool, provider, "client_id");
+	/* NB: written unescaped because the ap_unescape_url stub does not decode */
+	ck_assert_ptr_null(oidc_cfg_provider_auth_request_params_set(r->pool, provider, "resource=#&resource=#"));
+
+	/* a long query string, so that a copy of it per forward would show */
+	const int n = 20000;
+	char *filler = apr_palloc(r->pool, 65537);
+	_oidc_memset(filler, 'x', 65536);
+	filler[65536] = '\0';
+	r->args = apr_psprintf(r->pool, "redirect_uri=https%%3A%%2F%%2Fevil.example&resource=urn%%3Aexample%%3Ar&f=%s",
+			       filler);
+
+	apr_array_header_t *pairs = apr_array_make(r->pool, 2 * n, sizeof(const char *));
+	for (int i = 0; i < n; i++) {
+		APR_ARRAY_PUSH(pairs, const char *) = "redirect_uri=#";
+		APR_ARRAY_PUSH(pairs, const char *) = "resource=#";
+	}
+	const char *auth_request_params = apr_array_pstrcat(r->pool, pairs, OIDC_CHAR_AMP);
+
+	oidc_proto_state_t *ps = e2e_make_proto_state(r);
+	int rc = oidc_request_auth(r, c, provider, NULL, "https://www.example.com/protected/", "state-fwd-once", ps,
+				   NULL, NULL, auth_request_params, NULL);
+	ck_assert_int_eq(rc, HTTP_MOVED_TEMPORARILY);
+	const char *loc = apr_table_get(r->headers_out, "Location");
+	ck_assert_ptr_nonnull(loc);
+
+	ck_assert_int_eq(test_proto_count_occurrences(loc, "resource=urn%3Aexample%3Ar"), 1);
+	ck_assert_msg(_oidc_strstr(loc, "evil.example") == NULL,
+		      "a forward of a module-owned parameter must still be dropped: %s", loc);
+	ck_assert_int_eq(test_proto_count_occurrences(loc, "redirect_uri="), 1);
+}
+END_TEST
+
 /*
  * a Pushed Authorization Request that cannot be made: the OP never advertised the endpoint, or it
  * answers with an error. Either way the user must get an error page rather than a redirect to an
@@ -5221,6 +5276,7 @@ int main(void) {
 	tcase_add_test(e2e, test_proto_auth_request_params_cannot_duplicate_ours);
 	tcase_add_test(e2e, test_proto_auth_request_params_configured);
 	tcase_add_test(e2e, test_proto_auth_request_params_repeated_key);
+	tcase_add_test(e2e, test_proto_auth_request_params_forward_once);
 	tcase_add_test(e2e, test_proto_auth_request_params_across_directives);
 	tcase_add_test(e2e, test_proto_request_auth_par_failures);
 	tcase_add_test(e2e, test_proto_request_auth_post_html);

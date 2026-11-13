@@ -311,34 +311,40 @@ apr_byte_t oidc_util_url_has_parameter(request_rec *r, const char *param) {
 }
 
 /*
- * get a query parameter
+ * get a query parameter: the URL-decoded value of the last "<name>=<value>" in the query string
  */
 apr_byte_t oidc_util_url_parameter_get(request_rec *r, char *name, char **value) {
-	char *tokenizer_ctx = NULL;
 	const char *p = NULL;
-	char *args = NULL;
-	const char *k_param = apr_psprintf(r->pool, "%s=", name);
-	const size_t k_param_sz = _oidc_strlen(k_param);
+	const char *match = NULL;
+	size_t match_len = 0;
+	size_t name_len = 0;
 
 	*value = NULL;
 
-	if (r->args == NULL || _oidc_strlen(r->args) == 0)
+	if ((r->args == NULL) || (name == NULL))
 		return FALSE;
 
-	/* not sure why we do this, but better be safe than sorry */
-	args = apr_pstrmemdup(r->pool, r->args, _oidc_strlen(r->args));
+	name_len = _oidc_strlen(name);
 
-	/* a while() (not a do/while): when r->args is only separators, e.g. "&", the first apr_strtok
-	 * returns NULL without setting tokenizer_ctx, and a further apr_strtok(NULL, ...) would then
-	 * dereference a NULL context -- a crash reachable from any query-parameter read */
-	p = apr_strtok(args, OIDC_STR_AMP, &tokenizer_ctx);
-	while (p != NULL) {
-		if (_oidc_strncmp(p, k_param, k_param_sz) == 0) {
-			*value = apr_pstrdup(r->pool, p + k_param_sz);
-			*value = oidc_http_url_decode(r, *value);
+	/* walk the "&"-separated parameters in place and copy only the value that is returned, rather
+	 * than the whole query string on every lookup */
+	p = r->args;
+	while (*p != '\0') {
+		const char *end = strchr(p, OIDC_CHAR_AMP);
+		const size_t len = (end != NULL) ? (size_t)(end - p) : _oidc_strlen(p);
+		if ((len > name_len) && (p[name_len] == OIDC_CHAR_EQUAL) && (_oidc_strncmp(p, name, name_len) == 0)) {
+			match = p + name_len + 1;
+			match_len = len - name_len - 1;
 		}
-		p = apr_strtok(NULL, OIDC_STR_AMP, &tokenizer_ctx);
+		if (end == NULL)
+			break;
+		p = end + 1;
 	}
 
-	return (*value != NULL ? TRUE : FALSE);
+	if (match == NULL)
+		return FALSE;
+
+	*value = oidc_http_url_decode(r, apr_pstrmemdup(r->pool, match, match_len));
+
+	return TRUE;
 }

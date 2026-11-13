@@ -47,11 +47,62 @@
 #include "util/util.h"
 
 /*
+ * the state that the configured and the request-supplied custom parameters are added with
+ */
+typedef struct oidc_proto_request_auth_params_ctx_t {
+	/* the authorization request parameters */
+	apr_table_t *params;
+	/* the keys either directive added, to tell them apart from the ones this module owns */
+	apr_table_t *added;
+	/* the keys either directive forwarded from the query string with a "#" value */
+	apr_hash_t *forwarded;
+	/* the query string's parameters, indexed on the first "#" value */
+	apr_hash_t *query;
+} oidc_proto_request_auth_params_ctx_t;
+
+/*
+ * index the query string: each name, i.e. what precedes the first "=", to the still URL-encoded
+ * value of its last occurrence, which is the one that a query parameter lookup returns
+ */
+static apr_hash_t *oidc_proto_request_query_index(request_rec *r) {
+	apr_hash_t *index = apr_hash_make(r->pool);
+	const char *p = r->args;
+	while ((p != NULL) && (*p != '\0')) {
+		const char *end = strchr(p, OIDC_CHAR_AMP);
+		const size_t len = (end != NULL) ? (size_t)(end - p) : _oidc_strlen(p);
+		const char *eq = memchr(p, OIDC_CHAR_EQUAL, len);
+		if (eq != NULL)
+			apr_hash_set(index, apr_pstrmemdup(r->pool, p, (apr_size_t)(eq - p)), APR_HASH_KEY_STRING,
+				     apr_pstrmemdup(r->pool, eq + 1, len - (size_t)(eq - p) - 1));
+		p = (end != NULL) ? end + 1 : NULL;
+	}
+	return index;
+}
+
+/*
+ * resolve a "#" value: the URL-decoded value of the query string's parameter of that name, or
+ * NULL when the request does not carry it or when the key was forwarded before; a forward always
+ * yields the same value, so a repeat would add nothing but another copy of it, and a long
+ * auth_request_params with many repeats made the request allocate the length of the query string
+ * once per pair; the query string is indexed once, rather than scanned once per forwarded key
+ */
+static char *oidc_proto_request_auth_param_forward(request_rec *r, oidc_proto_request_auth_params_ctx_t *ctx,
+						   const char *key) {
+	if (apr_hash_get(ctx->forwarded, key, APR_HASH_KEY_STRING) != NULL)
+		return NULL;
+	apr_hash_set(ctx->forwarded, key, APR_HASH_KEY_STRING, "");
+	if (ctx->query == NULL)
+		ctx->query = oidc_proto_request_query_index(r);
+	const char *value = apr_hash_get(ctx->query, key, APR_HASH_KEY_STRING);
+	return (value != NULL) ? oidc_http_url_decode(r, value) : NULL;
+}
+
+/*
  * Configured extras may replace module-owned parameters; request-supplied values, including
  * "#" forwards, may not. One shared "added" table distinguishes both directives' parameters
  * from module-owned ones, allowing repeats such as RFC 8707 "resource" across either directive.
  */
-static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *params, apr_table_t *added,
+static void oidc_proto_request_auth_params_add(request_rec *r, oidc_proto_request_auth_params_ctx_t *ctx,
 					       const char *auth_request_params, apr_byte_t configured) {
 	char *key = NULL;
 	char *val = NULL;
@@ -68,12 +119,12 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 		ap_unescape_url(key);
 		ap_unescape_url(val);
 		if (_oidc_strcmp(val, OIDC_STR_HASH) == 0) {
-			if (oidc_util_url_has_parameter(r, key) == FALSE)
+			val = oidc_proto_request_auth_param_forward(r, ctx, key);
+			if (val == NULL)
 				continue;
-			oidc_util_url_parameter_get(r, key, &val);
 			from_request = TRUE;
 		}
-		if ((apr_table_get(params, key) != NULL) && (apr_table_get(added, key) == NULL)) {
+		if ((apr_table_get(ctx->params, key) != NULL) && (apr_table_get(ctx->added, key) == NULL)) {
 			if ((configured == FALSE) || (from_request == TRUE)) {
 				oidc_warn(r,
 					  "dropping authorization request parameter \"%s\": it would duplicate one "
@@ -81,12 +132,12 @@ static void oidc_proto_request_auth_params_add(request_rec *r, apr_table_t *para
 					  key);
 				continue;
 			}
-			apr_table_set(params, key, val);
-			apr_table_setn(added, key, "");
+			apr_table_set(ctx->params, key, val);
+			apr_table_setn(ctx->added, key, "");
 			continue;
 		}
-		apr_table_add(params, key, val);
-		apr_table_setn(added, key, "");
+		apr_table_add(ctx->params, key, val);
+		apr_table_setn(ctx->added, key, "");
 	}
 }
 
@@ -254,15 +305,17 @@ void oidc_proto_request_auth_params_set(request_rec *r, oidc_cfg_t *cfg, const s
 	if (prompt != NULL)
 		apr_table_setn(params, OIDC_PROTO_PROMPT, prompt);
 
-	/* the keys the two directives below add, shared between their invocations so that a
-	 * parameter the first one added is not mistaken for one this module owns by the second */
-	apr_table_t *added = apr_table_make(r->pool, 4);
+	/* shared between the invocations of the two directives below, so that a parameter that the
+	 * first one added is not mistaken for one this module owns by the second, and a key that the
+	 * first one forwarded is not forwarded again by the second */
+	oidc_proto_request_auth_params_ctx_t ctx = {
+	    .params = params, .added = apr_table_make(r->pool, 4), .forwarded = apr_hash_make(r->pool), .query = NULL};
 
 	/* add any statically configured custom authorization request parameters */
-	oidc_proto_request_auth_params_add(r, params, added, oidc_cfg_provider_auth_request_params_get(provider), TRUE);
+	oidc_proto_request_auth_params_add(r, &ctx, oidc_cfg_provider_auth_request_params_get(provider), TRUE);
 
 	/* add any dynamically configured custom authorization request parameters */
-	oidc_proto_request_auth_params_add(r, params, added, auth_request_params, FALSE);
+	oidc_proto_request_auth_params_add(r, &ctx, auth_request_params, FALSE);
 
 	/* add request parameter (request or request_uri) if set */
 	if (oidc_cfg_provider_request_object_get(provider) != NULL)
