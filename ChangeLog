@@ -1,3 +1,6 @@
+11/14/2026
+- release 2.4.20.5
+
 11/13/2026
 - proto: forward each "#" value in auth_request_params only once and look it up in an index of the query string
   built once, instead of in a fresh copy of the whole query string per pair: a discovery response that repeated
