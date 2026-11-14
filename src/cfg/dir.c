@@ -654,9 +654,9 @@ static apr_array_header_t *pass_userinfo_as_default = NULL;
 
 /*
  * forget the default when the pool that holds it is destroyed, so that the next post-config phase in
- * this process creates it again rather than leaving a pointer to freed memory behind: the process pool
- * lives as long as the server does, but the unit tests create and destroy one for every test, and
- * where they do not fork (CK_FORK=no, Windows) they all run in one process
+ * this process creates it again rather than leaving a pointer to freed memory behind: the unit tests
+ * create and destroy a configuration pool for every test, and where they do not fork (CK_FORK=no,
+ * Windows) they all run in one process
  */
 static apr_status_t oidc_cfg_dir_pass_userinfo_as_default_cleanup(void *data) {
 	apr_array_header_t **dflt = data;
@@ -673,10 +673,15 @@ int oidc_cfg_dir_post_config(server_rec *s) {
 	oidc_pass_user_info_as_t *p = NULL;
 	if (pass_userinfo_as_default != NULL)
 		return OK;
-	pass_userinfo_as_default = apr_array_make(s->process->pool, 3, sizeof(const oidc_pass_user_info_as_t *));
-	apr_pool_cleanup_register(s->process->pool, &pass_userinfo_as_default,
+	/* the configuration pool, not the process pool: this cleanup lives in the module, and httpd unloads
+	 * the module's DSO when it destroys pconf, which happens before the process pool's own cleanups run
+	 * at exit; one registered on the process pool would then jump into unmapped code, crashing every
+	 * shutdown of the parent process. pconf is also cleared on a restart, after which the next
+	 * post-config phase creates the default again. */
+	pass_userinfo_as_default = apr_array_make(s->process->pconf, 3, sizeof(const oidc_pass_user_info_as_t *));
+	apr_pool_cleanup_register(s->process->pconf, &pass_userinfo_as_default,
 				  oidc_cfg_dir_pass_userinfo_as_default_cleanup, apr_pool_cleanup_null);
-	if (oidc_cfg_dir_parse_pass_userinfo_as(s->process->pool, OIDC_DEFAULT_PASS_USERINFO_AS, &p) != NULL)
+	if (oidc_cfg_dir_parse_pass_userinfo_as(s->process->pconf, OIDC_DEFAULT_PASS_USERINFO_AS, &p) != NULL)
 		return HTTP_INTERNAL_SERVER_ERROR;
 	APR_ARRAY_PUSH(pass_userinfo_as_default, const oidc_pass_user_info_as_t *) = p;
 	return OK;

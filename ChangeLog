@@ -1,4 +1,8 @@
 11/14/2026
+- fix a crash of the parent process at every shutdown: the default OIDCPassUserInfoAs setting is now created in,
+  and forgotten with, the configuration pool rather than the process pool; httpd unloads the module when it
+  destroys the configuration pool, which happens before the process pool's own cleanups run at exit, so the
+  cleanup added on 11/12/2026 jumped into unmapped code; the child processes were not affected
 - release 2.4.20.5
 
 11/13/2026
