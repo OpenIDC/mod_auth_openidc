@@ -1,0 +1,11 @@
+format=prometheus
+c18	email	alice@example.com
+c18	email	bob"quoted\back@example.com
+c19	name	Alice Smith
+c19	https://example.com/claims/role	admin
+c25	200
+c25	500
+c0
+c0
+t0	1500
+t5	250000

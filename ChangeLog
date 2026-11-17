@@ -9,6 +9,10 @@
   counters and the timing sums, also when a corrupted segment holds a negative value; release the per-type
   object of a Prometheus rendering that skips a metric type this build does not know; neither can happen with
   a segment that only this module wrote (found by the new metrics fuzz target)
+- test/fuzz: add fuzz_metrics, for the metrics subsystem from claim-labelled samples through the flush into
+  shared memory to every OIDCMetricsPublish format, and fuzz_authz, for "Require claim" matching against
+  provider/user-chosen claims and the OIDCUnAutzAction handling of a denied request; both files had no fuzz
+  coverage at all; 21 targets in total
 
 11/14/2026
 - fix a crash of the parent process at every shutdown: the default OIDCPassUserInfoAs setting is now created in,

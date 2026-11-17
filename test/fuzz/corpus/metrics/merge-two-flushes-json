@@ -1,0 +1,7 @@
+format=json
+c18	email	alice@example.com
+t1	90
+f
+c18	email	alice@example.com
+c18	email	carol@example.com
+t1	40000000

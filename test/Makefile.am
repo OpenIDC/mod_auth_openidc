@@ -113,7 +113,9 @@ oidc_fuzz_targets = \
 	fuzz_bearer_token \
 	fuzz_redirect_uri \
 	fuzz_post_preserve \
-	fuzz_strings
+	fuzz_strings \
+	fuzz_metrics \
+	fuzz_authz
 
 fuzz_base64_SOURCES = fuzz/fuzz_base64.c fuzz/standalone.c
 fuzz_url_SOURCES = fuzz/fuzz_url.c fuzz/standalone.c
@@ -134,6 +136,8 @@ fuzz_bearer_token_SOURCES = fuzz/fuzz_bearer_token.c fuzz/standalone.c
 fuzz_redirect_uri_SOURCES = fuzz/fuzz_redirect_uri.c fuzz/standalone.c
 fuzz_post_preserve_SOURCES = fuzz/fuzz_post_preserve.c fuzz/standalone.c
 fuzz_strings_SOURCES = fuzz/fuzz_strings.c fuzz/standalone.c
+fuzz_metrics_SOURCES = fuzz/fuzz_metrics.c fuzz/standalone.c
+fuzz_authz_SOURCES = fuzz/fuzz_authz.c fuzz/standalone.c
 
 check_PROGRAMS = $(oidc_unit_tests) $(oidc_fuzz_targets)
 

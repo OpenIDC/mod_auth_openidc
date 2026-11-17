@@ -55,6 +55,8 @@
 /fuzz_redirect_uri
 /fuzz_post_preserve
 /fuzz_strings
+/fuzz_metrics
+/fuzz_authz
 /fuzz/*.o
 /fuzz/.deps/
 /fuzz/.dirstamp

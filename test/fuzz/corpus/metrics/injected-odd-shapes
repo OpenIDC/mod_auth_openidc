@@ -1,0 +1,2 @@
+format=prometheus
+j{"www.example.com":{"counters":{"99":1,"abc":{"x":1},"0":"str","18":{"email":{"a\"b\\c\nd":3}}},"timings":{"1":{"le01":"x","sum":9223372036854775807,"count":1,"bogus":2},"77":{}}},"other\"vhost":{"counters":[],"timings":null}}

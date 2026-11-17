@@ -1,0 +1,2 @@
+format=status&counter=claim.id_token&name=email&value=nobody&server_name=www.example.com
+c18	email	alice@example.com

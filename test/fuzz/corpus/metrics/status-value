@@ -1,0 +1,2 @@
+format=status&counter=provider.http.response.code&value=200&server_name=www.example.com
+c25	200
