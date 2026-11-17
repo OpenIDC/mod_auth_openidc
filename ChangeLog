@@ -13,6 +13,7 @@
   shared memory to every OIDCMetricsPublish format, and fuzz_authz, for "Require claim" matching against
   provider/user-chosen claims and the OIDCUnAutzAction handling of a denied request; both files had no fuzz
   coverage at all; 21 targets in total
+- bump to 2.4.20.6
 
 11/14/2026
 - fix a crash of the parent process at every shutdown: the default OIDCPassUserInfoAs setting is now created in,
