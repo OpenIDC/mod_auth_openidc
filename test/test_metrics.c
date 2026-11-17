@@ -665,6 +665,51 @@ START_TEST(test_metrics_histogram_boundary_inclusive) {
 }
 END_TEST
 
+/*
+ * A counter recorded both without a value and with values -- an error counter labeled with a failure reason only
+ * when one was recorded, or a claim that is empty for one user and not for another -- keeps the unlabeled count
+ * under the default "_" value, whichever of the two the flush meets first and whether they arrive in the same
+ * flush interval or in different ones. Before, the flush replaced the value object with the unlabeled count,
+ * leaking the object and dropping the labeled counts, or failed to add the labeled counts to an integer.
+ */
+START_TEST(test_metrics_counter_mixed_default_and_values) {
+	request_rec *r = oidc_test_request_get();
+	e2e_metrics_setup_flushed(r);
+
+	/* flush 1: both shapes of one counter in the same interval, and only the unlabeled one of another */
+	oidc_metrics_counter_inc(r, OM_AUTHZ_ERROR_OAUTH20, NULL, NULL);
+	oidc_metrics_counter_inc(r, OM_AUTHZ_ERROR_OAUTH20, NULL, "exp");
+	oidc_metrics_counter_inc(r, OM_AUTHN_RESPONSE_ERROR_PROTOCOL, NULL, NULL);
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "\"exp\"", 5000));
+
+	/* flush 2: the unlabeled one again, and the first labeled sample of the integer counter */
+	oidc_metrics_counter_inc(r, OM_AUTHZ_ERROR_OAUTH20, NULL, NULL);
+	oidc_metrics_counter_inc(r, OM_AUTHN_RESPONSE_ERROR_PROTOCOL, NULL, "nonce");
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "\"nonce\"", 5000));
+
+	r->args = "format=prometheus&reset=false";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	const char *body = oidc_request_state_get(r, "sent_body");
+	ck_assert_ptr_nonnull(body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_authz_error_oauth20{server_name=\"www.example.com\",value=\"_\"} 2") !=
+			  NULL,
+		      "body: [%s]", body);
+	ck_assert_msg(_oidc_strstr(body, "oidc_authz_error_oauth20{server_name=\"www.example.com\",value=\"exp\"} 1") !=
+			  NULL,
+		      "body: [%s]", body);
+	ck_assert_msg(
+	    _oidc_strstr(body, "oidc_authn_response_error_protocol{server_name=\"www.example.com\",value=\"_\"} 1") !=
+		NULL,
+	    "body: [%s]", body);
+	ck_assert_msg(
+	    _oidc_strstr(
+		body, "oidc_authn_response_error_protocol{server_name=\"www.example.com\",value=\"nonce\"} 1") != NULL,
+	    "body: [%s]", body);
+
+	e2e_metrics_teardown_flushed(r);
+}
+END_TEST
+
 /* the counters and timers added for the instrumentation gaps flush and render */
 START_TEST(test_metrics_flushed_gap_counters) {
 	request_rec *r = oidc_test_request_get();
@@ -934,6 +979,7 @@ int main(void) {
 	tcase_add_test(flushed, test_metrics_flushed_twice_updates_entries);
 	tcase_add_test(flushed, test_metrics_prometheus_escapes_claim_labels);
 	tcase_add_test(flushed, test_metrics_histogram_boundary_inclusive);
+	tcase_add_test(flushed, test_metrics_counter_mixed_default_and_values);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_counter);
 	tcase_add_test(flushed, test_metrics_handle_request_flushed_status_unknown_server);
 	tcase_add_test(flushed, test_metrics_flushed_gap_counters);

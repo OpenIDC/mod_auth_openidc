@@ -1,3 +1,15 @@
+11/17/2026
+- metrics: a counter recorded both without and with a value in the same flush interval -- an error counter that
+  is labeled with a failure reason only when one was recorded (authn.response.error.protocol, authz.error.oauth20)
+  or a claim value counter for a claim that is empty for one user and not for another -- leaked memory in the
+  flush thread and lost the labeled counts of that interval, and once such a counter had been stored in one
+  shape every later sample of the other shape was dropped; it is now an object keyed by value that keeps the
+  unlabeled count under "_" (found by the new metrics fuzz target)
+- metrics: guard every integer merged from the shared memory segment against signed overflow, not just the
+  counters and the timing sums, also when a corrupted segment holds a negative value; release the per-type
+  object of a Prometheus rendering that skips a metric type this build does not know; neither can happen with
+  a segment that only this module wrote (found by the new metrics fuzz target)
+
 11/14/2026
 - fix a crash of the parent process at every shutdown: the default OIDCPassUserInfoAs setting is now created in,
   and forgotten with, the configuration pool rather than the process pool; httpd unloads the module when it

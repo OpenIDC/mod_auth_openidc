@@ -206,10 +206,11 @@ static inline char *_json_int2str(apr_pool_t *pool, oidc_json_int_t n) {
 #define OIDC_METRICS_INT_MAX OIDC_JSON_INT_MAX
 
 /*
- * check Jansson specific integer/long number overrun
+ * check Jansson specific integer/long number overrun; add is never negative, and a negative cur (which only a
+ * corrupted shared memory segment can hold) cannot overflow by adding it, while MAX - cur itself would
  */
 static inline int _is_overflow(server_rec *s, oidc_json_int_t cur, oidc_json_int_t add) {
-	if (add > (OIDC_METRICS_INT_MAX - cur)) {
+	if ((cur > 0) && (add > (OIDC_METRICS_INT_MAX - cur))) {
 		oidc_swarn(s,
 			   "reset metrics since the size (%s) of the integer value would be larger than the "
 			   "JSON/libjansson maximum "
@@ -521,9 +522,14 @@ static void oidc_metrics_timings_update(server_rec *s, const oidc_json_t *entry,
 	oidc_json_int_t n = 0;
 	oidc_json_int_t v = 0;
 
+	/* every member gets the same overflow reset as the sum: none is ever close to the maximum unless the shared
+	 * memory segment was corrupted, but the addition would then overflow a signed integer */
 	for (int i = 0; i < OIDC_METRICS_BUCKET_NUM; i++) {
 		j_member = oidc_json_object_get(entry, _oidc_metric_buckets[i].name);
-		oidc_json_integer_set(j_member, oidc_json_integer_value(j_member) + timing->buckets[i]);
+		n = oidc_json_integer_value(j_member);
+		if (_is_overflow(s, n, timing->buckets[i]))
+			n = 0;
+		oidc_json_integer_set(j_member, n + timing->buckets[i]);
 	}
 
 	j_member = oidc_json_object_get(entry, OIDC_METRICS_SUM);
@@ -538,6 +544,8 @@ static void oidc_metrics_timings_update(server_rec *s, const oidc_json_t *entry,
 
 	j_member = oidc_json_object_get(entry, OIDC_METRICS_COUNT);
 	n = oidc_json_integer_value(j_member);
+	if (_is_overflow(s, n, timing->count))
+		n = 0;
 	oidc_json_integer_set(j_member, n + timing->count);
 }
 
@@ -551,21 +559,38 @@ static inline const char *_metrics_value2key(const char *value) {
 }
 
 /*
- * create a new counter entry in the collected JSON data
+ * true when a counter's local values include any other than the default (no value)
+ */
+static apr_byte_t oidc_metrics_counter_has_values(apr_hash_t *htable) {
+	const char *value = NULL;
+	for (apr_hash_index_t *hi = apr_hash_first(NULL, htable); hi; hi = apr_hash_next(hi)) {
+		apr_hash_this(hi, (const void **)&value, NULL, NULL);
+		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) != 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/*
+ * create a new counter entry in the collected JSON data: a counter only ever recorded without a value is a plain
+ * integer, one recorded with values is an object keyed by value, which keeps any count recorded without a value
+ * under the default key; the same counter can be recorded both ways, e.g. a claim that is empty for one user and
+ * not for another, or an error counter labeled with a failure reason only when one was recorded
  */
 static oidc_json_t *oidc_metrics_counter_new(apr_hash_t *htable) {
 	oidc_metrics_counter_t *counter = NULL;
-	char *value = NULL;
+	const char *value = NULL;
 	oidc_json_t *j_values = NULL;
+
+	if (oidc_metrics_counter_has_values(htable) == FALSE) {
+		counter = apr_hash_get(htable, OIDC_METRICS_VALUE_DEFAULT, APR_HASH_KEY_STRING);
+		return oidc_json_integer(counter ? counter->count : 0);
+	}
+
+	j_values = oidc_json_object();
 	for (apr_hash_index_t *hi = apr_hash_first(NULL, htable); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&value, NULL, (void **)&counter);
-		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0) {
-			j_values = oidc_json_integer(counter->count);
-		} else {
-			if (j_values == NULL)
-				j_values = oidc_json_object();
-			oidc_json_object_set_new(j_values, value, oidc_json_integer(counter->count));
-		}
+		oidc_json_object_set_new(j_values, value, oidc_json_integer(counter->count));
 	}
 	return j_values;
 }
@@ -580,7 +605,8 @@ static void oidc_metrics_counter_update(server_rec *s, oidc_json_t *j_counter, a
 	oidc_json_t *j_value = NULL;
 	for (apr_hash_index_t *hi = apr_hash_first(NULL, htable); hi; hi = apr_hash_next(hi)) {
 		apr_hash_this(hi, (const void **)&value, NULL, (void **)&counter);
-		if (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0) {
+		/* the default value is the counter itself only while it is an integer (oidc_metrics_counter_new) */
+		if (oidc_json_is_integer(j_counter) && (_oidc_strcmp(value, OIDC_METRICS_VALUE_DEFAULT) == 0)) {
 			j_value = j_counter;
 		} else {
 			j_value = oidc_json_object_get(j_counter, value);
@@ -644,10 +670,23 @@ static inline const oidc_metrics_timing_info_t *_oidc_metrics_key2timing_info(co
 static void oidc_metrics_counter_set_or_update(server_rec *s, oidc_json_t *parent, const char *key,
 					       apr_hash_t *counter_hash) {
 	oidc_json_t *j_counter = oidc_json_object_get(parent, key);
-	if (j_counter != NULL)
-		oidc_metrics_counter_update(s, j_counter, counter_hash);
-	else
+	oidc_json_t *j_values = NULL;
+
+	if (j_counter == NULL) {
 		oidc_json_object_set_new(parent, key, oidc_metrics_counter_new(counter_hash));
+		return;
+	}
+
+	/* a counter so far only recorded without a value now has values too: turn it into an object that keeps the
+	 * count so far under the default key */
+	if (oidc_json_is_integer(j_counter) && (oidc_metrics_counter_has_values(counter_hash) == TRUE)) {
+		j_values = oidc_json_object();
+		oidc_json_object_set(j_values, OIDC_METRICS_VALUE_DEFAULT, j_counter);
+		oidc_json_object_set_new(parent, key, j_values);
+		j_counter = j_values;
+	}
+
+	oidc_metrics_counter_update(s, j_counter, counter_hash);
 }
 
 /*
@@ -1551,8 +1590,11 @@ static int oidc_metrics_prometheus_counters(oidc_metric_prometheus_callback_ctx_
 	const oidc_metrics_counter_info_t *info = _oidc_metrics_key2counter_info(key);
 	const char *s_label = NULL;
 
-	if (info == NULL)
+	/* NB: this callback owns the per-type object that oidc_metrics_prometheus_convert created, even one it skips */
+	if (info == NULL) {
+		oidc_json_decref(o_counter);
 		return 1;
+	}
 
 	s_label = oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_counter_info2s(ctx->pool, info));
 	APR_ARRAY_PUSH(ctx->lines, const char *) =
@@ -1595,8 +1637,11 @@ static int oidc_metrics_prometheus_timings(oidc_metric_prometheus_callback_ctx_t
 	apr_array_header_t *s_text = NULL;
 	apr_array_header_t *s_secs = NULL;
 
-	if (info == NULL)
+	/* NB: owns the per-type object, as in oidc_metrics_prometheus_counters */
+	if (info == NULL) {
+		oidc_json_decref(o_timer);
 		return 1;
+	}
 
 	s_label = oidc_metric_prometheus_normalize_name(ctx->pool, _oidc_metrics_timing_info2s(ctx->pool, info));
 	/* the unsuffixed millisecond family is deprecated as of 2.4.20.4 in favor of the
