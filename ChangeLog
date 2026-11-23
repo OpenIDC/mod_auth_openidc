@@ -97,7 +97,7 @@
   OIDCWhiteListedClaims request headers in every spelling the application may read them under, i.e.
   in any case and with "_" for "-", not only in the configured spelling: e.g. "x-remote-user", which
   every HTTP/2 client sends, reached the application, also unauthenticated with OIDCUnAuthAction pass;
-  the names configured in OIDCPassUserInfoAs were not scrubbed at all
+  the names configured in OIDCPassUserInfoAs were not scrubbed at all (GHSA-6c2f-rc7q-c43c)
 - security: an unauthenticated request to the OIDCMetricsPublish path crashed the server process when no
   virtual host sets OIDCMetricsData; it now returns 404 and logs that OIDCMetricsData is needed
 - security: build the Prometheus metrics output in linear rather than quadratic time and memory, and label the
