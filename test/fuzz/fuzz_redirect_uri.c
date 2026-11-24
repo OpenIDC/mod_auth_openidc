@@ -22,11 +22,13 @@
  * these; this one goes wide, across the routing and every handler's own
  * parameter parsing, so nothing hanging off the redirect URI is left out.
  *
- * Input layout: the first byte selects the method (bit 0: form POST) and
+ * Input layout: the first byte selects the method (bit 0: form POST),
  * whether the request carries an authenticated session with tokens in it
  * (bit 1), which the info, refresh and session-management handlers require
- * or behave differently with; the rest is the query string (which the test
- * stubs also serve as the POST body).
+ * or behave differently with, and whether that session was issued for
+ * another host than the one that is requested (bit 2), which the info hook
+ * refuses before it looks at anything else; the rest is the query string
+ * (which the test stubs also serve as the POST body).
  *
  * The fixture provider has no token, userinfo, end-session or JWKS
  * endpoint, so every path that would call out fails at once and offline on
@@ -41,6 +43,7 @@
 #include "cfg/provider.h"     /* oidc_cfg_provider_client_secret_set */
 #include "handle/handle.h"    /* oidc_content_handler */
 #include "mod_auth_openidc.h" /* oidc_session_t */
+#include "util/util_cfg.h"    /* oidc_util_url_cur_host */
 /* clang-format on */
 
 #include <apr_pools.h>
@@ -52,7 +55,16 @@
 /* the top-level dispatch entry lives in mod_auth_openidc.c and has no public header */
 extern int oidc_handle_redirect_uri_request(request_rec *r, oidc_cfg_t *c, oidc_session_t *session);
 
+/* a host that the fixture does not serve */
+#define FUZZ_OTHER_HOST "other.example.com"
+
 static int g_ready = 0;
+
+/* the cookie domain that a login stores in the session: see oidc_response_save_in_session */
+static const char *fuzz_session_cookie_domain(request_rec *r, oidc_cfg_t *cfg) {
+	return oidc_cfg_cookie_domain_get(cfg) ? oidc_cfg_cookie_domain_get(cfg)
+					       : oidc_util_url_cur_host(r, oidc_cfg_x_forwarded_headers_get(cfg));
+}
 
 /* engine-called one-time init, pre-forkserver on AFL++: see fuzz.h */
 int LLVMFuzzerInitialize(int *argc, char ***argv) {
@@ -68,6 +80,15 @@ int LLVMFuzzerInitialize(int *argc, char ***argv) {
 		 * NULL URL and fails at once, offline; drop the retries so it does not sleep either */
 		cfg->http_timeout_long.retries = 0;
 		cfg->http_timeout_short.retries = 0;
+		/* OIDCInfoHook with every data element: with none configured the info hook has nothing
+		 * to return and says so, before it reads its parameters or builds a response */
+		static const char *const info_hook_data[] = {
+		    OIDC_HOOK_INFO_TIMESTAMP,		OIDC_HOOK_INFO_ACCES_TOKEN, OIDC_HOOK_INFO_ACCES_TOKEN_EXP,
+		    OIDC_HOOK_INFO_ID_TOKEN_HINT,	OIDC_HOOK_INFO_ID_TOKEN,    OIDC_HOOK_INFO_USER_INFO,
+		    OIDC_HOOK_INFO_REFRESH_TOKEN,	OIDC_HOOK_INFO_SESSION_EXP, OIDC_HOOK_INFO_SESSION_TIMEOUT,
+		    OIDC_HOOK_INFO_SESSION_REMOTE_USER, OIDC_HOOK_INFO_SESSION};
+		for (size_t i = 0; i < sizeof(info_hook_data) / sizeof(info_hook_data[0]); i++)
+			oidc_cmd_info_hook_data_set(oidc_test_cmd_get(OIDCInfoHook), NULL, info_hook_data[i]);
 		g_ready = 1;
 	}
 	return 0;
@@ -136,6 +157,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 		oidc_session_set_session_state(&r, session, "session-state-1");
 		oidc_session_set_original_url(&r, session, "https://www.example.com/protected/index.html");
 		oidc_session_set_session_expires(&r, session, apr_time_now() + apr_time_from_sec(3600));
+		/* the host that the session was issued for: without the one that is requested here, the
+		 * info hook takes the session for one that is replayed against another host and refuses
+		 * it, so that nothing behind that check would run -- the checks on the session, the
+		 * refreshes that are due and the info response itself */
+		oidc_session_set_cookie_domain(&r, session,
+					       (sel & 4) ? FUZZ_OTHER_HOST : fuzz_session_cookie_domain(&r, cfg));
 	}
 
 	int rc = oidc_handle_redirect_uri_request(&r, cfg, session);

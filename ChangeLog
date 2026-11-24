@@ -1,3 +1,9 @@
+11/24/2026
+- test/fuzz: let fuzz_redirect_uri reach the info hook: the session that it presents carried no cookie domain
+  and the fixture configured no OIDCInfoHook data, so every info request was refused as a session replayed
+  against another host, before the checks on the session, the refreshes that are due and the info response
+  itself were run; a selector bit keeps the refusal of a session that was issued for another host covered
+
 11/17/2026
 - metrics: a counter recorded both without and with a value in the same flush interval -- an error counter that
   is labeled with a failure reason only when one was recorded (authn.response.error.protocol, authz.error.oauth20)
