@@ -1,4 +1,10 @@
 11/24/2026
+- metrics: count an access token that AuthType oauth20 rejects, in authz.error.oauth20 and labeled with the check
+  that it failed ("exp", "signature", "parse", "iss", "aud", "inactive", "introspection", "remote_user", or else
+  "other"): such a request is answered with a 401 in the authentication hook and never reached the authorization
+  hook in which that counter is incremented, so that the failure reason that 2.4.20.4 added to it was never
+  recorded and a rejected token was not counted at all; a request with an accepted token that does not meet a
+  Require is counted without a value, as before, and format=status reports that count when no value is asked for
 - test/fuzz: let fuzz_redirect_uri reach the info hook: the session that it presents carried no cookie domain
   and the fixture configured no OIDCInfoHook data, so every info request was refused as a session replayed
   against another host, before the checks on the session, the refreshes that are due and the info response

@@ -1374,6 +1374,8 @@ static oidc_json_t *oidc_metrics_status_find_counter(request_rec *r, oidc_json_t
  *   - integer entry: the counter itself
  *   - object entry with value-only selector: j_counter[value]
  *   - object entry with name+value selectors: j_counter[name][value]
+ *   - object entry without a value selector: the count that was recorded without a value, if any, so
+ *     that a counter keeps answering for it once it is also recorded with values
  */
 static oidc_json_t *oidc_metrics_status_select_value(oidc_json_t *j_counter, const char *s_name_param,
 						     const char *s_value_param) {
@@ -1381,7 +1383,7 @@ static oidc_json_t *oidc_metrics_status_select_value(oidc_json_t *j_counter, con
 	if (oidc_json_is_integer(j_counter))
 		return j_counter;
 	if (s_value_param == NULL)
-		return NULL;
+		s_value_param = OIDC_METRICS_VALUE_DEFAULT;
 	if (s_name_param == NULL)
 		return oidc_json_object_get(j_counter, s_value_param);
 	j_values = oidc_json_object_get(j_counter, s_name_param);

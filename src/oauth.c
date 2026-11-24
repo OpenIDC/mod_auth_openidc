@@ -626,12 +626,15 @@ static apr_byte_t oidc_oauth_introspect(request_rec *r, oidc_cfg_t *c, const cha
 	 * claims back */
 	if (oidc_oauth_validate_access_token(r, c, access_token, &s_json) == FALSE) {
 		oidc_error(r, "could not get a validation response from the Authorization server");
+		OIDC_METRICS_ERROR_REASON(r, "introspection");
 		return FALSE;
 	}
 
 	/* decode and see if it is not an error response somehow */
-	if (oidc_json_decode_and_check_error(r, s_json, result) == FALSE)
+	if (oidc_json_decode_and_check_error(r, s_json, result) == FALSE) {
+		OIDC_METRICS_ERROR_REASON(r, "introspection");
 		return FALSE;
+	}
 
 	if (oidc_oauth_introspection_validate_and_cache(r, c, access_token, *result) == FALSE) {
 		oidc_json_decref(*result);
@@ -767,9 +770,15 @@ static apr_byte_t oidc_oauth_validate_jwt_iss(request_rec *r, const oidc_cfg_t *
  * with different audience or issuer settings.
  */
 static apr_byte_t oidc_oauth_validate_jwt_claims(request_rec *r, const oidc_cfg_t *c, const oidc_json_t *claims) {
-	if (oidc_oauth_validate_jwt_iss(r, c, claims) == FALSE)
+	if (oidc_oauth_validate_jwt_iss(r, c, claims) == FALSE) {
+		OIDC_METRICS_ERROR_REASON(r, "iss");
 		return FALSE;
-	return oidc_oauth_validate_jwt_aud(r, c, claims);
+	}
+	if (oidc_oauth_validate_jwt_aud(r, c, claims) == FALSE) {
+		OIDC_METRICS_ERROR_REASON(r, "aud");
+		return FALSE;
+	}
+	return TRUE;
 }
 
 /*
@@ -823,6 +832,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	oidc_jwt_t *jwt = NULL;
 	if (oidc_jwt_parse(r->pool, access_token, &jwt, decrypt_keys, FALSE, &err) == FALSE) {
 		oidc_error(r, "could not parse JWT from access_token: %s", oidc_jose_e2s(r->pool, err));
+		OIDC_METRICS_ERROR_REASON(r, "parse");
 		oidc_jwk_destroy(jwk);
 		return FALSE;
 	}
@@ -835,6 +845,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 	 * cache hits; iat is not enforced for access tokens.
 	 */
 	if (oidc_proto_jwt_validate(r, jwt, NULL, TRUE, FALSE, -1) == FALSE) {
+		/* NB: oidc_proto_jwt_validate recorded the specific exp/iat error reason */
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -855,6 +866,7 @@ static apr_byte_t oidc_oauth_validate_jwt_access_token(request_rec *r, oidc_cfg_
 							   oidc_cfg_oauth_verify_public_keys_get(c)),
 				  NULL) == FALSE) {
 		oidc_error(r, "JWT access token signature could not be validated, aborting");
+		OIDC_METRICS_ERROR_REASON(r, "signature");
 		oidc_jwt_destroy(jwt);
 		return FALSE;
 	}
@@ -897,6 +909,7 @@ static apr_byte_t oidc_oauth_set_request_user(request_rec *r, const oidc_cfg_t *
 		    "" OIDCOAuthRemoteUserClaim
 		    " is set to \"%s\", but could not set the remote user based the available claims for the user",
 		    oidc_cfg_oauth_remote_user_claim_name_get(c));
+		OIDC_METRICS_ERROR_REASON(r, "remote_user");
 		return FALSE;
 	}
 
@@ -963,6 +976,23 @@ static void oidc_oauth_pass_info_to_app(request_rec *r, const oidc_cfg_t *c, oid
 				      encoding);
 }
 
+/* the value that a rejected access token is counted with when no check recorded why it was rejected */
+#define OIDC_OAUTH_ERROR_REASON_OTHER "other"
+
+/*
+ * reject an access token: count it, with the check that it failed, and return the 401 for it
+ *
+ * NB: the caller returns this from the authentication hook, which ends the request, so the authorization
+ *     hook never runs for it: that is where a request that does not meet a Require is counted in this same
+ *     counter (oidc_authz_24_unauthorized_user), without a value, which is why a rejected token always has one
+ */
+static int oidc_oauth_return_invalid_token(request_rec *r, const oidc_cfg_t *c, const char *error_description) {
+	const char *reason = oidc_metrics_error_reason_consume(r);
+	OIDC_METRICS_COUNTER_INC_VALUE(r, c, OM_AUTHZ_ERROR_OAUTH20,
+				       reason != NULL ? reason : OIDC_OAUTH_ERROR_REASON_OTHER);
+	return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN, error_description);
+}
+
 /*
  * main routine: handle OAuth 2.0 authentication/authorization
  */
@@ -1005,16 +1035,15 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 
 	/* validate the obtained access token against the OAuth AS validation endpoint */
 	if (oidc_oauth_validate_token(r, c, access_token, &claims, &s_token) == FALSE)
-		return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN,
-							  oidc_cfg_oauth_introspection_endpoint_url_get(c) != NULL
-							      ? "Reference token could not be introspected"
-							      : "JWT token could not be validated");
+		return oidc_oauth_return_invalid_token(r, c,
+						       oidc_cfg_oauth_introspection_endpoint_url_get(c) != NULL
+							   ? "Reference token could not be introspected"
+							   : "JWT token could not be validated");
 
 	/* check that we've got something back */
 	if (claims == NULL) {
 		oidc_error(r, "could not resolve claims (token == NULL)");
-		return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN,
-							  "No claims could be parsed from the token");
+		return oidc_oauth_return_invalid_token(r, c, "No claims could be parsed from the token");
 	}
 
 	/* store the parsed token (cq. the claims from the response) in the request state so it can be accessed by the
@@ -1025,7 +1054,7 @@ int oidc_oauth_check_userid(request_rec *r, oidc_cfg_t *c, const char *access_to
 	if (oidc_oauth_set_request_user(r, c, claims) == FALSE) {
 		oidc_json_decref(claims);
 		oidc_error(r, "remote user could not be set, aborting with HTTP_UNAUTHORIZED");
-		return oidc_proto_return_www_authenticate(r, OIDC_PROTO_ERR_INVALID_TOKEN, "Could not set remote user");
+		return oidc_oauth_return_invalid_token(r, c, "Could not set remote user");
 	}
 
 	/*

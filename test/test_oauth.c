@@ -29,11 +29,14 @@
 #include "cfg/dir.h"
 #include "cfg/oauth.h"
 #include "check_util.h"
+#include "handle/handle.h"
 #include "http_server.h"
+#include "metrics.h"
 #include "mod_auth_openidc.h"
 #include "oauth.h"
 #include "proto/proto.h"
 #include "util.h"
+#include "util/request_state.h"
 #include "util/util.h"
 
 /* oauth.c exports this as non-static but has no header declaration; the
@@ -1623,6 +1626,183 @@ START_TEST(test_oauth_check_userid_jwt_aud_wrong_type) {
 }
 END_TEST
 
+/*
+ * Tests for the metrics of a request that AuthType oauth20 answers with a 401.
+ *
+ * An access token that fails validation is rejected in the authentication hook, which ends the
+ * request: the authorization hook, where a request that does not meet a Require is counted, never
+ * runs for it. A rejected token is therefore counted where it is rejected, in the same counter and
+ * with the check that it failed.
+ */
+
+/* the start of a sample of the oauth20 error counter in the Prometheus output */
+#define E2E_METRICS_OAUTH20_ERROR "oidc_authz_error_oauth20{server_name=\"www.example.com\""
+
+/* collect the "authz" metrics class and flush it often enough for a test to read it back */
+static void e2e_metrics_setup(request_rec *r) {
+	oidc_test_setenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL", "100");
+	ck_assert_ptr_null(oidc_cmd_metrics_hook_data_set(oidc_test_cmd_get(OIDCMetricsData), NULL, "authz"));
+	ck_assert_int_eq(oidc_metrics_post_config(r->server->process->pconf, r->server), TRUE);
+	ck_assert_int_eq(oidc_metrics_child_init(r->server->process->pconf, r->server), APR_SUCCESS);
+}
+
+static void e2e_metrics_teardown(request_rec *r) {
+	ck_assert_int_eq(oidc_metrics_cleanup(r->server), APR_SUCCESS);
+	oidc_test_unsetenv(r->pool, "OIDC_METRICS_CACHE_STORAGE_INTERVAL");
+}
+
+/* the Prometheus output, as soon as the flush thread has stored the sample that is waited for: samples
+ * are flushed in the order in which they were recorded, so waiting for the last one covers them all */
+static const char *e2e_metrics_wait_for(request_rec *r, const char *sample) {
+	const char *body = NULL;
+	for (int waited = 0; waited <= 5000; waited += 100) {
+		r->args = "format=prometheus&reset=false";
+		ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+		body = oidc_request_state_get(r, "sent_body");
+		if ((body != NULL) && (_oidc_strstr(body, sample) != NULL))
+			break;
+		apr_sleep(apr_time_from_msec(100));
+	}
+	ck_assert_ptr_nonnull(body);
+	return body;
+}
+
+/* the oauth20 error counter holds this many requests for a rejected token that failed the given check */
+static void e2e_metrics_assert_rejected(const char *body, const char *reason, int count) {
+	const char *sample =
+	    apr_psprintf(oidc_test_request_get()->pool, E2E_METRICS_OAUTH20_ERROR ",value=\"%s\"} %d\n", reason, count);
+	ck_assert_msg(_oidc_strstr(body, sample) != NULL, "no [%s] in: [%s]", sample, body);
+}
+
+/* serve one introspection response and present a token that is validated against it */
+static int e2e_introspect(request_rec *r, oidc_cfg_t *c, const char *response, const char *access_token) {
+	oidc_test_http_response_t resp = {.status_code = 200, .content_type = "application/json", .body = response};
+	oidc_test_http_server_t *srv = oidc_test_http_server_start(r->pool, &resp);
+	ck_assert_ptr_nonnull(srv);
+	e2e_set_introspection_endpoint(c, oidc_test_http_server_url(srv, r->pool));
+	int rc = oidc_oauth_check_userid(r, c, access_token);
+	(void)oidc_test_http_server_wait(srv);
+	oidc_test_http_server_stop(srv);
+	return rc;
+}
+
+/* a JWT access token that is rejected is counted with the check that it failed */
+START_TEST(test_oauth_metrics_rejected_jwt) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *secret = e2e_setup_jwt_validation(r, c);
+	const char *body = NULL;
+
+	e2e_metrics_setup(r);
+
+	/* an expired token, presented twice */
+	const char *token = e2e_sign_jwt_access_token_hs256(r, secret, -3600);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), HTTP_UNAUTHORIZED);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), HTTP_UNAUTHORIZED);
+
+	/* a token that is signed with another key, and something that is not a JWT at all */
+	token = e2e_sign_jwt_access_token_hs256(r, "fedcba9876543210fedcba9876543210", 300);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), HTTP_UNAUTHORIZED);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "not-a-jwt"), HTTP_UNAUTHORIZED);
+
+	/* a token that was issued for another resource server */
+	ck_assert_ptr_null(oidc_cmd_oauth_verify_aud_values_set(oidc_test_cmd_get(OIDCOAuthVerifyAudience), NULL,
+								OIDC_TEST_OAUTH_AUD));
+	ck_assert_ptr_null(
+	    oidc_cmd_oauth_verify_issuer_set(oidc_test_cmd_get(OIDCOAuthVerifyIssuer), NULL, OIDC_TEST_OAUTH_ISS));
+	token = e2e_sign_jwt_access_token_claims(r, secret, 300, oidc_json_string("https://other-api.example.org"),
+						 OIDC_TEST_OAUTH_ISS);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), HTTP_UNAUTHORIZED);
+
+	/* a token that is accepted is not counted */
+	token = e2e_sign_jwt_access_token_claims(r, secret, 300, oidc_json_string(OIDC_TEST_OAUTH_AUD),
+						 OIDC_TEST_OAUTH_ISS);
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), OK);
+
+	/* a token that was issued by another issuer */
+	token = e2e_sign_jwt_access_token_claims(r, secret, 300, oidc_json_string(OIDC_TEST_OAUTH_AUD),
+						 "https://evil-issuer.example.org");
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, token), HTTP_UNAUTHORIZED);
+
+	body = e2e_metrics_wait_for(r, E2E_METRICS_OAUTH20_ERROR ",value=\"iss\"}");
+	e2e_metrics_assert_rejected(body, "exp", 2);
+	e2e_metrics_assert_rejected(body, "signature", 1);
+	e2e_metrics_assert_rejected(body, "parse", 1);
+	e2e_metrics_assert_rejected(body, "aud", 1);
+	e2e_metrics_assert_rejected(body, "iss", 1);
+	/* none of them is counted without a value: that is how a request that does not meet a Require is counted */
+	ck_assert_msg(_oidc_strstr(body, E2E_METRICS_OAUTH20_ERROR "}") == NULL, "body: [%s]", body);
+	ck_assert_msg(_oidc_strstr(body, E2E_METRICS_OAUTH20_ERROR ",value=\"_\"}") == NULL, "body: [%s]", body);
+
+	e2e_metrics_teardown(r);
+}
+END_TEST
+
+/* a reference token that is rejected is counted with the check that it failed */
+START_TEST(test_oauth_metrics_rejected_reference_token) {
+	request_rec *r = oidc_test_request_get();
+	oidc_cfg_t *c = oidc_test_cfg_get();
+	const char *body = NULL;
+	apr_table_unset(r->headers_in, OIDC_HTTP_HDR_AUTHORIZATION);
+
+	e2e_metrics_setup(r);
+
+	/* the Authorization Server says that the token is not active */
+	ck_assert_int_eq(e2e_introspect(r, c, "{\"active\":false}", "AT-M-INACTIVE"), HTTP_UNAUTHORIZED);
+
+	/* the Authorization Server returns an error, or cannot be reached at all */
+	ck_assert_int_eq(e2e_introspect(r, c, "{\"error\":\"invalid_request\"}", "AT-M-ERROR"), HTTP_UNAUTHORIZED);
+	int free_port = oidc_test_http_free_port(r->pool);
+	ck_assert_int_ne(free_port, 0);
+	e2e_set_introspection_endpoint(c, apr_psprintf(r->pool, "http://127.0.0.1:%d/introspect", free_port));
+	ck_assert_int_eq(oidc_oauth_check_userid(r, c, "AT-M-DEAD"), HTTP_UNAUTHORIZED);
+
+	/* the token is active, but lacks the claim that names the user */
+	ck_assert_int_eq(e2e_introspect(r, c, "{\"active\":true,\"scope\":\"read\"}", "AT-M-NO-USER"),
+			 HTTP_UNAUTHORIZED);
+
+	/* a token that is accepted is not counted */
+	ck_assert_int_eq(e2e_introspect(r, c, "{\"active\":true,\"sub\":\"alice\"}", "AT-M-OK"), OK);
+
+	/* the response has no "active" member, and not the expiry claim that is then required instead */
+	ck_assert_ptr_null(oidc_cmd_oauth_token_expiry_claim_set(oidc_test_cmd_get(OIDCOAuthTokenExpiryClaim), NULL,
+								 OIDC_CLAIM_EXP, "absolute", "mandatory"));
+	ck_assert_int_eq(e2e_introspect(r, c, "{\"sub\":\"alice\"}", "AT-M-EXP"), HTTP_UNAUTHORIZED);
+
+	body = e2e_metrics_wait_for(r, E2E_METRICS_OAUTH20_ERROR ",value=\"exp\"}");
+	e2e_metrics_assert_rejected(body, "inactive", 1);
+	e2e_metrics_assert_rejected(body, "introspection", 2);
+	e2e_metrics_assert_rejected(body, "remote_user", 1);
+	e2e_metrics_assert_rejected(body, "exp", 1);
+	ck_assert_msg(_oidc_strstr(body, E2E_METRICS_OAUTH20_ERROR "}") == NULL, "body: [%s]", body);
+	ck_assert_msg(_oidc_strstr(body, E2E_METRICS_OAUTH20_ERROR ",value=\"_\"}") == NULL, "body: [%s]", body);
+
+	e2e_metrics_teardown(r);
+}
+END_TEST
+
+/* a request with a token that is accepted but does not meet a Require is counted in the authorization hook,
+ * without a value: nothing that a check recorded earlier in the request, without rejecting the token, labels it */
+START_TEST(test_oauth_metrics_unauthorized) {
+	request_rec *r = oidc_test_request_get();
+	const char *body = NULL;
+
+	e2e_metrics_setup(r);
+
+	oidc_test_set_auth_type(OIDC_AUTH_TYPE_OPENID_OAUTH20);
+	r->user = apr_pstrdup(r->pool, "alice");
+	OIDC_METRICS_ERROR_REASON(r, "exp");
+	ck_assert_int_eq(oidc_authz_24_checker_claim(r, "claim sub:bob", NULL), AUTHZ_DENIED);
+	oidc_test_set_auth_type(NULL);
+
+	body = e2e_metrics_wait_for(r, E2E_METRICS_OAUTH20_ERROR);
+	ck_assert_msg(_oidc_strstr(body, E2E_METRICS_OAUTH20_ERROR "} 1\n") != NULL, "body: [%s]", body);
+	ck_assert_msg(_oidc_strstr(body, E2E_METRICS_OAUTH20_ERROR ",value=") == NULL, "body: [%s]", body);
+
+	e2e_metrics_teardown(r);
+}
+END_TEST
+
 int main(void) {
 	TCase *bearer = tcase_create("bearer");
 	tcase_add_checked_fixture(bearer, oidc_test_setup, oidc_test_teardown);
@@ -1695,11 +1875,19 @@ int main(void) {
 	tcase_add_test(metadata, test_oauth_metadata_cache_expiry_seconds);
 	tcase_add_test(metadata, test_oauth_metadata_does_not_mutate_shared_config);
 
+	TCase *metrics = tcase_create("metrics");
+	tcase_add_checked_fixture(metrics, oidc_test_setup, oidc_test_teardown);
+	tcase_set_timeout(metrics, 30);
+	tcase_add_test(metrics, test_oauth_metrics_rejected_jwt);
+	tcase_add_test(metrics, test_oauth_metrics_rejected_reference_token);
+	tcase_add_test(metrics, test_oauth_metrics_unauthorized);
+
 	Suite *s = suite_create("oauth");
 	suite_add_tcase(s, bearer);
 	suite_add_tcase(s, introspect);
 	suite_add_tcase(s, jwt);
 	suite_add_tcase(s, metadata);
+	suite_add_tcase(s, metrics);
 
 	return oidc_test_suite_run(s);
 }

@@ -706,6 +706,21 @@ START_TEST(test_metrics_counter_mixed_default_and_values) {
 		body, "oidc_authn_response_error_protocol{server_name=\"www.example.com\",value=\"nonce\"} 1") != NULL,
 	    "body: [%s]", body);
 
+	/* format=status selects the count that was recorded without a value when it is not asked for one, as
+	 * it did for as long as the counter was not recorded with values, and a labeled count by its value */
+	r->args = "format=status&server_name=www.example.com&counter=authz.error.oauth20";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	ck_assert_str_eq(oidc_request_state_get(r, "sent_body"), "OK: 2\n");
+	r->args = "format=status&server_name=www.example.com&counter=authz.error.oauth20&value=exp";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	ck_assert_str_eq(oidc_request_state_get(r, "sent_body"), "OK: 1\n");
+	/* a counter that is only recorded with values has no such count */
+	oidc_metrics_counter_inc(r, OM_PROVIDER_HTTP_RESPONSE_CODE, NULL, "200");
+	ck_assert_ptr_nonnull(metrics_json_wait_for(r, "\"200\"", 5000));
+	r->args = "format=status&server_name=www.example.com&counter=provider.http.response.code";
+	ck_assert_int_eq(oidc_metrics_handle_request(r), OK);
+	ck_assert_str_eq(oidc_request_state_get(r, "sent_body"), "OK\n");
+
 	e2e_metrics_teardown_flushed(r);
 }
 END_TEST
