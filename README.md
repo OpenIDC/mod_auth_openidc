@@ -134,7 +134,7 @@ To report a security vulnerability, please follow the process in [`SECURITY.md`]
 #### Commercial
 Licensed builds with support for Redis/Valkey over TLS, Redis Sentinel/Cluster as well as binary packages for Microsoft Windows, EOL Red Hat, Ubuntu and Debian releases, Oracle HTTP Server and IBM HTTP Server are available under a commercial agreement.
 
-For inquiries about commercial - subscription based - support and licensing please contact:  
+For inquiries about commercial - subscription based - support and licensing, including early access to security fixes before public disclosure, please contact:  
   [sales@openidc.com](mailto:sales@openidc.com)  
 
 License
