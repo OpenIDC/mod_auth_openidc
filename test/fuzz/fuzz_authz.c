@@ -34,7 +34,8 @@
  *   bit 7     a browser navigation (Accept: text/html), so OIDCUnAutzAction
  *             auth issues the authentication request instead of a 401
  * and the rest holds up to four newline-separated sections:
- *   the Require claim arguments, tokenized like the configuration line
+ *   the Require claim arguments, tokenized like the configuration line (an
+ *     input with more than FUZZ_AUTHZ_REQUIRE_MAX bytes of them is skipped)
  *   the scope from the token endpoint (empty: none)
  *   the id_token claims, a JSON object on one line (empty or not an object: none)
  *   the userinfo claims, a JSON object: the rest of the input, newlines and all
@@ -75,6 +76,20 @@
  */
 #define FUZZ_AUTHZ_REGEX_MAX_INPUT 512
 
+/*
+ * The longest Require arguments (the first section) that are run. The module
+ * tries every whitespace-separated word of them against every claim, and at
+ * the debug log level of the fixture it formats a line into the request pool
+ * for each claim that it looks at, so the cost is words x claims: 12,000 words
+ * against 12,000 claims, a 218KB input, took 19s and 3.4GB, which ClusterFuzz
+ * files as an out-of-memory or a timeout although the words are the
+ * administrator's configuration line, a handful in any real one. Only the
+ * claims are the provider's, and in those alone the cost is linear. 256 bytes
+ * hold a long Require line and at most 128 words: against the 116,000 claims
+ * that fit in a 1MB input those take 2s and 400MB.
+ */
+#define FUZZ_AUTHZ_REQUIRE_MAX 256
+
 static int g_ready = 0;
 
 /* a cmd_parms on the given pool, the way the fixture's oidc_test_cmd_get builds one */
@@ -112,12 +127,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 	if (!g_ready)
 		LLVMFuzzerInitialize(NULL, NULL);
 
-	/* a regex in the Require arguments (the first section, after the selector byte): bound the
-	 * input, see above */
-	if (size > FUZZ_AUTHZ_REGEX_MAX_INPUT) {
+	/* the Require arguments (the first section, after the selector byte): bound their length, and
+	 * the input when there is a regex in them, see above */
+	if (size > 1) {
 		const uint8_t *args = data + 1;
 		const uint8_t *nl = memchr(args, '\n', size - 1);
-		if (memchr(args, '~', nl ? (size_t)(nl - args) : size - 1) != NULL)
+		const size_t args_len = nl ? (size_t)(nl - args) : size - 1;
+		if (args_len > FUZZ_AUTHZ_REQUIRE_MAX)
+			return 0;
+		if ((size > FUZZ_AUTHZ_REGEX_MAX_INPUT) && (memchr(args, '~', args_len) != NULL))
 			return 0;
 	}
 

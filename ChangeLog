@@ -1,3 +1,9 @@
+11/28/2026
+- test/fuzz: bound the Require arguments that fuzz_authz runs at 256 bytes: every word of them is tried against
+  every claim, so an input with thousands of both ran the fuzzer out of memory or time, at a cost that no
+  deployment has because the Require line is the administrator's and only the claims are the provider's
+  (OSS-Fuzz 591174186)
+
 11/24/2026
 - metrics: count an access token that AuthType oauth20 rejects, in authz.error.oauth20 and labeled with the check
   that it failed ("exp", "signature", "parse", "iss", "aud", "inactive", "introspection", "remote_user", or else
